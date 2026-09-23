@@ -40,6 +40,7 @@ import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-dee
 import { isGlmConfigured, streamGlmCompatible } from "@/lib/glovix-glm"
 import { isMiniMaxConfigured, streamMiniMaxCompatible } from "@/lib/glovix-minimax"
 import { isNimConfigured, streamNimCompatible, isNimModelId } from "@/lib/glovix-nim"
+import { isVercelAiConfigured, streamVercelAiGateway } from "@/lib/vercel-ai-gateway"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
@@ -196,12 +197,37 @@ export async function POST(req: Request) {
     })
   }
 
-  // Default: Gemini on Vertex AI.
+  // Route to Vercel AI Gateway if model has provider prefix (e.g. anthropic/*, openai/*, meta/*, google/*, etc.)
+  // or if VERCEL_AI is configured.
+  const isSlashModel = typeof model === "string" && model.includes("/")
+  if (isVercelAiConfigured() && (isSlashModel || !isConfigured())) {
+    return streamVercelAiGateway({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      max_tokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model || undefined,
+      signal: req.signal,
+    })
+  }
+
+  // Default: Gemini on Vertex AI or Vercel AI Gateway.
+  if (isVercelAiConfigured()) {
+    return streamVercelAiGateway({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      max_tokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model || undefined,
+      signal: req.signal,
+    })
+  }
+
   if (!isConfigured()) {
     return new Response(
       JSON.stringify({
         error:
-          "No AI provider is configured. Set NVIDIA_NIM_API_KEY, DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
+          "No AI provider is configured. Set VERCEL_AI, NVIDIA_NIM_API_KEY, DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API.",
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     )

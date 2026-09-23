@@ -14,8 +14,10 @@ import {
   ArrowUp,
   Bot,
   Zap,
+  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { SycordOmniRouterModal, BrandLogo } from "@/components/sycord-omni-router-modal"
 
 interface QuickAction {
   id: string
@@ -67,6 +69,9 @@ export function AstroDashboard() {
   const [prompt, setPrompt] = useState("")
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([])
   const [isSending, setIsSending] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<string>("anthropic/claude-3.5-sonnet")
+  const [selectedModelName, setSelectedModelName] = useState<string>("Claude 3.5 Sonnet")
+  const [isOmniModalOpen, setIsOmniModalOpen] = useState(false)
 
   const handleSend = async (textToSend?: string) => {
     const input = (textToSend || prompt).trim()
@@ -81,6 +86,7 @@ export function AstroDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          model: selectedModel,
           messages: [{ role: "user", content: input }],
         }),
       })
@@ -241,9 +247,15 @@ export function AstroDashboard() {
               <span className="hidden sm:inline">Tools</span>
             </Button>
             <div className="h-3.5 w-[1px] bg-zinc-800 hidden sm:block mx-0.5" />
-            <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline-flex items-center gap-1">
-              <Zap className="h-3 w-3 text-amber-500/80" /> Global Agent
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsOmniModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 text-xs font-medium text-zinc-200 transition-colors"
+            >
+              <BrandLogo brand={selectedModel.split("/")[0] || "anthropic"} size={14} />
+              <span className="truncate max-w-[130px]">{selectedModelName}</span>
+              <ChevronDown className="w-3 h-3 text-zinc-400" />
+            </button>
           </div>
 
           <Button
@@ -285,6 +297,17 @@ export function AstroDashboard() {
           )
         })}
       </div>
+
+      {/* Omni Router Model Picker Modal */}
+      <SycordOmniRouterModal
+        open={isOmniModalOpen}
+        onOpenChange={setIsOmniModalOpen}
+        selectedModel={selectedModel}
+        onSelectModel={(modelId, modelObj) => {
+          setSelectedModel(modelId)
+          if (modelObj?.name) setSelectedModelName(modelObj.name)
+        }}
+      />
     </div>
   )
 }

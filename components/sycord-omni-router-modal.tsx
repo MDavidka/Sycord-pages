@@ -1,29 +1,24 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import {
-  Search,
-  Check,
-  Sparkles,
-  X,
-  Plus,
-} from "lucide-react"
+import { Search, Check, Sparkles, X, RefreshCw, Cpu, Layers, Zap } from "lucide-react"
 
-// Model Interface strictly matching the Sycord AI Router
+// Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
 export interface OmniModelItem {
   id: string
   name: string
   provider: string
   providerDisplay?: string
+  provider_display?: string
   swe_bench_score?: number
   swe_score?: number
   input_cost?: number
   output_cost?: number
+  inputCostDisplay?: string
+  outputCostDisplay?: string
   context_window?: number
   latency_tier?: string
   supports_vision?: boolean
@@ -34,21 +29,20 @@ export interface OmniModelItem {
   description?: string
   is_active?: boolean
   rank?: number
+  tags?: string[]
 }
 
-// Brand SVG logos strictly matching svgl.app provider pre-destinations
-export function BrandLogo({ brand, size = 28, className = "" }: { brand: string; size?: number; className?: string }) {
+// Brand SVG logos strictly matching svgl.app provider designs
+export function BrandLogo({ brand, size = 24, className = "" }: { brand: string; size?: number; className?: string }) {
   const key = (brand || "").toLowerCase().trim()
 
-  // Anthropic / Claude / Fabble (matches the exact orange flower / sunburst starburst logo in the image)
+  // Anthropic / Claude
   if (
     key.includes("anthropic") ||
     key.includes("claude") ||
     key.includes("sonnet") ||
     key.includes("opus") ||
-    key.includes("haiku") ||
-    key.includes("fabble") ||
-    key.includes("fable")
+    key.includes("haiku")
   ) {
     return (
       <svg
@@ -59,18 +53,16 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
         className={className}
         style={{ display: "inline-block", verticalAlign: "middle" }}
       >
-        {/* Exact Anthropic sunburst / asterisk rays from svgl.app */}
         <path d="M13.823 2.1a1.2 1.2 0 0 0-2.396 0l-.582 4.417a.6.6 0 0 1-.51.51l-4.417.582a1.2 1.2 0 0 0 0 2.396l4.417.582a.6.6 0 0 1 .51.51l.582 4.417a1.2 1.2 0 0 0 2.396 0l.582-4.417a.6.6 0 0 1 .51-.51l4.417-.582a1.2 1.2 0 0 0 0-2.396l-4.417-.582a.6.6 0 0 1-.51-.51L13.823 2.1z" opacity="0.95" />
         <path d="M19.74 5.46a1.2 1.2 0 0 0-1.7-.01l-3.535 3.535a.6.6 0 0 1-.722.094l-3.92-2.263a1.2 1.2 0 0 0-1.2 2.078l3.92 2.263a.6.6 0 0 1 .288.666l-1.157 4.382a1.2 1.2 0 1 0 2.318.613l1.157-4.382a.6.6 0 0 1 .536-.442l4.515-.17a1.2 1.2 0 0 0 .49-2.348l-4.515.17a.6.6 0 0 1-.617-.373l-1.848-4.175a1.2 1.2 0 0 0-2.196.972l1.848 4.175a.6.6 0 0 1-.093.722L4.26 18.54a1.2 1.2 0 1 0 1.698 1.698l3.535-3.535a.6.6 0 0 1 .722-.093l3.92 2.263a1.2 1.2 0 0 0 1.2-2.078l-3.92-2.263a.6.6 0 0 1-.288-.666l1.157-4.382a1.2 1.2 0 1 0-2.318-.613l-1.157 4.382a.6.6 0 0 1-.536.442l-4.515.17a1.2 1.2 0 1 0-.49 2.348l4.515-.17a.6.6 0 0 1 .617.373l1.848 4.175a1.2 1.2 0 0 0 2.196-.972l-1.848-4.175a.6.6 0 0 1 .093-.722l9.268-9.268a1.2 1.2 0 0 0-.01-1.7z" />
       </svg>
     )
   }
 
-  // OpenAI / Astra / ChatGPT / GPT (matches the exact spiral rosette from svgl.app)
+  // OpenAI / ChatGPT
   if (
     key.includes("openai") ||
     key.includes("gpt") ||
-    key.includes("astra") ||
     key.includes("o3") ||
     key.includes("o1") ||
     key.includes("chatgpt")
@@ -85,7 +77,7 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
         strokeWidth="1.6"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={`text-zinc-300 ${className}`}
+        className={`text-emerald-400 ${className}`}
         style={{ display: "inline-block", verticalAlign: "middle" }}
       >
         <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073z" />
@@ -96,23 +88,23 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  // Google / Gemini (svgl.app official multi-color 4-pointed star)
+  // Google / Gemini
   if (key.includes("google") || key.includes("gemini") || key.includes("vertex") || key.includes("gemma")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
         <defs>
-          <linearGradient id="gemini-svgl-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="gemini-svgl-grad-mod" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#4285F4" />
             <stop offset="50%" stopColor="#9B72CF" />
             <stop offset="100%" stopColor="#D96570" />
           </linearGradient>
         </defs>
-        <path fill="url(#gemini-svgl-grad)" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
+        <path fill="url(#gemini-svgl-grad-mod)" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
       </svg>
     )
   }
 
-  // DeepSeek (svgl.app official blue whale / curve)
+  // DeepSeek
   if (key.includes("deepseek")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="#4D6BFE" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
@@ -121,7 +113,7 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  // Zhipu / ZAI / GLM (svgl.app destination logo for ZAI)
+  // Zhipu / ZAI / GLM
   if (key.includes("zai") || key.includes("zhipu") || key.includes("glm") || key.includes("z-ai")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
@@ -131,16 +123,7 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  // xAI / Grok (svgl.app official stylized X)
-  if (key.includes("xai") || key.includes("grok")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-      </svg>
-    )
-  }
-
-  // Mistral (svgl.app orange block pixel wave)
+  // Mistral
   if (key.includes("mistral")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="#FF7000" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
@@ -149,7 +132,7 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  // Meta / Llama (svgl.app infinity loop)
+  // Meta / Llama
   if (key.includes("meta") || key.includes("llama")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="#0081FB" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
@@ -167,17 +150,7 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  // OpenRouter (svgl.app official logo)
-  if (key.includes("openrouter")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#6366F1" />
-        <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="#818CF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-
-  // NVIDIA / NIM (svgl.app green eye/circuit)
+  // NVIDIA
   if (key.includes("nvidia") || key.includes("nim")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="#76B900" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
@@ -186,115 +159,45 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
-  return <Sparkles className={`w-5 h-5 text-zinc-400 ${className}`} />
-}
+  // Amazon / Bedrock
+  if (key.includes("amazon") || key.includes("aws")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="#FF9900" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M15.4 12.7c-.1-.1-.3-.2-.5-.1-1.3.8-3.1 1.2-4.9 1.2-3.1 0-5.8-1.5-7.7-3.9-.2-.2-.4-.2-.6 0-.2.2-.1.5 0 .7 2.1 2.6 5 4.2 8.3 4.2 1.9 0 3.8-.5 5.3-1.3.3-.2.3-.4.1-.7z" />
+        <path d="M16.4 11.3c-.2-.3-.6-.3-.9 0l-.8.8c-.2.2-.1.5.1.7l1.7 1.2c.2.2.5.1.7-.1l.9-1.9c.1-.3-.1-.6-.4-.7h-.1l-1.2 0z" />
+      </svg>
+    )
+  }
 
-export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
-  {
-    id: "gemini-3.8-flash",
-    name: "Gemini 3.8 Flash",
-    provider: "google",
-    providerDisplay: "Google Vertex AI",
-    input_cost: 0.75,
-    output_cost: 3.75,
-    swe_score: 64.2,
-    context_window: 1000000,
-    description: "Frontier enterprise multimodal agent model with fast reasoning and tool execution",
-    is_active: false,
-    rank: 1,
-  },
-  {
-    id: "gemini-2.5-flash",
-    name: "Gemini 2.5 Flash",
-    provider: "google",
-    providerDisplay: "Google Vertex AI",
-    input_cost: 0.15,
-    output_cost: 0.60,
-    swe_score: 56.8,
-    context_window: 1000000,
-    description: "High-speed hybrid reasoning workhorse for agentic coding and automation",
-    is_active: false,
-    rank: 2,
-  },
-  {
-    id: "gemini-2.5-pro",
-    name: "Gemini 2.5 Pro",
-    provider: "google",
-    providerDisplay: "Google Vertex AI",
-    input_cost: 1.25,
-    output_cost: 5.00,
-    swe_score: 68.9,
-    context_window: 2000000,
-    description: "Deep reasoning enterprise foundation model with adaptive thinking budget",
-    is_active: true,
-    rank: 3,
-  },
-  {
-    id: "meta/llama-3.3-70b-instruct",
-    name: "Llama 3.3 70B (NVIDIA NIM)",
-    provider: "nim",
-    providerDisplay: "NVIDIA NIM",
-    input_cost: 0.70,
-    output_cost: 0.90,
-    swe_score: 65.5,
-    context_window: 131072,
-    description: "High-throughput frontier open-weights model hosted on NVIDIA NIM with smart rate-limit retry",
-    is_active: false,
-    rank: 4,
-  },
-  {
-    id: "nvidia/nemotron-4-340b-instruct",
-    name: "Nemotron 4 340B (NVIDIA NIM)",
-    provider: "nim",
-    providerDisplay: "NVIDIA NIM",
-    input_cost: 1.50,
-    output_cost: 2.50,
-    swe_score: 63.8,
-    context_window: 131072,
-    description: "NVIDIA flagship generative AI model for complex synthesis, code architecture, and tooling",
-    is_active: false,
-    rank: 5,
-  },
-  {
-    id: "openrouter:free",
-    name: "OpenRouter Free",
-    provider: "openrouter",
-    providerDisplay: "OpenRouter (Auto Free)",
-    input_cost: 0.00,
-    output_cost: 0.00,
-    swe_score: 55.4,
-    context_window: 262144,
-    description: "Auto-routed across all discovered free OpenRouter models with zero latency fallback",
-    is_active: false,
-    rank: 6,
-  },
-  {
-    id: "gemini-2.5-flash-lite",
-    name: "Gemini 2.5 Flash-Lite",
-    provider: "google",
-    providerDisplay: "Google Vertex AI",
-    input_cost: 0.075,
-    output_cost: 0.30,
-    swe_score: 48.5,
-    context_window: 1000000,
-    description: "Ultra-efficient lightweight model for high-frequency tool loops",
-    is_active: false,
-    rank: 7,
-  },
-  {
-    id: "gemini-2.5-computer-use",
-    name: "Gemini 2.5 Computer Use",
-    provider: "google",
-    providerDisplay: "Google Vertex AI",
-    input_cost: 1.25,
-    output_cost: 5.00,
-    swe_score: 60.4,
-    context_window: 1000000,
-    description: "Autonomous GUI navigation, screen understanding, and tool execution",
-    is_active: false,
-    rank: 8,
-  },
-]
+  // Cohere
+  if (key.includes("cohere")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="#39594C" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6z" />
+      </svg>
+    )
+  }
+
+  // MiniMax
+  if (key.includes("minimax")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="#EC4899" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M4 4h4v16H4V4zm6 6h4v10h-4V10zm6-4h4v14h-4V6z" />
+      </svg>
+    )
+  }
+
+  // Perplexity
+  if (key.includes("perplexity")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="#22B8CD" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.3l5.8 3.6L12 11.5 6.2 7.9 12 4.3z" />
+      </svg>
+    )
+  }
+
+  return <Sparkles className={`w-4 h-4 text-zinc-400 ${className}`} />
+}
 
 export interface SycordOmniRouterModalProps {
   open: boolean
@@ -302,16 +205,6 @@ export interface SycordOmniRouterModalProps {
   selectedModel?: string
   onSelectModel?: (modelId: string, modelObj?: OmniModelItem) => void
   projectId?: string
-  isDark?: boolean
-  modelChoices?: Array<{
-    id: string
-    label?: string
-    apiModel?: string
-    active?: boolean
-    isAiTabActive?: boolean
-    enabled?: boolean
-  }>
-  onlyTurnedOn?: boolean
 }
 
 export function SycordOmniRouterModal({
@@ -320,63 +213,49 @@ export function SycordOmniRouterModal({
   selectedModel,
   onSelectModel,
   projectId = "global",
-  modelChoices,
-  onlyTurnedOn,
 }: SycordOmniRouterModalProps) {
-  // Initial list seeded with Google Gemini Enterprise Agent Platform models
-  const [models, setModels] = useState<OmniModelItem[]>(GEMINI_ENTERPRISE_MODELS)
+  const [models, setModels] = useState<OmniModelItem[]>([])
+  const [providers, setProviders] = useState<Array<{ id: string; name: string; count: number }>>([])
+  const [selectedProvider, setSelectedProvider] = useState<string>("all")
   const [loading, setLoading] = useState(false)
-  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-pro")
+  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "anthropic/claude-3.5-sonnet")
   const [userCredits, setUserCredits] = useState<number>(200)
   const [searchQuery, setSearchQuery] = useState("")
 
-  // Add Model dialog state
-  const [showAddProviderModal, setShowAddProviderModal] = useState(false)
-  const [newProviderType, setNewProviderType] = useState("vertex")
-  const [newApiKey, setNewApiKey] = useState("")
-  const [newGcpProject, setNewGcpProject] = useState("")
-  const [newGcpLocation, setNewGcpLocation] = useState("us-central1")
-  const [newBaseUrl, setNewBaseUrl] = useState("")
-  const [addingProvider, setAddingProvider] = useState(false)
-
-  // Fetch models dynamically from the backend
-  useEffect(() => {
-    if (!open) return
-    let active = true
+  const loadModels = (forceRefresh = false) => {
     setLoading(true)
-
-    fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}`)
+    fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}${forceRefresh ? "&refresh=true" : ""}`)
       .then((r) => r.json())
       .then((data) => {
-        if (!active) return
-        if (data?.models && Array.isArray(data.models) && data.models.length > 0) {
+        if (data?.models && Array.isArray(data.models)) {
           setModels(data.models)
-        } else {
-          setModels(GEMINI_ENTERPRISE_MODELS)
+          if (data?.providers && Array.isArray(data.providers)) {
+            setProviders(data.providers)
+          }
         }
         if (data?.active_model && !selectedModel) {
           setActiveModelId(data.active_model)
         }
       })
-      .catch(() => {
-        if (active) setModels(GEMINI_ENTERPRISE_MODELS)
+      .catch((err) => {
+        toast.error("Failed to load models from Vercel AI Gateway")
       })
       .finally(() => {
-        if (active) setLoading(false)
+        setLoading(false)
       })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    loadModels()
 
     fetch(`/api/user/credits`)
       .then((r) => r.json())
       .then((data) => {
-        if (!active) return
         if (typeof data?.credits === "number") setUserCredits(data.credits)
         else if (typeof data?.balance === "number") setUserCredits(Math.round(data.balance * 40))
       })
       .catch(() => {})
-
-    return () => {
-      active = false
-    }
   }, [open, projectId, selectedModel])
 
   const handleSelectModel = async (model: OmniModelItem) => {
@@ -392,7 +271,7 @@ export function SycordOmniRouterModal({
         }),
       }).catch(() => {})
 
-      toast.success(`Active model routed to ${model.name || model.id}`)
+      toast.success(`Active model set to ${model.name || model.id}`)
       onSelectModel?.(model.id, model)
       onOpenChange(false)
     } catch {
@@ -402,57 +281,11 @@ export function SycordOmniRouterModal({
     }
   }
 
-  const handleAddProviderSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setAddingProvider(true)
-    try {
-      const res = await fetch("/api/ai/handshake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providers: [
-            {
-              provider: newProviderType,
-              api_key: newApiKey,
-              base_url: newBaseUrl,
-              gcp_project: newGcpProject,
-              gcp_location: newGcpLocation,
-            },
-          ],
-        }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        toast.success(`Provider added and synchronized!`)
-        setShowAddProviderModal(false)
-        setNewApiKey("")
-        // Refresh models
-        const refreshed = await fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}`).then((r) => r.json())
-        if (refreshed?.models && refreshed.models.length > 0) setModels(refreshed.models)
-      } else {
-        toast.error(`Failed to add provider: ${data.error || "Unknown error"}`)
-      }
-    } catch (err: any) {
-      toast.error(`Error adding provider: ${err.message}`)
-    } finally {
-      setAddingProvider(false)
-    }
-  }
-
-  // Filter models by search query and turned-on status if specified
+  // Filter models by provider category & search query
   const filteredModels = useMemo(() => {
-    let list = models.length > 0 ? models : GEMINI_ENTERPRISE_MODELS
-
-    if (onlyTurnedOn && modelChoices && modelChoices.length > 0) {
-      const activeIds = new Set(
-        modelChoices
-          .filter((c: any) => c.active || c.isAiTabActive || c.enabled !== false)
-          .map((c: any) => (c.apiModel || c.id || "").toLowerCase())
-      )
-      list = list.filter((m) => {
-        const idLower = (m.id || "").toLowerCase()
-        return activeIds.has(idLower) || activeIds.has(idLower.replace(/^google\//, "")) || m.is_active
-      })
+    let list = models
+    if (selectedProvider !== "all") {
+      list = list.filter((m) => (m.provider || "").toLowerCase() === selectedProvider.toLowerCase())
     }
 
     const q = searchQuery.toLowerCase().trim()
@@ -465,268 +298,223 @@ export function SycordOmniRouterModal({
         (m.description && m.description.toLowerCase().includes(q))
       )
     })
-  }, [models, searchQuery, onlyTurnedOn, modelChoices])
+  }, [models, selectedProvider, searchQuery])
+
+  // Group filtered models by provider for categorized rendering
+  const categorizedModels = useMemo(() => {
+    const groups = new Map<string, OmniModelItem[]>()
+    for (const model of filteredModels) {
+      const p = model.provider || "other"
+      if (!groups.has(p)) groups.set(p, [])
+      groups.get(p)!.push(model)
+    }
+    return Array.from(groups.entries()).map(([provider, items]) => ({
+      provider,
+      providerDisplay: items[0]?.provider_display || items[0]?.providerDisplay || provider.toUpperCase(),
+      items,
+    }))
+  }, [filteredModels])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        overlayClassName="!bg-[#181818] data-[state=open]:!bg-[#181818]"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#181818] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-sm"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#121214] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
-        {/* Uniform Header Bar — Exact match to media_1789746982556.png */}
-        <header className="flex items-center justify-between px-6 sm:px-10 py-4 bg-[#181818] shrink-0 border-b border-[#222226]">
-          {/* Left: Sycord Logo Icon + Sycord + Divider + AI Router */}
+        {/* Top Header Bar */}
+        <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 bg-[#121214] shrink-0 border-b border-zinc-800/80">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-white">
-                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeDasharray="4 2" />
-                <circle cx="12" cy="12" r="4" fill="currentColor" />
-              </svg>
-              <span className="font-bold text-white text-[17px] tracking-tight">Sycord</span>
+              <div className="w-6 h-6 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              </div>
+              <span className="font-bold text-white text-base tracking-tight">Sycord</span>
             </div>
-            <div className="h-4 w-[1px] bg-zinc-700 mx-1.5" />
-            <span className="text-sm text-zinc-400 font-medium">AI Router</span>
+            <div className="h-4 w-[1px] bg-zinc-800 mx-1" />
+            <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
+              <span>Vercel AI Gateway</span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                Live Gateway
+              </Badge>
+            </span>
           </div>
 
-          {/* Right: Add model button (Closing 'X' removed per user requirement) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowAddProviderModal(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-[#2e2e34] bg-[#202024] hover:bg-[#28282e] text-xs sm:text-sm font-medium text-zinc-200 transition-colors cursor-pointer"
+              onClick={() => loadModels(true)}
+              title="Refresh models"
+              className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
             >
-              <span>Add model</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         </header>
 
-        {/* Scrollable Center Body with Single Unified Background */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-8 pt-5 pb-[calc(2rem+env(safe-area-inset-bottom,2rem))] bg-[#181818] custom-scrollbar">
-          <div className="max-w-xl mx-auto space-y-4">
-            {/* Title & Subtitle */}
-            <div className="space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Models</h1>
-              <p className="text-xs sm:text-[13px] text-zinc-400 leading-relaxed font-normal">
-                Browse and compare available AI models with live upward performance telemetry.
-              </p>
-            </div>
+        {/* Category Horizontal Filter Bar */}
+        <div className="px-4 sm:px-8 py-2 bg-[#161619] border-b border-zinc-800/60 overflow-x-auto custom-scrollbar flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSelectedProvider("all")}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
+              selectedProvider === "all"
+                ? "bg-zinc-100 text-zinc-900 font-semibold"
+                : "bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800"
+            }`}
+          >
+            <span>All Providers</span>
+            <span className="text-[10px] opacity-70">({models.length})</span>
+          </button>
+          {providers.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setSelectedProvider(p.id)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
+                selectedProvider === p.id
+                  ? "bg-zinc-100 text-zinc-900 font-semibold"
+                  : "bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800"
+              }`}
+            >
+              <BrandLogo brand={p.id} size={14} />
+              <span>{p.name}</span>
+              <span className="text-[10px] opacity-70">({p.count})</span>
+            </button>
+          ))}
+        </div>
 
-            {/* Credit Badge Pill [ ✦ 200 ] */}
-            <div className="pt-0.5">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl border border-[#2e2e34] bg-[#1d1d21] text-zinc-200 text-xs font-semibold">
-                <span className="text-zinc-400 text-xs">✦</span>
-                <span className="tabular-nums tracking-wide">{userCredits}</span>
-              </div>
-            </div>
-
-            {/* Search Input Bar (Matching #181818 background palette with ⌘ K) */}
-            <div className="relative pt-0.5">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
+        {/* Scrollable Model Browser Surface */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 custom-scrollbar bg-[#121214]">
+          <div className="max-w-4xl mx-auto space-y-5">
+            {/* Search Input Bar */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search models..."
+                placeholder="Search by model name, provider, tags (e.g. reasoning, vision)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-14 py-2 rounded-xl border border-[#2e2e34] bg-[#202024] text-zinc-100 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-100 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 shadow-xs"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-400 font-mono bg-[#28282e] px-1.5 py-0.5 rounded border border-[#383840] pointer-events-none">
-                <span>⌘</span>
-                <span>K</span>
-              </div>
-            </div>
-
-            {/* Model List: Compacted rows with grey checkbox */}
-            <div className="pt-1 space-y-1.5">
-              {loading && models.length === 0 ? (
-                <div className="py-12 text-center text-xs text-zinc-500 animate-pulse">
-                  Loading router models...
-                </div>
-              ) : filteredModels.length === 0 ? (
-                <div className="py-12 text-center text-xs text-zinc-500 space-y-3">
-                  <p>No models connected yet.</p>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddProviderModal(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2e2e34] bg-[#222226] hover:bg-[#28282e] text-xs text-zinc-300 transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Connect a provider now</span>
-                  </button>
-                </div>
-              ) : (
-                filteredModels.map((model) => {
-                  const isSelected = model.id === activeModelId
-                  const inCredit = model.input_cost !== undefined ? `${model.input_cost}$` : "10$"
-                  const outCredit = model.output_cost !== undefined ? `${model.output_cost}$` : "6$"
-
-                  return (
-                    <div
-                      key={model.id}
-                      onClick={() => handleSelectModel(model)}
-                      className="group flex items-center justify-between py-2 px-3 rounded-xl transition-colors hover:bg-white/[0.04] cursor-pointer"
-                    >
-                      {/* Left: Brand Icon + Title/Subtitle + Divider + Pricing */}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Provider Brand Logo */}
-                        <div className="shrink-0 flex items-center justify-center">
-                          <BrandLogo brand={model.provider || model.name} size={22} />
-                        </div>
-
-                        {/* Model Name & Provider Subtitle */}
-                        <div className="min-w-0 pr-1.5">
-                          <div className="text-[13px] sm:text-[14px] font-semibold text-white truncate leading-tight">
-                            {model.name}
-                          </div>
-                          <div className="text-[10px] text-zinc-400 capitalize truncate mt-0.5">
-                            {model.providerDisplay || model.provider || "anthropic"}
-                          </div>
-                        </div>
-
-                        {/* Vertical Separator | */}
-                        <div className="h-5 w-[1px] bg-[#333339] mx-2 shrink-0" />
-
-                        {/* Pricing Block */}
-                        <div className="flex flex-col text-[10px] sm:text-[11px] leading-tight font-medium shrink-0">
-                          <span className="text-zinc-200">
-                            <span className="font-semibold text-white">{inCredit}</span> in credit
-                          </span>
-                          <span className="text-zinc-400 mt-0.5">
-                            <span className="font-semibold text-zinc-300">{outCredit}</span> out credit
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Right: Grey Checkbox Selection Indicator */}
-                      <div className="shrink-0 pl-3">
-                        <div
-                          className={`w-5 h-5 rounded-md border transition-all flex items-center justify-center ${
-                            isSelected
-                              ? "border-zinc-400 bg-zinc-600/30 text-zinc-200"
-                              : "border-[#383840] bg-transparent group-hover:border-zinc-500"
-                          }`}
-                        >
-                          {isSelected && <Check className="w-3.5 h-3.5 text-zinc-200 stroke-[2.5]" />}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </main>
-
-        {/* Add Model / Provider Handshake Submodal */}
-        {showAddProviderModal && (
-          <div className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-[#1c1c20] border border-[#2e2e34] rounded-2xl p-6 text-zinc-100 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between border-b border-[#2c2c34] pb-3">
-                <div className="flex items-center gap-2">
-                  <Plus className="h-4 w-4 text-emerald-400" />
-                  <h3 className="text-base font-bold text-white">Add Provider &amp; Models</h3>
-                </div>
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setShowAddProviderModal(false)}
-                  className="h-7 w-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Models list grouped by provider */}
+            {loading && models.length === 0 ? (
+              <div className="py-16 text-center text-xs text-zinc-500 animate-pulse">
+                Fetching live models from Vercel AI Gateway...
+              </div>
+            ) : categorizedModels.length === 0 ? (
+              <div className="py-16 text-center text-xs text-zinc-500 space-y-2">
+                <p>No matching models found.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProvider("all")
+                    setSearchQuery("")
+                  }}
+                  className="text-emerald-400 hover:underline text-xs"
+                >
+                  Reset filters
                 </button>
               </div>
-
-              <form onSubmit={handleAddProviderSubmit} className="space-y-4 text-xs">
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-zinc-300">Provider</label>
-                  <select
-                    value={newProviderType}
-                    onChange={(e) => setNewProviderType(e.target.value)}
-                    className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none"
-                  >
-                    <option value="vertex">Google Vertex AI / Gemini</option>
-                    <option value="nim">NVIDIA NIM (Llama 3.3, Nemotron)</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI (GPT-4o, o3)</option>
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="zai">Zhipu AI (ZAI / GLM)</option>
-                    <option value="mistral">Mistral AI</option>
-                    <option value="custom">Custom OpenAI-compatible Proxy</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-zinc-300">API Key / Service Account JSON</label>
-                  <input
-                    type="password"
-                    value={newApiKey}
-                    onChange={(e) => setNewApiKey(e.target.value)}
-                    placeholder="Enter API Key or JSON"
-                    className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none font-mono"
-                    required
-                  />
-                </div>
-
-                {newProviderType === "vertex" && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="font-semibold text-zinc-300">GCP Project ID</label>
-                      <input
-                        type="text"
-                        value={newGcpProject}
-                        onChange={(e) => setNewGcpProject(e.target.value)}
-                        placeholder="gen-lang-client-..."
-                        className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="font-semibold text-zinc-300">GCP Location</label>
-                      <input
-                        type="text"
-                        value={newGcpLocation}
-                        onChange={(e) => setNewGcpLocation(e.target.value)}
-                        placeholder="us-central1"
-                        className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none"
-                      />
-                    </div>
+            ) : (
+              categorizedModels.map((group) => (
+                <div key={group.provider} className="space-y-2">
+                  {/* Category Header with SVGL Icon */}
+                  <div className="flex items-center gap-2 px-1 pt-2 pb-1 border-b border-zinc-800/60">
+                    <BrandLogo brand={group.provider} size={18} />
+                    <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                      {group.providerDisplay}
+                    </h2>
+                    <span className="text-[10px] text-zinc-500 font-mono">({group.items.length})</span>
                   </div>
-                )}
 
-                {newProviderType === "custom" && (
-                  <div className="space-y-1.5">
-                    <label className="font-semibold text-zinc-300">Base URL</label>
-                    <input
-                      type="text"
-                      value={newBaseUrl}
-                      onChange={(e) => setNewBaseUrl(e.target.value)}
-                      placeholder="https://api.example.com/v1"
-                      className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none font-mono"
-                    />
+                  {/* Models in Provider */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {group.items.map((model) => {
+                      const isSelected = model.id === activeModelId
+                      return (
+                        <div
+                          key={model.id}
+                          onClick={() => handleSelectModel(model)}
+                          className={`group relative p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                            isSelected
+                              ? "bg-zinc-800/80 border-emerald-500/60 shadow-sm"
+                              : "bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center shrink-0 mt-0.5">
+                                <BrandLogo brand={model.provider || model.name} size={18} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-emerald-300 transition-colors">
+                                  {model.name}
+                                </div>
+                                <p className="text-[10px] font-mono text-zinc-500 truncate">{model.id}</p>
+                              </div>
+                            </div>
+
+                            {/* Checkmark */}
+                            <div
+                              className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                                isSelected
+                                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
+                                  : "border-zinc-700 bg-transparent group-hover:border-zinc-500"
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                          </div>
+
+                          {model.description && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
+                              {model.description}
+                            </p>
+                          )}
+
+                          {/* Pricing & Context Details */}
+                          <div className="pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
+                            <div className="flex items-center gap-2">
+                              <span>
+                                In: <strong className="text-zinc-200">{model.inputCostDisplay || `$${model.input_cost}`}</strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                Out: <strong className="text-zinc-200">{model.outputCostDisplay || `$${model.output_cost}`}</strong>
+                              </span>
+                            </div>
+                            <div className="font-mono text-zinc-500">
+                              {model.context_window ? `${Math.round(model.context_window / 1000)}k ctx` : ""}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                )}
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#2c2c34]">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddProviderModal(false)}
-                    className="px-3.5 py-2 rounded-xl border border-[#2e2e34] bg-[#24242a] hover:bg-[#2c2c34] text-zinc-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={addingProvider}
-                    className="px-4 py-2 rounded-xl bg-white text-black font-semibold hover:bg-zinc-200 disabled:opacity-50"
-                  >
-                    {addingProvider ? "Saving..." : "Save Provider"}
-                  </button>
                 </div>
-              </form>
-            </div>
+              ))
+            )}
           </div>
-        )}
-
-        {/* Non-safe area down layer solid guard */}
-        <div className="shrink-0 w-full h-[env(safe-area-inset-bottom,0px)] bg-[#181818]" />
+        </main>
       </DialogContent>
     </Dialog>
   )

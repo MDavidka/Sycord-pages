@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireModerator } from "@/lib/moderator-types"
-import { syteGetOmniModels } from "@/lib/deploy/syte-client"
+import { fetchVercelGatewayModels } from "@/lib/vercel-ai-gateway"
 import clientPromise from "@/lib/torso"
 
 export const dynamic = "force-dynamic"
@@ -11,85 +11,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const period = searchParams.get("period") || "7d"
 
-    // 1. Fetch Global Models Catalog
-    let modelsCatalog: any[] = []
-    try {
-      const syteRes = await syteGetOmniModels("global")
-      if (syteRes.ok && syteRes.data?.models) {
-        modelsCatalog = syteRes.data.models
-      }
-    } catch {
-      // Fallback to static catalog if VM endpoint unreachable
-    }
-
-    if (!modelsCatalog || modelsCatalog.length === 0) {
-      modelsCatalog = [
-        {
-          id: "gemini-3.8-flash",
-          name: "Gemini 3.8 Flash",
-          provider: "google",
-          providerDisplay: "Google Vertex AI",
-          context_window: 1000000,
-          is_active: true,
-        },
-        {
-          id: "gemini-2.5-flash",
-          name: "Gemini 2.5 Flash",
-          provider: "google",
-          providerDisplay: "Google Vertex AI",
-          context_window: 1000000,
-          is_active: true,
-        },
-        {
-          id: "gemini-2.5-pro",
-          name: "Gemini 2.5 Pro",
-          provider: "google",
-          providerDisplay: "Google Vertex AI",
-          context_window: 2000000,
-          is_active: true,
-        },
-        {
-          id: "meta/llama-3.3-70b-instruct",
-          name: "Llama 3.3 70B",
-          provider: "nim",
-          providerDisplay: "NVIDIA NIM",
-          context_window: 131072,
-          is_active: true,
-        },
-        {
-          id: "nvidia/nemotron-4-340b-instruct",
-          name: "Nemotron 4 340B",
-          provider: "nim",
-          providerDisplay: "NVIDIA NIM",
-          context_window: 131072,
-          is_active: true,
-        },
-        {
-          id: "deepseek-chat",
-          name: "DeepSeek V3",
-          provider: "deepseek",
-          providerDisplay: "DeepSeek",
-          context_window: 128000,
-          is_active: true,
-        },
-        {
-          id: "glm-5.2",
-          name: "GLM 5.2",
-          provider: "zai",
-          providerDisplay: "Z.ai (GLM)",
-          context_window: 1000000,
-          is_active: true,
-        },
-        {
-          id: "MiniMax-M3",
-          name: "MiniMax M3",
-          provider: "minimax",
-          providerDisplay: "MiniMax",
-          context_window: 1000000,
-          is_active: true,
-        },
-      ]
-    }
+    // 1. Fetch live models from Vercel AI Gateway
+    const modelsCatalog = await fetchVercelGatewayModels()
 
     // 2. Fetch Aggregated Usage from Database
     let usageRecords: any[] = []
@@ -128,8 +51,8 @@ export async function GET(request: Request) {
       return {
         id: m.id,
         name: m.name || m.id,
-        provider: m.providerDisplay || m.provider || "Global",
-        contextWindow: m.context_window || m.contextWindow || 128000,
+        provider: m.provider_display || m.providerDisplay || m.provider || "Global",
+        contextWindow: m.context_window || 128000,
         inputTokens: stats.inputTokens,
         outputTokens: stats.outputTokens,
         totalTokens: stats.totalTokens,
