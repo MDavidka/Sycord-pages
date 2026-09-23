@@ -46,14 +46,20 @@ export interface AiClient {
 export const GLOBAL_LOCATION = "global"
 
 function readEnv() {
-  const apiKey = process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || ""
+  const apiKey =
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AIAGENT_API ||
+    process.env.GOOGLE_AIAGENT_API_KEY ||
+    ""
   const project = process.env.GOOGLE_VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ""
   // Default to the GLOBAL endpoint. A specific region can still be pinned via
   // GOOGLE_VERTEX_LOCATION / GOOGLE_CLOUD_LOCATION, but absent that we always
   // use "global".
   const location =
     process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || GLOBAL_LOCATION
-  const useVertex = (process.env.GOOGLE_GENAI_USE_VERTEXAI ?? "true").toLowerCase() !== "false"
+  const useVertex =
+    !apiKey && ((process.env.GOOGLE_GENAI_USE_VERTEXAI ?? "true").toLowerCase() !== "false")
   return { apiKey, project, location, useVertex }
 }
 

@@ -197,7 +197,22 @@ export async function POST(req: Request) {
     })
   }
 
-  // Route to Vercel AI Gateway if model has provider prefix (e.g. anthropic/*, openai/*, meta/*, google/*, etc.)
+  // Route to Google API / Vertex AI for Gemini models (gemini-*, google/*, etc.)
+  const isGoogle = model && (model.toLowerCase().startsWith("gemini") || model.toLowerCase().startsWith("google/"))
+  if (isGoogle && isConfigured()) {
+    const cleanModel = model.replace(/^google\//i, "")
+    return streamOpenAICompatible({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: cleanModel,
+      thinkingLevel: typeof body?.thinking_level === "string" ? body.thinking_level : typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined,
+      signal: req.signal,
+    })
+  }
+
+  // Route to Vercel AI Gateway if model has provider prefix (e.g. anthropic/*, openai/*, meta/*, etc.)
   // or if VERCEL_AI is configured.
   const isSlashModel = typeof model === "string" && model.includes("/")
   if (isVercelAiConfigured() && (isSlashModel || !isConfigured())) {
@@ -211,7 +226,20 @@ export async function POST(req: Request) {
     })
   }
 
-  // Default: Gemini on Vertex AI or Vercel AI Gateway.
+  // If Google is configured, use Gemini on Google Developer API / Vertex AI as default
+  if (isConfigured()) {
+    return streamOpenAICompatible({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model ? model.replace(/^google\//i, "") : undefined,
+      thinkingLevel: typeof body?.thinking_level === "string" ? body.thinking_level : typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined,
+      signal: req.signal,
+    })
+  }
+
+  // Fallback: Vercel AI Gateway
   if (isVercelAiConfigured()) {
     return streamVercelAiGateway({
       messages,
@@ -223,23 +251,11 @@ export async function POST(req: Request) {
     })
   }
 
-  if (!isConfigured()) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "No AI provider is configured. Set VERCEL_AI, NVIDIA_NIM_API_KEY, DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API.",
-      }),
-      { status: 503, headers: { "Content-Type": "application/json" } },
-    )
-  }
-
-  return streamOpenAICompatible({
-    messages,
-    tools: body?.tools,
-    temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
-    maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
-    model: model || undefined,
-    thinkingLevel: typeof body?.thinking_level === "string" ? body.thinking_level : typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined,
-    signal: req.signal,
-  })
+  return new Response(
+    JSON.stringify({
+      error:
+        "No AI provider is configured. Set GOOGLE_API_KEY, GOOGLE_AIAGENT_API, VERCEL_AI, NVIDIA_NIM_API_KEY, DEEPSEEK_API_KEY, or ZAI_API_KEY.",
+    }),
+    { status: 503, headers: { "Content-Type": "application/json" } },
+  )
 }

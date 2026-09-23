@@ -69,8 +69,8 @@ export function AstroDashboard() {
   const [prompt, setPrompt] = useState("")
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([])
   const [isSending, setIsSending] = useState(false)
-  const [selectedModel, setSelectedModel] = useState<string>("anthropic/claude-3.5-sonnet")
-  const [selectedModelName, setSelectedModelName] = useState<string>("Claude 3.5 Sonnet")
+  const [selectedModel, setSelectedModel] = useState<string>("gemini-2.5-flash")
+  const [selectedModelName, setSelectedModelName] = useState<string>("Gemini 2.5 Flash")
   const [isOmniModalOpen, setIsOmniModalOpen] = useState(false)
 
   const handleSend = async (textToSend?: string) => {

@@ -1,10 +1,23 @@
 "use client"
 
 import React, { useState, useEffect, useMemo } from "react"
+import Image from "next/image"
+import Link from "next/link"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { Search, Check, Sparkles, X, RefreshCw, Cpu, Layers, Zap } from "lucide-react"
+import {
+  Search,
+  Check,
+  Sparkles,
+  X,
+  RefreshCw,
+  Coins,
+  SlidersHorizontal,
+  ArrowUpDown,
+  CircleDot,
+} from "lucide-react"
 
 // Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
 export interface OmniModelItem {
@@ -33,7 +46,7 @@ export interface OmniModelItem {
 }
 
 // Brand SVG logos strictly matching svgl.app provider designs
-export function BrandLogo({ brand, size = 24, className = "" }: { brand: string; size?: number; className?: string }) {
+export function BrandLogo({ brand, size = 20, className = "" }: { brand: string; size?: number; className?: string }) {
   const key = (brand || "").toLowerCase().trim()
 
   // Anthropic / Claude
@@ -93,13 +106,13 @@ export function BrandLogo({ brand, size = 24, className = "" }: { brand: string;
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
         <defs>
-          <linearGradient id="gemini-svgl-grad-mod" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="gemini-svgl-mod" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#4285F4" />
             <stop offset="50%" stopColor="#9B72CF" />
             <stop offset="100%" stopColor="#D96570" />
           </linearGradient>
         </defs>
-        <path fill="url(#gemini-svgl-grad-mod)" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
+        <path fill="url(#gemini-svgl-mod)" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
       </svg>
     )
   }
@@ -196,8 +209,10 @@ export function BrandLogo({ brand, size = 24, className = "" }: { brand: string;
     )
   }
 
-  return <Sparkles className={`w-4 h-4 text-zinc-400 ${className}`} />
+  return <Sparkles className={`w-4 h-4 text-muted-foreground ${className}`} />
 }
+
+export type PriceFilter = "all" | "free" | "low" | "medium" | "high"
 
 export interface SycordOmniRouterModalProps {
   open: boolean
@@ -223,15 +238,13 @@ export function SycordOmniRouterModal({
   selectedModel,
   onSelectModel,
   projectId = "global",
-  modelChoices,
-  isDark,
-  onlyTurnedOn,
 }: SycordOmniRouterModalProps) {
   const [models, setModels] = useState<OmniModelItem[]>([])
   const [providers, setProviders] = useState<Array<{ id: string; name: string; count: number }>>([])
   const [selectedProvider, setSelectedProvider] = useState<string>("all")
+  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
   const [loading, setLoading] = useState(false)
-  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "anthropic/claude-3.5-sonnet")
+  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
   const [userCredits, setUserCredits] = useState<number>(200)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -250,8 +263,8 @@ export function SycordOmniRouterModal({
           setActiveModelId(data.active_model)
         }
       })
-      .catch((err) => {
-        toast.error("Failed to load models from Vercel AI Gateway")
+      .catch(() => {
+        toast.error("Failed to load models")
       })
       .finally(() => {
         setLoading(false)
@@ -294,13 +307,27 @@ export function SycordOmniRouterModal({
     }
   }
 
-  // Filter models by provider category & search query
+  // Filter models by provider category, price bracket, and search query
   const filteredModels = useMemo(() => {
     let list = models
+
+    // Provider filter
     if (selectedProvider !== "all") {
       list = list.filter((m) => (m.provider || "").toLowerCase() === selectedProvider.toLowerCase())
     }
 
+    // Price tier filter (per 1M input tokens)
+    if (priceFilter === "free") {
+      list = list.filter((m) => (m.input_cost ?? 0) === 0 && (m.output_cost ?? 0) === 0)
+    } else if (priceFilter === "low") {
+      list = list.filter((m) => (m.input_cost ?? 0) > 0 && (m.input_cost ?? 0) <= 0.5)
+    } else if (priceFilter === "medium") {
+      list = list.filter((m) => (m.input_cost ?? 0) > 0.5 && (m.input_cost ?? 0) <= 2.5)
+    } else if (priceFilter === "high") {
+      list = list.filter((m) => (m.input_cost ?? 0) > 2.5)
+    }
+
+    // Search query
     const q = searchQuery.toLowerCase().trim()
     if (!q) return list
     return list.filter((m) => {
@@ -311,7 +338,7 @@ export function SycordOmniRouterModal({
         (m.description && m.description.toLowerCase().includes(q))
       )
     })
-  }, [models, selectedProvider, searchQuery])
+  }, [models, selectedProvider, priceFilter, searchQuery])
 
   // Group filtered models by provider for categorized rendering
   const categorizedModels = useMemo(() => {
@@ -331,193 +358,254 @@ export function SycordOmniRouterModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-sm"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#121214] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        overlayClassName="!bg-black/60 data-[state=open]:!bg-black/60 backdrop-blur-md"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-background text-foreground shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
-        {/* Top Header Bar */}
-        <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 bg-[#121214] shrink-0 border-b border-zinc-800/80">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+        {/* Modern Dashboard Header */}
+        <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 shrink-0">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+            {/* Left: Brand, Logo & Breadcrumb */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <Image
+                  src="/logo.png"
+                  alt="Sycord"
+                  width={26}
+                  height={26}
+                  className="rounded object-contain shrink-0"
+                  priority
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-semibold text-foreground tracking-tight">Sycord</span>
+                  <Badge variant="outline" className="bg-primary/10 border-primary/20 text-primary text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 gap-1">
+                    <CircleDot className="w-2 h-2 text-primary fill-primary" />
+                    AI Models
+                  </Badge>
+                </div>
               </div>
-              <span className="font-bold text-white text-base tracking-tight">Sycord</span>
             </div>
-            <div className="h-4 w-[1px] bg-zinc-800 mx-1" />
-            <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
-              <span>Vercel AI Gateway</span>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
-                Live Gateway
-              </Badge>
-            </span>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => loadModels(true)}
-              title="Refresh models"
-              className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {/* Right: Credits, Refresh & Close */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-card text-muted-foreground text-xs font-medium">
+                <Coins className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-foreground font-semibold tabular-nums">{userCredits}</span>
+                <span className="text-[11px] text-muted-foreground">credits</span>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadModels(true)}
+                title="Refresh models"
+                className="h-8 px-2.5 text-xs border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground gap-1.5 rounded-lg"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Sync</span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </header>
 
-        {/* Category Horizontal Filter Bar */}
-        <div className="px-4 sm:px-8 py-2 bg-[#161619] border-b border-zinc-800/60 overflow-x-auto custom-scrollbar flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => setSelectedProvider("all")}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-              selectedProvider === "all"
-                ? "bg-zinc-100 text-zinc-900 font-semibold"
-                : "bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800"
-            }`}
-          >
-            <span>All Providers</span>
-            <span className="text-[10px] opacity-70">({models.length})</span>
-          </button>
-          {providers.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setSelectedProvider(p.id)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-                selectedProvider === p.id
-                  ? "bg-zinc-100 text-zinc-900 font-semibold"
-                  : "bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800"
-              }`}
-            >
-              <BrandLogo brand={p.id} size={14} />
-              <span>{p.name}</span>
-              <span className="text-[10px] opacity-70">({p.count})</span>
-            </button>
-          ))}
-        </div>
+        {/* Filter Controls Bar (Search, Price Brackets, Providers) */}
+        <div className="border-b border-border bg-card/50 px-4 sm:px-6 py-3 shrink-0">
+          <div className="max-w-6xl mx-auto space-y-3">
+            {/* Search and Price Filter Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Search Bar */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search models by name, capabilities, or id..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-1.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground text-xs font-medium outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
-        {/* Scrollable Model Browser Surface */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 custom-scrollbar bg-[#121214]">
-          <div className="max-w-4xl mx-auto space-y-5">
-            {/* Search Input Bar */}
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search by model name, provider, tags (e.g. reasoning, vision)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-100 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 shadow-xs"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              {/* Price Filter Pills (Matching card background, border & roundness) */}
+              <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-0.5">
+                <span className="text-[11px] font-medium text-muted-foreground mr-1 hidden sm:inline flex items-center gap-1">
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span>Price:</span>
+                </span>
+                {(
+                  [
+                    { id: "all", label: "All Prices" },
+                    { id: "free", label: "Free" },
+                    { id: "low", label: "Economy (<$0.5)" },
+                    { id: "medium", label: "Standard ($0.5-$2.5)" },
+                    { id: "high", label: "Frontier (>$2.5)" },
+                  ] as const
+                ).map((tier) => (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    onClick={() => setPriceFilter(tier.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap ${
+                      priceFilter === tier.id
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    {tier.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Models list grouped by provider */}
+            {/* Provider Horizontal Scrolling Filter */}
+            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-0.5">
+              <button
+                type="button"
+                onClick={() => setSelectedProvider("all")}
+                className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 flex items-center gap-1.5 ${
+                  selectedProvider === "all"
+                    ? "bg-accent text-foreground border-border shadow-xs font-semibold"
+                    : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <span>All Providers</span>
+                <span className="text-[10px] opacity-70">({models.length})</span>
+              </button>
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedProvider(p.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 flex items-center gap-1.5 ${
+                    selectedProvider === p.id
+                      ? "bg-accent text-foreground border-border shadow-xs font-semibold"
+                      : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <BrandLogo brand={p.id} size={14} />
+                  <span>{p.name}</span>
+                  <span className="text-[10px] opacity-70 font-mono">({p.count})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Minimalist Models Grid Surface */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 custom-scrollbar bg-background">
+          <div className="max-w-6xl mx-auto space-y-6">
             {loading && models.length === 0 ? (
-              <div className="py-16 text-center text-xs text-zinc-500 animate-pulse">
-                Fetching live models from Vercel AI Gateway...
+              <div className="py-20 text-center text-xs text-muted-foreground animate-pulse">
+                Fetching models and specifications...
               </div>
             ) : categorizedModels.length === 0 ? (
-              <div className="py-16 text-center text-xs text-zinc-500 space-y-2">
-                <p>No matching models found.</p>
-                <button
-                  type="button"
+              <div className="py-20 text-center text-xs text-muted-foreground space-y-2">
+                <p>No models match your current filters.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     setSelectedProvider("all")
+                    setPriceFilter("all")
                     setSearchQuery("")
                   }}
-                  className="text-emerald-400 hover:underline text-xs"
+                  className="rounded-lg text-xs border-border"
                 >
-                  Reset filters
-                </button>
+                  Clear all filters
+                </Button>
               </div>
             ) : (
               categorizedModels.map((group) => (
-                <div key={group.provider} className="space-y-2">
-                  {/* Category Header with SVGL Icon */}
-                  <div className="flex items-center gap-2 px-1 pt-2 pb-1 border-b border-zinc-800/60">
-                    <BrandLogo brand={group.provider} size={18} />
-                    <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                <div key={group.provider} className="space-y-3">
+                  {/* Category Header with Brand Logo */}
+                  <div className="flex items-center gap-2 px-0.5 border-b border-border/60 pb-1.5">
+                    <BrandLogo brand={group.provider} size={16} />
+                    <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
                       {group.providerDisplay}
                     </h2>
-                    <span className="text-[10px] text-zinc-500 font-mono">({group.items.length})</span>
+                    <span className="text-[11px] text-muted-foreground font-mono">({group.items.length})</span>
                   </div>
 
-                  {/* Models in Provider */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {/* Clean, minimalist cards matching dashboard card & background styling */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {group.items.map((model) => {
                       const isSelected = model.id === activeModelId
                       return (
                         <div
                           key={model.id}
                           onClick={() => handleSelectModel(model)}
-                          className={`group relative p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                          className={`group relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-xs ${
                             isSelected
-                              ? "bg-zinc-800/80 border-emerald-500/60 shadow-sm"
-                              : "bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-900/80 hover:border-zinc-700"
+                              ? "bg-card border-primary/70 ring-1 ring-primary/40"
+                              : "bg-card border-border hover:border-border/80 hover:bg-card/90"
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center shrink-0 mt-0.5">
-                                <BrandLogo brand={model.provider || model.name} size={18} />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-xs sm:text-sm font-semibold text-white truncate group-hover:text-emerald-300 transition-colors">
-                                  {model.name}
+                          <div className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-7 h-7 rounded-lg bg-muted/60 border border-border flex items-center justify-center shrink-0">
+                                  <BrandLogo brand={model.provider || model.name} size={16} />
                                 </div>
-                                <p className="text-[10px] font-mono text-zinc-500 truncate">{model.id}</p>
+                                <div className="min-w-0">
+                                  <div className="text-xs sm:text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                                    {model.name}
+                                  </div>
+                                  <p className="text-[10px] font-mono text-muted-foreground truncate">{model.id}</p>
+                                </div>
+                              </div>
+
+                              {/* Selection Indicator */}
+                              <div
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                                  isSelected
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-transparent group-hover:border-muted-foreground"
+                                }`}
+                              >
+                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                               </div>
                             </div>
 
-                            {/* Checkmark */}
-                            <div
-                              className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
-                                isSelected
-                                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                                  : "border-zinc-700 bg-transparent group-hover:border-zinc-500"
-                              }`}
-                            >
-                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                            </div>
+                            {model.description && (
+                              <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                {model.description}
+                              </p>
+                            )}
                           </div>
 
-                          {model.description && (
-                            <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
-                              {model.description}
-                            </p>
-                          )}
-
                           {/* Pricing & Context Details */}
-                          <div className="pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
-                            <div className="flex items-center gap-2">
+                          <div className="pt-2 border-t border-border/60 flex items-center justify-between text-[10px] text-muted-foreground">
+                            <div className="flex items-center gap-1.5 font-medium">
                               <span>
-                                In: <strong className="text-zinc-200">{model.inputCostDisplay || `$${model.input_cost}`}</strong>
+                                In: <strong className="text-foreground">{model.inputCostDisplay || `$${model.input_cost}`}</strong>
                               </span>
                               <span>•</span>
                               <span>
-                                Out: <strong className="text-zinc-200">{model.outputCostDisplay || `$${model.output_cost}`}</strong>
+                                Out: <strong className="text-foreground">{model.outputCostDisplay || `$${model.output_cost}`}</strong>
                               </span>
                             </div>
-                            <div className="font-mono text-zinc-500">
-                              {model.context_window ? `${Math.round(model.context_window / 1000)}k ctx` : ""}
-                            </div>
+                            {model.context_window && (
+                              <div className="font-mono text-muted-foreground text-[10px]">
+                                {Math.round(model.context_window / 1000)}k ctx
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
