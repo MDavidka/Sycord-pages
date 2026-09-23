@@ -49,6 +49,8 @@ async function loadEnvFile(envFile) {
     return env;
 }
 export async function pm2Describe(processName) {
+    if (!/^[A-Za-z0-9_-]+$/.test(processName))
+        throw new Error("Invalid processName");
     return runCommand(config.pm2Binary, ["jlist"])
         .then(({ stdout }) => {
         const json = JSON.parse(stdout.join("\n") || "[]");
@@ -57,14 +59,18 @@ export async function pm2Describe(processName) {
         .catch(() => null);
 }
 export async function startOrRestartProcess(projectId, processName, port, cwd, envFile) {
+    if (!/^[A-Za-z0-9_-]+$/.test(processName))
+        throw new Error("Invalid processName");
     const envFileVars = await loadEnvFile(envFile);
     const existing = await pm2Describe(processName);
     const env = {
         PORT: String(port),
         HOSTNAME: "0.0.0.0",
-        NODE_ENV: "production",
         ENV_FILE: envFile,
         ...envFileVars,
+        NODE_ENV: envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test"
+            ? envFileVars.NODE_ENV
+            : "production",
     };
     if (existing) {
         return runCommand(config.pm2Binary, ["restart", processName, "--update-env"], { cwd, env });
@@ -72,8 +78,12 @@ export async function startOrRestartProcess(projectId, processName, port, cwd, e
     return runCommand(config.pm2Binary, ["start", "npm", "--name", processName, "--cwd", cwd, "--", "run", "start"], { cwd, env });
 }
 export async function stopProcess(processName) {
+    if (!/^[A-Za-z0-9_-]+$/.test(processName))
+        throw new Error("Invalid processName");
     return runCommand(config.pm2Binary, ["stop", processName]);
 }
 export async function deleteProcess(processName) {
+    if (!/^[A-Za-z0-9_-]+$/.test(processName))
+        throw new Error("Invalid processName");
     return runCommand(config.pm2Binary, ["delete", processName]);
 }
