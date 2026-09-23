@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkCoolifyHealth, isCoolifyConfigured } from "@/lib/deploy/coolify-client"
+import { isAdmin } from "@/lib/is-admin"
 import { checkSyteHealth, isSyteConfigured, useSyteWorkspace } from "@/lib/deploy/syte-client"
 
 export const runtime = "nodejs"
@@ -11,6 +12,10 @@ export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   if (useSyteWorkspace()) {
