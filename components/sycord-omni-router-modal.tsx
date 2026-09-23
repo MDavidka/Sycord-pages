@@ -205,6 +205,16 @@ export interface SycordOmniRouterModalProps {
   selectedModel?: string
   onSelectModel?: (modelId: string, modelObj?: OmniModelItem) => void
   projectId?: string
+  modelChoices?: Array<{
+    id: string
+    label?: string
+    apiModel?: string
+    active?: boolean
+    isAiTabActive?: boolean
+    enabled?: boolean
+  }>
+  isDark?: boolean
+  onlyTurnedOn?: boolean
 }
 
 export function SycordOmniRouterModal({
@@ -213,6 +223,9 @@ export function SycordOmniRouterModal({
   selectedModel,
   onSelectModel,
   projectId = "global",
+  modelChoices,
+  isDark,
+  onlyTurnedOn,
 }: SycordOmniRouterModalProps) {
   const [models, setModels] = useState<OmniModelItem[]>([])
   const [providers, setProviders] = useState<Array<{ id: string; name: string; count: number }>>([])
