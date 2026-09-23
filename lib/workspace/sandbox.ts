@@ -105,7 +105,7 @@ export function safeJoin(root: string, rel: string): string {
 function isDisallowedFile(name: string): boolean {
   if (!name) return true
   if (name.includes("..") || name.includes("\0")) return true
-  if (path.isAbsolute(name)) return true
+  if (path.isAbsolute(name) || name.startsWith("/")) return true
   if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) return true
   return false
 }
