@@ -95,21 +95,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
   const connections = await listMcpConnections(loaded.db, loaded.ownerId, projectId)
   const listed = await syteAgentMcpList(loaded.uuid)
-  if (!listed.ok) {
-    return Response.json(
-      {
-        message: listed.error || "Failed to list MCP addons.",
-        connections,
-      },
-      { status: listed.status || 502 },
-    )
-  }
+  // A credential-backed integration can be valid even when Syte has not
+  // registered a corresponding remote MCP addon. Do not turn that state into
+  // a 502 or “addon not found”; the durable local connection is authoritative.
+  const addons = listed.ok ? listed.data?.addons || [] : []
 
   return Response.json({
     ok: true,
     uuid: loaded.uuid,
-    addons: mergeConnectionState(listed.data?.addons || [], connections),
+    addons: mergeConnectionState(addons, connections),
     connections,
+    remoteAddonError: listed.ok ? undefined : listed.error || "Remote addon unavailable",
   })
 }
 

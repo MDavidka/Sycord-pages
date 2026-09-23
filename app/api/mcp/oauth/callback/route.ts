@@ -15,6 +15,7 @@ import {
 import {
   completeMcpConnection,
   consumeOAuthConnectionState,
+  ensureMcpConnection,
 } from "@/lib/mcp-connections"
 
 export const runtime = "nodejs"
@@ -123,56 +124,55 @@ export async function GET(request: Request) {
   }
 
   if (state.integrationMode) {
-    // Skip MCP connection creation entirely; directly save token as env var
-    const envKey = provider.envKeys?.[0]
-    if (!envKey) {
-      return htmlResponse({ ok: false, error: "provider_missing_env_key", addon: provider.id, integrationMode: true }, 500)
-    }
-
-    const value = exchanged.credentials.accessToken
-    if (!value) {
-      return htmlResponse({ ok: false, error: "missing_access_token", addon: provider.id, integrationMode: true }, 400)
-    }
-
+    // Integrations are credential connections, not remote MCP registrations. Persist
+    // the OAuth credential in the encrypted connection store and treat remote tool
+    // discovery as optional: a provider may be callable by the agent without being
+    // present in Syte's addon registry yet.
     try {
-      // Add or update the env var in the user's project
-      await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": state.projectId },
-        { $pull: { "projects.$.envVars": { key: envKey } } as any }
-      )
+      const connection = await ensureMcpConnection(db, session.user.id, state.projectId, provider)
+      const { useSyteWorkspace, syteAgentMcpList } = await import("@/lib/deploy/syte-client")
+      const { requireSyteWorkspaceUuid } = await import("@/lib/deploy/syte-workspace")
+      let tools: unknown[] = []
+      let workspaceReady = false
 
-      await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": state.projectId },
-        {
-          $push: {
-            "projects.$.envVars": {
-              key: envKey,
-              value,
-              integration: provider.id,
-              addedAt: new Date(),
-            },
-          } as any,
-        }
-      )
-
-      // Sync it immediately to Syte if configured
-      const { useSyteWorkspace, syteSetEnv } = await import("@/lib/deploy/syte-client");
-      const { requireSyteWorkspaceUuid } = await import("@/lib/deploy/syte-workspace");
       if (useSyteWorkspace()) {
         const workspace = await requireSyteWorkspaceUuid(project, state.projectId)
         if (!("error" in workspace)) {
-          await syteSetEnv(workspace.uuid, { [envKey]: value }, true)
+          workspaceReady = true
+          const listed = await syteAgentMcpList(workspace.uuid)
+          if (listed.ok) {
+            const addon = (listed.data?.addons || []).find((candidate) => {
+              const candidateId = String(candidate.id || "").toLowerCase()
+              return candidateId === provider.id || candidateId.endsWith(`:${provider.id}`)
+            })
+            if (Array.isArray(addon?.tools)) tools = addon.tools
+          }
         }
+      }
+
+      const result = await completeMcpConnection({
+        db,
+        connection,
+        project,
+        credentials: exchanged.credentials,
+        connectRemote: false,
+        syncRemote: workspaceReady,
+        tools,
+      })
+      if (!result.ok) {
+        return htmlResponse({ ok: false, addon: provider.id, projectId: state.projectId, error: result.error || "connection_sync_failed", integrationMode: true }, 200)
       }
 
       return htmlResponse({
         ok: true,
         addon: provider.id,
         projectId: state.projectId,
+        connectionId: result.connection.connectionId,
+        tools: result.connection.tools || [],
         integrationMode: true,
       }, 200)
     } catch (error: any) {
-      return htmlResponse({ ok: false, addon: provider.id, error: error?.message || "failed_to_save_env", integrationMode: true }, 500)
+      return htmlResponse({ ok: false, addon: provider.id, error: error?.message || "failed_to_save_credentials", integrationMode: true }, 500)
     }
   }
 
