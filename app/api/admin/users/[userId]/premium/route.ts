@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/is-admin"
+import { isAdmin } from "@/lib/is-admin"
 import clientPromise from "@/lib/torso"
 
 export async function POST(request: Request, { params }: { params: Promise<{ userId: string }> }) {
-  try {
-    await requireAdmin()
-  } catch {
+  if (!(await isAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

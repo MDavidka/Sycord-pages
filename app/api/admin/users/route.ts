@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/is-admin"
+import { isAdmin } from "@/lib/is-admin"
 import clientPromise from "@/lib/torso"
 
 export async function GET() {
   try {
-    await requireAdmin()
+    if (!(await isAdmin())) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const client = await clientPromise
     const db = client.db()
