@@ -839,9 +839,11 @@ class TorsoDatabase {
 let torsoPromise: Promise<{ db: (name?: string) => TorsoDatabase }>;
 
 function createTorsoClient(): Promise<{ db: (name?: string) => TorsoDatabase }> {
-  console.log(`[torso] Initializing with URL: ${TORSO_URL || "(missing)"}`);
+  const torsoUrl = getTorsoUrl();
+  const torsoToken = getTorsoToken();
+  console.log(`[torso] Initializing with URL: ${torsoUrl || "(missing)"}`);
 
-  if (!TORSO_URL || !TORSO_TOKEN) {
+  if (!torsoUrl || !torsoToken) {
     console.warn("[torso] Warning: TORSO_URL or TORSO_TOKEN is not set. Auth will fail until configured.");
     return Promise.resolve({ db: (_name?: string) => new TorsoDatabase().db(_name) });
   }
