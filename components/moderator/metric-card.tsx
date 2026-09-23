@@ -19,18 +19,20 @@ export function MetricCard({
   value,
   changeText = "— vs. last week",
   icon: Icon,
-  iconColor = "text-[#A7AAB0]",
+  iconColor = "text-zinc-400",
   className,
 }: MetricCardProps) {
   return (
-    <Card className={cn("bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] shadow-sm rounded-xl", className)}>
-      <CardContent className="p-4 flex items-start justify-between">
+    <Card className={cn("bg-[#111111] border-[#27272a] text-zinc-100 shadow-sm rounded-xl py-0 gap-0", className)}>
+      <CardContent className="p-4 sm:p-5 flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-[#A7AAB0]">{title}</p>
-          <p className="text-2xl font-bold tracking-tight text-[#E5E7EB]">{value}</p>
-          <p className="text-[11px] text-[#777B82] font-normal">{changeText}</p>
+          <p className="text-xs font-medium text-zinc-400">{title}</p>
+          <p className="text-2xl font-bold tracking-tight text-white mt-1">{value}</p>
+          <p className="text-[11px] text-zinc-400 font-normal">{changeText}</p>
         </div>
-        <Icon className={cn("w-4 h-4 shrink-0 mt-0.5 text-muted-foreground", iconColor)} />
+        <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+          <Icon className={cn("w-4 h-4", iconColor)} />
+        </div>
       </CardContent>
     </Card>
   )

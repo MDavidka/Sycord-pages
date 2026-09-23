@@ -98,26 +98,33 @@ export async function GET(request: Request) {
     const userList = rawUsers.map((user: any) => {
       const userProjects = user.projects || []
       const credits = typeof user.credits === "number" ? user.credits : (user.isPremium ? 200 : 10)
+      const email = user.email || user.user?.email || "Unknown"
+      const name = user.name || user.user?.name || (email !== "Unknown" ? email.split("@")[0] : "User")
+      const ip = user.ip || user.user?.ip || "Unknown"
+      const createdAt = user.createdAt || user.created_at || user.user?.join_date || new Date().toISOString()
 
       return {
-        userId: user.id || user._tid,
-        email: user.email || "Unknown",
-        name: user.name || "Unknown",
-        projectCount: userProjects.length,
-        isPremium: user.isPremium || false,
-        isBlocked: user.isBlocked || false,
+        userId: user.id || user.userId || user._tid || user._id,
+        email,
+        name,
+        image: user.image || user.picture || user.user?.image || null,
+        projectCount: Array.isArray(userProjects) ? userProjects.length : 0,
+        isPremium: Boolean(user.isPremium || user.subscription === "pro" || user.subscription === "premium"),
+        isBlocked: Boolean(user.isBlocked),
         blockReason: user.blockReason || null,
         subscription: user.subscription || (user.isPremium ? "Premium" : "Free"),
         credits,
         totalTokensUsed: user.totalTokensUsed || 0,
-        ip: user.user?.ip || "Unknown",
-        createdAt: user.createdAt || user.user?.join_date || new Date().toISOString(),
-        websites: userProjects.map((p: any) => ({
-          id: p._id || p.id,
-          businessName: p.businessName || p.name || "Project",
-          subdomain: p.subdomain || "",
-        })),
-        warnings: user.warnings || [],
+        ip,
+        createdAt,
+        websites: Array.isArray(userProjects)
+          ? userProjects.map((p: any) => ({
+              id: p._id || p.id,
+              businessName: p.businessName || p.name || "Project",
+              subdomain: p.subdomain || "",
+            }))
+          : [],
+        warnings: Array.isArray(user.warnings) ? user.warnings : [],
       }
     })
 

@@ -515,8 +515,9 @@ async function loadCollectionDocs(
     sql += ` ORDER BY json_extract(doc, ?) ${options?.sortOrder === -1 ? "DESC" : "ASC"}`;
   }
 
-  // Only apply SQL-level LIMIT/OFFSET if we don't have JS-level filter/sort steps pending
-  if (useSqlFilter && (useSqlSort || !options?.sortField)) {
+  // Apply SQL-level LIMIT/OFFSET if we don't have pending JS-level filter/sort steps
+  const canUseSqlPagination = (!options?.filter || Object.keys(options.filter).length === 0 || useSqlFilter) && (useSqlSort || !options?.sortField);
+  if (canUseSqlPagination) {
     if (typeof options?.limit === "number" && options.limit >= 0) {
       sql += " LIMIT ?";
       args.push(options.limit);
@@ -623,7 +624,8 @@ class TorsoQuery<T = any> {
 
   async toArray(): Promise<T[]> {
     try {
-      const useSqlFilter = canUseSqlFilter(this.filter);
+      const isFilterEmpty = !this.filter || Object.keys(this.filter).length === 0;
+      const useSqlFilter = isFilterEmpty || canUseSqlFilter(this.filter);
       const useSqlSort = canUseSqlSort(this.sortField);
       const isFullSql = useSqlFilter && (useSqlSort || !this.sortField);
 

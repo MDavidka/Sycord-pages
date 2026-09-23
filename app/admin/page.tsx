@@ -365,300 +365,217 @@ export default function ModeratorPage() {
   }
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const userInitials = session?.user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "M"
+
+  const navItems = [
+    { id: "general" as ModeratorTab, label: "General", icon: LayoutDashboard },
+    { id: "users" as ModeratorTab, label: "Users", icon: Users },
+    { id: "providers" as ModeratorTab, label: "Providers & Usage", icon: Cpu },
+    { id: "servers" as ModeratorTab, label: "Servers", icon: Server },
+    { id: "tickets" as ModeratorTab, label: "Tickets & Broadcasts", icon: LifeBuoy },
+  ]
 
   return (
-    <div className="min-h-screen bg-[#181818] text-[#E5E7EB] flex flex-col md:flex-row antialiased font-sans">
-      {/* Mobile Top Navbar with Sycord Icon & Menu trigger */}
-      <div className="md:hidden flex items-center justify-between h-14 px-4 bg-[#1c1c1e] border-b border-[#2A2C30] shrink-0">
-        <div className="flex items-center gap-2.5">
-          <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-foreground leading-none">Sycord</span>
-              <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
-                Moderator
-              </Badge>
-            </div>
-            <p className="text-[10px] text-muted-foreground leading-none mt-1">Control Console</p>
-          </div>
-        </div>
-
-        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-foreground hover:bg-[#242528]">
+    <div className="min-h-screen bg-background text-foreground antialiased flex flex-col selection:bg-zinc-800 selection:text-white">
+      {/* Global Dashboard-Style Sticky Header */}
+      <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+          {/* Brand & Mode Tag */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
+              aria-label="Open menu"
+            >
               <Menu className="w-5 h-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="bg-[#1c1c1e] border-r border-[#2A2C30] text-[#E5E7EB] p-0 w-72 flex flex-col">
-            <SheetHeader className="h-14 px-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
-                <div>
-                  <SheetTitle className="text-xs font-semibold text-foreground leading-none text-left">Sycord Mod</SheetTitle>
-                  <p className="text-[10px] text-muted-foreground leading-none mt-1 text-left">Moderator View</p>
-                </div>
-              </div>
-            </SheetHeader>
+            </button>
 
-            {/* Mobile Nav Links */}
-            <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
-              {[
-                { id: "general", label: "General", icon: LayoutDashboard },
-                { id: "users", label: "Users", icon: Users },
-                { id: "providers", label: "Providers & Usage", icon: Cpu },
-                { id: "servers", label: "Servers", icon: Server },
-                { id: "tickets", label: "Tickets & Announcements", icon: LifeBuoy },
-              ].map((item) => {
+            <Link href="/dashboard" className="flex items-center gap-2.5 group">
+              <Image
+                src="/logo.png"
+                alt="Sycord Logo"
+                width={26}
+                height={26}
+                className="rounded object-contain shrink-0 transition-transform group-hover:scale-105"
+                priority
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-base font-semibold text-foreground tracking-tight">Sycord</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Mod Panel
+                </span>
+              </div>
+            </Link>
+          </div>
+
+          {/* Desktop Navigation Tabs (Dashboard Segmented Style) */}
+          <div className="hidden lg:flex items-center">
+            <div className="inline-flex items-center justify-center rounded-lg bg-zinc-900/80 p-1 border border-zinc-800/80 text-muted-foreground shadow-xs">
+              {navItems.map((item) => {
                 const Icon = item.icon
                 const isActive = activeTab === item.id
                 return (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id as ModeratorTab)
-                      setMobileMenuOpen(false)
-                    }}
+                    onClick={() => setActiveTab(item.id)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors select-none text-left",
+                      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-all select-none",
                       isActive
-                        ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                        : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
+                        ? "bg-zinc-800 text-zinc-100 shadow-xs"
+                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
                     )}
                   >
-                    <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span>{item.label}</span>
                   </button>
                 )
               })}
             </div>
-
-            <div className="p-3 border-t border-[#2A2C30] space-y-2">
-              <Button
-                variant="ghost"
-                onClick={() => router.push("/dashboard")}
-                className="w-full justify-start h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[#242528] gap-2"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Exit to Dashboard</span>
-              </Button>
-            </div>
-          </SheetContent>
-        </Sheet>
-      </div>
-
-      {/* Primary Moderator Navigation Sidebar (Desktop) */}
-      <aside className="hidden md:flex w-60 bg-[#1c1c1e] border-r border-[#2A2C30] flex-col shrink-0">
-        <div className="h-14 px-4 border-b border-[#2A2C30] flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
-            <div>
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs font-semibold text-foreground leading-none">Sycord</p>
-                <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
-                  Mod
-                </Badge>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-none mt-1">Moderator View</p>
-            </div>
           </div>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-[#2A2C30] text-muted-foreground">
-            v1.0
-          </Badge>
-        </div>
 
-        {/* Navigation Items */}
-        <nav className="p-2 space-y-1 flex-1">
-          <button
-            onClick={() => setActiveTab("general")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
-              activeTab === "general"
-                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
-            )}
-          >
-            <LayoutDashboard className="w-4 h-4 shrink-0 text-muted-foreground" />
-            <span>General</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("users")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
-              activeTab === "users"
-                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
-            )}
-          >
-            <Users className="w-4 h-4 shrink-0 text-muted-foreground" />
-            <span>Users</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("providers")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
-              activeTab === "providers"
-                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
-            )}
-          >
-            <Cpu className="w-4 h-4 shrink-0 text-muted-foreground" />
-            <span>Providers & Usage</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("servers")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
-              activeTab === "servers"
-                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
-            )}
-          >
-            <Server className="w-4 h-4 shrink-0 text-muted-foreground" />
-            <span>Servers</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("tickets")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
-              activeTab === "tickets"
-                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
-                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
-            )}
-          >
-            <LifeBuoy className="w-4 h-4 shrink-0 text-muted-foreground" />
-            <span>Tickets & Announcements</span>
-          </button>
-        </nav>
-
-        {/* Footer & Exit to Dashboard */}
-        <div className="p-3 border-t border-[#2A2C30] space-y-1.5">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/dashboard")}
-            className="w-full justify-start h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[#242528] gap-2"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Exit to Dashboard</span>
-          </Button>
-          <div className="flex items-center justify-between px-2 pt-1 text-[11px] text-muted-foreground">
-            <span className="truncate">{session?.user?.email}</span>
-            <button onClick={() => signOut({ callbackUrl: "/" })} className="hover:text-destructive transition-colors">
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Moderator View Surface */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-5">
-        {/* Openable Top Menubar with fast controls & tools */}
-        <div className="flex items-center justify-between bg-[#1c1c1e] border border-[#2A2C30] rounded-xl px-3 py-1.5 shadow-sm">
-          <Menubar className="bg-transparent border-0 h-auto p-0 gap-1 text-xs">
-            <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
-                <Menu className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Navigate</span>
-              </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
-                <MenubarItem onClick={() => setActiveTab("general")} className="gap-2 cursor-pointer">
-                  <LayoutDashboard className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>General Overview</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("users")} className="gap-2 cursor-pointer">
-                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>User Management</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("providers")} className="gap-2 cursor-pointer">
-                  <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Providers & Token Usage</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
-                  <Server className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Infrastructure & Servers</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("tickets")} className="gap-2 cursor-pointer">
-                  <LifeBuoy className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Tickets & Announcements</span>
-                </MenubarItem>
-                <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={() => router.push("/dashboard")} className="gap-2 cursor-pointer">
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Return to Dashboard</span>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Actions</span>
-              </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
-                <MenubarItem onClick={() => setAnnouncementDialogOpen(true)} className="gap-2 cursor-pointer">
-                  <Megaphone className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Broadcast Announcement</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => { setActiveTab("users"); fetchUsers() }} className="gap-2 cursor-pointer">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Lookup User</span>
-                </MenubarItem>
-                <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={fetchOverview} className="gap-2 cursor-pointer">
-                  <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Refresh Metrics</span>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-
-            <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>System</span>
-              </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
-                  <Server className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>View All Server Nodes</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
-                  <Database className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Database Cluster (Germany)</span>
-                </MenubarItem>
-                <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={() => { setActiveTab("tickets"); fetchAuditLogs() }} className="gap-2 cursor-pointer">
-                  <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>Moderation Audit Trail</span>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
-          </Menubar>
-
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              All systems nominal
-            </span>
+          {/* Right Header Controls & User Menu */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => {
                 fetchOverview()
                 if (activeTab === "users") fetchUsers(userSearch)
                 if (activeTab === "providers") fetchUsage()
                 if (activeTab === "servers") fetchServerMonitoring()
-                if (activeTab === "tickets") { fetchTickets(); fetchAnnouncements(); fetchAuditLogs() }
-                toast.success("Moderator data refreshed")
+                if (activeTab === "tickets") {
+                  fetchTickets()
+                  fetchAnnouncements()
+                  fetchAuditLogs()
+                }
+                toast.success("Moderator data synchronized")
               }}
-              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+              className="h-8 px-2.5 text-xs border-border bg-background/50 hover:bg-muted/60 text-muted-foreground hover:text-foreground gap-1.5"
             >
-              <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+              <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 ring-1 ring-border">
+                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-zinc-900 border-zinc-800 text-zinc-100" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none text-white">{session?.user?.name || "Moderator"}</p>
+                    <p className="text-xs leading-none text-zinc-400 truncate">{session?.user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuItem onClick={() => router.push("/dashboard")} className="cursor-pointer hover:bg-zinc-800">
+                  <ExternalLink className="mr-2 h-4 w-4 text-zinc-400" />
+                  <span>Exit to Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAnnouncementDialogOpen(true)} className="cursor-pointer hover:bg-zinc-800">
+                  <Megaphone className="mr-2 h-4 w-4 text-emerald-400" />
+                  <span>Broadcast Notice</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="text-destructive focus:text-destructive cursor-pointer hover:bg-zinc-800"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
+
+        {/* Mobile / Tablet Horizontal Navigation Scrollbar */}
+        <div className="lg:hidden border-t border-border/60 overflow-x-auto custom-scrollbar px-4 py-2 bg-background/50">
+          <div className="flex items-center gap-1.5 min-w-max">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={cn(
+                    "inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all select-none",
+                    isActive
+                      ? "bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Drawer Sheet */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="left" className="bg-[#111111] border-r border-[#27272a] text-zinc-100 p-0 w-72 flex flex-col">
+          <SheetHeader className="h-14 px-4 border-b border-[#27272a] flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
+              <div>
+                <SheetTitle className="text-xs font-semibold text-white leading-none text-left">Sycord Moderator</SheetTitle>
+                <p className="text-[10px] text-zinc-400 leading-none mt-1 text-left">Control & Safety Console</p>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id)
+                    setMobileMenuOpen(false)
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors select-none text-left",
+                    isActive
+                      ? "bg-zinc-800 text-white border border-zinc-700/60"
+                      : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="p-3 border-t border-[#27272a] space-y-2">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/dashboard")}
+              className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white border-[#27272a] bg-zinc-900 gap-2"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Exit to Dashboard</span>
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Main Moderator View Surface */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
         {/* =========================================================================
             TAB 1: GENERAL (DASHBOARD OVERVIEW)
            ========================================================================= */}
@@ -722,9 +639,9 @@ export default function ModeratorPage() {
             {/* Recent Reports / Cases & Quick Access Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Cols: Recent Reports */}
-              <Card className="lg:col-span-2 bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Card className="lg:col-span-2 bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
+                <CardHeader className="p-4 sm:p-5 border-b border-[#27272a] flex flex-row items-center justify-between">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
                     <AlertTriangle className="w-4 h-4 text-amber-400" />
                     Recent Reports
                   </CardTitle>
@@ -732,7 +649,7 @@ export default function ModeratorPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => setActiveTab("users")}
-                    className="h-7 text-xs text-[#A7AAB0] hover:text-white"
+                    className="h-7 text-xs text-zinc-400 hover:text-white"
                   >
                     View all users
                   </Button>
@@ -741,30 +658,30 @@ export default function ModeratorPage() {
                   {recentReports.length === 0 ? (
                     <div className="p-8 text-center space-y-1.5">
                       <CheckCircle2 className="w-6 h-6 text-zinc-500 mx-auto" />
-                      <p className="text-xs font-medium text-[#E5E7EB]">No recent reports</p>
-                      <p className="text-[11px] text-[#777B82]">When users report content, it will appear here.</p>
+                      <p className="text-xs font-medium text-zinc-200">No recent reports</p>
+                      <p className="text-[11px] text-zinc-500">When users report content, it will appear here.</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-[#2A2C30]">
+                    <div className="divide-y divide-[#27272a]/70">
                       {recentReports.map((report) => (
-                        <div key={report.id} className="p-3.5 flex items-center justify-between hover:bg-[#202124] transition-colors">
+                        <div key={report.id} className="p-3.5 sm:p-4 flex items-center justify-between hover:bg-zinc-900/50 transition-colors">
                           <div className="space-y-1 min-w-0 pr-3">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-semibold text-white truncate">{report.reportedUserEmail}</span>
                               <Badge
                                 variant="outline"
                                 className={cn(
-                                  "text-[10px] uppercase font-mono px-1.5 py-0 border-[#2A2C30]",
-                                  report.status === "open" && "text-amber-400 border-amber-500/30",
-                                  report.status === "resolved" && "text-emerald-400 border-emerald-500/30",
-                                  report.status === "dismissed" && "text-zinc-400"
+                                  "text-[10px] uppercase font-mono px-1.5 py-0 border",
+                                  report.status === "open" && "text-amber-400 border-amber-500/30 bg-amber-950/10",
+                                  report.status === "resolved" && "text-emerald-400 border-emerald-500/30 bg-emerald-950/10",
+                                  report.status === "dismissed" && "text-zinc-400 border-zinc-700"
                                 )}
                               >
                                 {report.status}
                               </Badge>
                             </div>
-                            <p className="text-xs text-[#A7AAB0] line-clamp-1">{report.reason}</p>
-                            <p className="text-[10px] text-[#777B82]">Reporter: {report.reporterEmail}</p>
+                            <p className="text-xs text-zinc-400 line-clamp-1">{report.reason}</p>
+                            <p className="text-[10px] text-zinc-500">Reporter: {report.reporterEmail}</p>
                           </div>
                           {report.status === "open" && (
                             <div className="flex items-center gap-1.5 shrink-0">
@@ -772,7 +689,7 @@ export default function ModeratorPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleResolveReport(report.id, "resolved")}
-                                className="h-7 px-2.5 text-xs border-[#2A2C30] hover:bg-emerald-950/30 hover:text-emerald-300"
+                                className="h-7 px-2.5 text-xs border-zinc-800 hover:bg-emerald-950/30 hover:text-emerald-300 text-zinc-300"
                               >
                                 Resolve
                               </Button>
@@ -780,7 +697,7 @@ export default function ModeratorPage() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleResolveReport(report.id, "dismissed")}
-                                className="h-7 px-2 text-xs text-[#A7AAB0] hover:text-zinc-200"
+                                className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200"
                               >
                                 Dismiss
                               </Button>
@@ -796,15 +713,15 @@ export default function ModeratorPage() {
               {/* Right 1 Col: Quick Access & Fast Server Status */}
               <div className="space-y-4">
                 {/* Quick Actions Card */}
-                <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                  <CardHeader className="p-4 border-b border-[#2A2C30]">
-                    <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
+                <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
+                  <CardHeader className="p-4 border-b border-[#27272a]">
+                    <CardTitle className="text-sm font-semibold text-white">Quick Actions</CardTitle>
                   </CardHeader>
                   <CardContent className="p-3 space-y-1.5">
                     <Button
                       variant="ghost"
                       onClick={() => setActiveTab("users")}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2.5"
+                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
                     >
                       <Search className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Search & Inspect User</span>
@@ -812,7 +729,7 @@ export default function ModeratorPage() {
                     <Button
                       variant="ghost"
                       onClick={() => setActiveTab("tickets")}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2.5"
+                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
                     >
                       <LifeBuoy className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Open Support Tickets</span>
@@ -820,48 +737,48 @@ export default function ModeratorPage() {
                     <Button
                       variant="ghost"
                       onClick={() => setAnnouncementDialogOpen(true)}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2.5"
+                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
                     >
                       <Megaphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Broadcast Server Announcement</span>
+                      <span>Broadcast Notice</span>
                     </Button>
                   </CardContent>
                 </Card>
 
                 {/* Fast Server Monitoring Widget */}
-                <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                  <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
+                  <CardHeader className="p-4 border-b border-[#27272a] flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
                       <Activity className="w-4 h-4 text-emerald-400" />
-                      System Status
+                      System Health
                     </CardTitle>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setActiveTab("servers")}
-                      className="h-7 text-xs text-[#A7AAB0] hover:text-white gap-1"
+                      className="h-7 text-xs text-zinc-400 hover:text-white gap-1"
                     >
-                      <span>View servers</span>
+                      <span>Servers</span>
                       <ArrowRight className="w-3 h-3" />
                     </Button>
                   </CardHeader>
                   <CardContent className="p-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-[#202124] border border-[#2A2C30]/50">
-                      <span className="text-[#A7AAB0]">Frontend</span>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
+                      <span className="text-zinc-400">Frontend (Edge)</span>
                       <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         Operational
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-[#202124] border border-[#2A2C30]/50">
-                      <span className="text-[#A7AAB0]">Backend (Syte API)</span>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
+                      <span className="text-zinc-400">Backend API</span>
                       <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         Operational
                       </span>
                     </div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-[#202124] border border-[#2A2C30]/50">
-                      <span className="text-[#A7AAB0]">Database (Germany)</span>
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
+                      <span className="text-zinc-400">Database (Germany)</span>
                       <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                         Operational (14ms)
@@ -878,167 +795,275 @@ export default function ModeratorPage() {
             TAB 2: USERS (SEARCH, INSPECTION, CREDITS, BAN)
            ========================================================================= */}
         {activeTab === "users" && (
-          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2C30] pb-4">
+          <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
               <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Users</h1>
-                <p className="text-xs md:text-sm text-[#A7AAB0] mt-0.5">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Registered Users</h1>
+                <p className="text-xs md:text-sm text-zinc-400 mt-0.5">
                   Inspect registered users, credit allocations, login IPs, and moderation controls
                 </p>
               </div>
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#777B82]" />
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
                 <Input
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="Search user, email, IP, project..."
-                  className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] pl-9 h-9 text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+                  placeholder="Search by email, name, IP, or ID..."
+                  className="bg-zinc-900 border-zinc-800 text-zinc-100 pl-9 h-9 text-xs focus-visible:ring-1 focus-visible:ring-zinc-600 w-full"
                 />
               </div>
             </div>
 
-            {/* Users Table */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#202124] border-b border-[#2A2C30] text-[#A7AAB0] font-medium">
-                    <tr>
-                      <th className="py-2.5 px-4">User</th>
-                      <th className="py-2.5 px-3">Email</th>
-                      <th className="py-2.5 px-3">Login IP</th>
-                      <th className="py-2.5 px-3">Projects</th>
-                      <th className="py-2.5 px-3">Credits</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2A2C30]">
-                    {usersLoading ? (
+            {/* Desktop Users Table */}
+            <div className="hidden md:block">
+              <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm overflow-hidden py-0 gap-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#18181b] border-b border-[#27272a] text-zinc-400 font-medium">
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-[#A7AAB0]">
-                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
-                          Loading users...
-                        </td>
+                        <th className="py-3 px-4 font-semibold">User</th>
+                        <th className="py-3 px-3 font-semibold">Email</th>
+                        <th className="py-3 px-3 font-semibold">Login IP</th>
+                        <th className="py-3 px-3 font-semibold">Projects</th>
+                        <th className="py-3 px-3 font-semibold">Credits</th>
+                        <th className="py-3 px-3 font-semibold">Status</th>
+                        <th className="py-3 px-4 text-right font-semibold">Actions</th>
                       </tr>
-                    ) : users.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-8 text-center text-[#A7AAB0]">
-                          No users found matching query.
-                        </td>
-                      </tr>
-                    ) : (
-                      users.map((u) => (
-                        <tr key={u.userId} className="hover:bg-[#202124]/60 transition-colors">
-                          <td className="py-3 px-4 font-medium text-white flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-[#2A2C30] flex items-center justify-center text-[10px] font-bold text-[#E5E7EB]">
-                              {(u.name || u.email || "U").charAt(0).toUpperCase()}
-                            </div>
-                            <span className="truncate max-w-[140px]">{u.name || "User"}</span>
-                          </td>
-                          <td className="py-3 px-3 text-[#E5E7EB] font-mono text-[11px] truncate max-w-[160px]">
-                            {u.email}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-[#A7AAB0]">
-                            {u.ip || "—"}
-                          </td>
-                          <td className="py-3 px-3 text-[#A7AAB0]">
-                            {u.projectCount || u.websites?.length || 0}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-emerald-400">
-                            {u.credits ?? 10}
-                          </td>
-                          <td className="py-3 px-3">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] px-1.5 py-0 border-[#2A2C30]",
-                                u.isBlocked
-                                  ? "text-red-400 border-red-500/30 bg-red-950/20"
-                                  : "text-emerald-400 border-emerald-500/30"
-                              )}
-                            >
-                              {u.isBlocked ? "Banned" : "Active"}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0 text-[#A7AAB0] hover:text-white hover:bg-[#242528]"
-                                >
-                                  <span className="sr-only">Open menu</span>
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44 bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB]">
-                                <DropdownMenuLabel className="text-[11px] text-[#777B82]">User Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTargetUser(u)
-                                    setCreditActionType("add")
-                                    setCreditDialogOpen(true)
-                                  }}
-                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2"
-                                >
-                                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                  <span>Add Credits</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTargetUser(u)
-                                    setCreditActionType("remove")
-                                    setCreditDialogOpen(true)
-                                  }}
-                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2"
-                                >
-                                  <Minus className="w-3.5 h-3.5 text-zinc-400" />
-                                  <span>Remove Credits</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-[#2A2C30]" />
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTargetUser(u)
-                                    setWarnDialogOpen(true)
-                                  }}
-                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2 text-amber-400 focus:text-amber-300"
-                                >
-                                  <AlertTriangle className="w-3.5 h-3.5" />
-                                  <span>Warn User</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setTargetUser(u)
-                                    setBanDialogOpen(true)
-                                  }}
-                                  className={cn(
-                                    "text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2",
-                                    u.isBlocked ? "text-emerald-400 focus:text-emerald-300" : "text-red-400 focus:text-red-300"
-                                  )}
-                                >
-                                  {u.isBlocked ? (
-                                    <>
-                                      <UserCheck className="w-3.5 h-3.5" />
-                                      <span>Unban User</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Ban className="w-3.5 h-3.5" />
-                                      <span>Ban User</span>
-                                    </>
-                                  )}
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                    </thead>
+                    <tbody className="divide-y divide-[#27272a]/70">
+                      {usersLoading ? (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-zinc-400">
+                            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
+                            Loading users from database...
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+                      ) : users.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-zinc-400">
+                            No registered users found.
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map((u) => (
+                          <tr key={u.userId} className="hover:bg-zinc-900/60 transition-colors">
+                            <td className="py-3.5 px-4 font-medium text-white flex items-center gap-2.5">
+                              <Avatar className="h-7 w-7 ring-1 ring-zinc-800">
+                                <AvatarImage src={u.image || ""} alt={u.name} />
+                                <AvatarFallback className="bg-zinc-800 text-zinc-300 text-[11px] font-bold">
+                                  {(u.name || u.email || "U").charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <p className="truncate max-w-[140px] font-medium text-white text-xs">{u.name || "User"}</p>
+                                <span className="text-[10px] text-zinc-400 font-mono block">ID: {String(u.userId).slice(0, 8)}...</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-3 text-zinc-300 font-mono text-[11px] truncate max-w-[160px]">
+                              {u.email}
+                            </td>
+                            <td className="py-3.5 px-3 font-mono text-[11px] text-zinc-400">
+                              {u.ip || "—"}
+                            </td>
+                            <td className="py-3.5 px-3 text-zinc-300 font-medium">
+                              {u.projectCount || u.websites?.length || 0}
+                            </td>
+                            <td className="py-3.5 px-3 font-semibold text-emerald-400 font-mono">
+                              {u.credits ?? 10}
+                            </td>
+                            <td className="py-3.5 px-3">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] px-2 py-0.5 border font-medium",
+                                  u.isBlocked
+                                    ? "text-red-400 border-red-500/30 bg-red-950/20"
+                                    : "text-emerald-400 border-emerald-500/30 bg-emerald-950/10"
+                                )}
+                              >
+                                {u.isBlocked ? "Banned" : "Active"}
+                              </Badge>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                  >
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48 bg-zinc-900 border-zinc-800 text-zinc-100">
+                                  <DropdownMenuLabel className="text-[11px] text-zinc-400 font-normal">Manage Account</DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTargetUser(u)
+                                      setCreditActionType("add")
+                                      setCreditDialogOpen(true)
+                                    }}
+                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Add Credits</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTargetUser(u)
+                                      setCreditActionType("remove")
+                                      setCreditDialogOpen(true)
+                                    }}
+                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2"
+                                  >
+                                    <Minus className="w-3.5 h-3.5 text-zinc-400" />
+                                    <span>Remove Credits</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className="bg-zinc-800" />
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTargetUser(u)
+                                      setWarnDialogOpen(true)
+                                    }}
+                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2 text-amber-400 focus:text-amber-300"
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                    <span>Warn User</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setTargetUser(u)
+                                      setBanDialogOpen(true)
+                                    }}
+                                    className={cn(
+                                      "text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2",
+                                      u.isBlocked ? "text-emerald-400 focus:text-emerald-300" : "text-red-400 focus:text-red-300"
+                                    )}
+                                  >
+                                    {u.isBlocked ? (
+                                      <>
+                                        <UserCheck className="w-3.5 h-3.5" />
+                                        <span>Unban Account</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Ban className="w-3.5 h-3.5" />
+                                        <span>Ban Account</span>
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+
+            {/* Mobile Users Card Grid */}
+            <div className="md:hidden space-y-3">
+              {usersLoading ? (
+                <div className="p-8 text-center text-zinc-400 bg-[#111111] border border-[#27272a] rounded-xl">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
+                  Loading users...
+                </div>
+              ) : users.length === 0 ? (
+                <div className="p-8 text-center text-zinc-400 bg-[#111111] border border-[#27272a] rounded-xl">
+                  No registered users found.
+                </div>
+              ) : (
+                users.map((u) => (
+                  <Card key={u.userId} className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl p-4 space-y-3 py-4 gap-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="h-9 w-9 ring-1 ring-zinc-800">
+                          <AvatarImage src={u.image || ""} alt={u.name} />
+                          <AvatarFallback className="bg-zinc-800 text-zinc-300 text-xs font-bold">
+                            {(u.name || u.email || "U").charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-white text-sm">{u.name || "User"}</p>
+                          <p className="text-xs text-zinc-400 font-mono truncate max-w-[200px]">{u.email}</p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 font-medium",
+                          u.isBlocked
+                            ? "text-red-400 border-red-500/30 bg-red-950/20"
+                            : "text-emerald-400 border-emerald-500/30 bg-emerald-950/10"
+                        )}
+                      >
+                        {u.isBlocked ? "Banned" : "Active"}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-lg bg-zinc-900/80 border border-zinc-800/80 text-xs text-center">
+                      <div>
+                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">Credits</span>
+                        <span className="font-semibold text-emerald-400 mt-0.5 block">{u.credits ?? 10}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">Projects</span>
+                        <span className="font-semibold text-white mt-0.5 block">{u.projectCount || 0}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">IP</span>
+                        <span className="font-mono text-zinc-400 mt-0.5 block text-[11px] truncate">{u.ip || "—"}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTargetUser(u)
+                          setCreditActionType("add")
+                          setCreditDialogOpen(true)
+                        }}
+                        className="flex-1 h-8 text-xs border-zinc-800 bg-zinc-900 text-zinc-200 hover:text-white"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+                        Credits
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTargetUser(u)
+                          setWarnDialogOpen(true)
+                        }}
+                        className="h-8 text-xs border-zinc-800 bg-zinc-900 text-amber-400 hover:text-amber-300 px-2.5"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setTargetUser(u)
+                          setBanDialogOpen(true)
+                        }}
+                        className={cn(
+                          "h-8 text-xs border-zinc-800 bg-zinc-900 px-2.5",
+                          u.isBlocked ? "text-emerald-400" : "text-red-400"
+                        )}
+                      >
+                        {u.isBlocked ? <UserCheck className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+                      </Button>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
           </div>
         )}
 
