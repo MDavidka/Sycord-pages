@@ -44,6 +44,8 @@ import {
   X,
   SlidersHorizontal,
   Sliders,
+  Filter,
+  MoreHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -796,232 +798,60 @@ export default function ModeratorPage() {
             TAB 2: USERS (SEARCH, INSPECTION, CREDITS, BAN)
            ========================================================================= */}
         {activeTab === "users" && (
-          <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Registered Users</h1>
-                <p className="text-xs md:text-sm text-zinc-400 mt-0.5">
-                  Inspect registered users, credit allocations, login IPs, and moderation controls
-                </p>
-              </div>
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-400" />
+          <div className="space-y-5 max-w-4xl mx-auto animate-in fade-in duration-150">
+            {/* Search Bar & Filter Action Row (Exact Image Match) */}
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-zinc-500" />
                 <Input
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="Search by email, name, IP, or ID..."
-                  className="bg-zinc-900 border-zinc-800 text-zinc-100 pl-9 h-9 text-xs focus-visible:ring-1 focus-visible:ring-zinc-600 w-full"
+                  placeholder="Search users..."
+                  className="bg-zinc-900/60 border-zinc-800/80 text-zinc-100 pl-10 h-9 rounded-full text-xs focus-visible:ring-1 focus-visible:ring-zinc-700"
                 />
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 px-3 rounded-xl border-zinc-800/80 bg-zinc-900/60 text-zinc-400 hover:text-white"
+              >
+                <Filter className="w-3.5 h-3.5" />
+              </Button>
             </div>
 
-            {/* Desktop Users Table */}
-            <div className="hidden md:block">
-              <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm overflow-hidden py-0 gap-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#18181b] border-b border-[#27272a] text-zinc-400 font-medium">
-                      <tr>
-                        <th className="py-3 px-4 font-semibold">User</th>
-                        <th className="py-3 px-3 font-semibold">Email</th>
-                        <th className="py-3 px-3 font-semibold">Login IP</th>
-                        <th className="py-3 px-3 font-semibold">Projects</th>
-                        <th className="py-3 px-3 font-semibold">Credits</th>
-                        <th className="py-3 px-3 font-semibold">Status</th>
-                        <th className="py-3 px-4 text-right font-semibold">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#27272a]/70">
-                      {usersLoading ? (
-                        <tr>
-                          <td colSpan={7} className="p-10 text-center text-zinc-400">
-                            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
-                            Loading users from database...
-                          </td>
-                        </tr>
-                      ) : users.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="p-10 text-center text-zinc-400">
-                            No registered users found.
-                          </td>
-                        </tr>
-                      ) : (
-                        users.map((u) => (
-                          <tr key={u.userId} className="hover:bg-zinc-900/60 transition-colors">
-                            <td className="py-3.5 px-4 font-medium text-white flex items-center gap-2.5">
-                              <Avatar className="h-7 w-7 ring-1 ring-zinc-800">
-                                <AvatarImage src={u.image || ""} alt={u.name} />
-                                <AvatarFallback className="bg-zinc-800 text-zinc-300 text-[11px] font-bold">
-                                  {(u.name || u.email || "U").charAt(0).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <p className="truncate max-w-[140px] font-medium text-white text-xs">{u.name || "User"}</p>
-                                <span className="text-[10px] text-zinc-400 font-mono block">ID: {String(u.userId).slice(0, 8)}...</span>
-                              </div>
-                            </td>
-                            <td className="py-3.5 px-3 text-zinc-300 font-mono text-[11px] truncate max-w-[160px]">
-                              {u.email}
-                            </td>
-                            <td className="py-3.5 px-3 font-mono text-[11px] text-zinc-400">
-                              {u.ip || "—"}
-                            </td>
-                            <td className="py-3.5 px-3 text-zinc-300 font-medium">
-                              {u.projectCount || u.websites?.length || 0}
-                            </td>
-                            <td className="py-3.5 px-3 font-semibold text-emerald-400 font-mono">
-                              {u.credits ?? 10}
-                            </td>
-                            <td className="py-3.5 px-3">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] px-2 py-0.5 border font-medium",
-                                  u.isBlocked
-                                    ? "text-red-400 border-red-500/30 bg-red-950/20"
-                                    : "text-emerald-400 border-emerald-500/30 bg-emerald-950/10"
-                                )}
-                              >
-                                {u.isBlocked ? "Banned" : "Active"}
-                              </Badge>
-                            </td>
-                            <td className="py-3.5 px-4 text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
-                                  >
-                                    <span className="sr-only">Open menu</span>
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48 bg-zinc-900 border-zinc-800 text-zinc-100">
-                                  <DropdownMenuLabel className="text-[11px] text-zinc-400 font-normal">Manage Account</DropdownMenuLabel>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setTargetUser(u)
-                                      setCreditActionType("add")
-                                      setCreditDialogOpen(true)
-                                    }}
-                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2"
-                                  >
-                                    <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span>Add Credits</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setTargetUser(u)
-                                      setCreditActionType("remove")
-                                      setCreditDialogOpen(true)
-                                    }}
-                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2"
-                                  >
-                                    <Minus className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span>Remove Credits</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="bg-zinc-800" />
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setTargetUser(u)
-                                      setWarnDialogOpen(true)
-                                    }}
-                                    className="text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2 text-amber-400 focus:text-amber-300"
-                                  >
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    <span>Warn User</span>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setTargetUser(u)
-                                      setBanDialogOpen(true)
-                                    }}
-                                    className={cn(
-                                      "text-xs cursor-pointer hover:bg-zinc-800 flex items-center gap-2",
-                                      u.isBlocked ? "text-emerald-400 focus:text-emerald-300" : "text-red-400 focus:text-red-300"
-                                    )}
-                                  >
-                                    {u.isBlocked ? (
-                                      <>
-                                        <UserCheck className="w-3.5 h-3.5" />
-                                        <span>Unban Account</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Ban className="w-3.5 h-3.5" />
-                                        <span>Ban Account</span>
-                                      </>
-                                    )}
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            </div>
-
-            {/* Mobile Users Card Grid */}
-            <div className="md:hidden space-y-3">
+            {/* Users Card Container (Matching Image rounded container) */}
+            <Card className="bg-zinc-900/40 border-zinc-800/80 text-zinc-100 rounded-2xl p-4 sm:p-5 shadow-xs py-4 gap-0 space-y-4">
               {usersLoading ? (
-                <div className="p-8 text-center text-zinc-400 bg-[#111111] border border-[#27272a] rounded-xl">
+                <div className="p-10 text-center text-zinc-500">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
                   Loading users...
                 </div>
               ) : users.length === 0 ? (
-                <div className="p-8 text-center text-zinc-400 bg-[#111111] border border-[#27272a] rounded-xl">
+                <div className="p-10 text-center text-zinc-500 text-xs">
                   No registered users found.
                 </div>
               ) : (
                 users.map((u) => (
-                  <Card key={u.userId} className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl p-4 space-y-3 py-4 gap-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar className="h-9 w-9 ring-1 ring-zinc-800">
-                          <AvatarImage src={u.image || ""} alt={u.name} />
-                          <AvatarFallback className="bg-zinc-800 text-zinc-300 text-xs font-bold">
-                            {(u.name || u.email || "U").charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold text-white text-sm">{u.name || "User"}</p>
-                          <p className="text-xs text-zinc-400 font-mono truncate max-w-[200px]">{u.email}</p>
-                        </div>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 font-medium",
-                          u.isBlocked
-                            ? "text-red-400 border-red-500/30 bg-red-950/20"
-                            : "text-emerald-400 border-emerald-500/30 bg-emerald-950/10"
-                        )}
-                      >
-                        {u.isBlocked ? "Banned" : "Active"}
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-lg bg-zinc-900/80 border border-zinc-800/80 text-xs text-center">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">Credits</span>
-                        <span className="font-semibold text-emerald-400 mt-0.5 block">{u.credits ?? 10}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">Projects</span>
-                        <span className="font-semibold text-white mt-0.5 block">{u.projectCount || 0}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-zinc-500 uppercase block font-medium">IP</span>
-                        <span className="font-mono text-zinc-400 mt-0.5 block text-[11px] truncate">{u.ip || "—"}</span>
+                  <div
+                    key={u.userId}
+                    className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/60 flex items-center justify-between gap-4 hover:border-zinc-700/80 transition-all"
+                  >
+                    {/* Left: Avatar Initial & Email/IP info (Exact Image Layout) */}
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <Avatar className="h-10 w-10 rounded-xl ring-0 shrink-0">
+                        <AvatarImage src={u.image || ""} alt={u.name} />
+                        <AvatarFallback className="bg-amber-950/40 border border-amber-800/30 text-amber-200 text-sm font-bold rounded-xl">
+                          {(u.email || u.name || "U").charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="font-semibold text-white text-sm truncate">{u.email || u.name}</p>
+                        <p className="text-[11px] text-zinc-500 font-mono">{u.ip || "Unknown IP"}</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1">
+                    {/* Right: Quick Action Buttons (Exact matching icon buttons from image) */}
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <Button
                         size="sm"
                         variant="outline"
@@ -1030,10 +860,10 @@ export default function ModeratorPage() {
                           setCreditActionType("add")
                           setCreditDialogOpen(true)
                         }}
-                        className="flex-1 h-8 text-xs border-zinc-800 bg-zinc-900 text-zinc-200 hover:text-white"
+                        title="Add Credits"
+                        className="h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 text-emerald-400 hover:text-emerald-300 hover:bg-zinc-800"
                       >
-                        <Plus className="w-3.5 h-3.5 mr-1 text-emerald-400" />
-                        Credits
+                        <Plus className="w-3.5 h-3.5" />
                       </Button>
                       <Button
                         size="sm"
@@ -1042,7 +872,8 @@ export default function ModeratorPage() {
                           setTargetUser(u)
                           setWarnDialogOpen(true)
                         }}
-                        className="h-8 text-xs border-zinc-800 bg-zinc-900 text-amber-400 hover:text-amber-300 px-2.5"
+                        title="Warn User"
+                        className="h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 text-amber-400 hover:text-amber-300 hover:bg-zinc-800"
                       >
                         <AlertTriangle className="w-3.5 h-3.5" />
                       </Button>
@@ -1053,18 +884,19 @@ export default function ModeratorPage() {
                           setTargetUser(u)
                           setBanDialogOpen(true)
                         }}
+                        title={u.isBlocked ? "Unban User" : "Ban User"}
                         className={cn(
-                          "h-8 text-xs border-zinc-800 bg-zinc-900 px-2.5",
+                          "h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 hover:bg-zinc-800",
                           u.isBlocked ? "text-emerald-400" : "text-red-400"
                         )}
                       >
                         {u.isBlocked ? <UserCheck className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
                       </Button>
                     </div>
-                  </Card>
+                  </div>
                 ))
               )}
-            </div>
+            </Card>
           </div>
         )}
 
