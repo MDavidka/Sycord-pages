@@ -402,10 +402,10 @@ export default function ModeratorPage() {
               />
               <div className="flex items-center gap-2">
                 <span className="text-base font-semibold text-foreground tracking-tight">Sycord</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
+                <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider gap-1 px-2 py-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   Mod Panel
-                </span>
+                </Badge>
               </div>
             </Link>
           </div>
@@ -583,22 +583,22 @@ export default function ModeratorPage() {
         {activeTab === "general" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2C30] pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
               <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Moderator View</h1>
-                <p className="text-xs md:text-sm text-[#A7AAB0] mt-0.5">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">Moderator View</h1>
+                <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
                   Monitor, review and keep the platform safe
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-[#1c1c1e] border-[#2A2C30] text-[#A7AAB0] text-xs px-2.5 py-1">
+                <Badge variant="outline" className="bg-card border-border text-muted-foreground text-xs px-2.5 py-1">
                   Last 7 days
                 </Badge>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={fetchOverview}
-                  className="h-8 px-2 text-[#A7AAB0] hover:text-white hover:bg-[#202124]"
+                  className="h-8 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
                 </Button>
@@ -640,8 +640,8 @@ export default function ModeratorPage() {
             {/* Recent Reports / Cases & Quick Access Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Cols: Recent Reports */}
-              <Card className="lg:col-span-2 bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
-                <CardHeader className="p-4 sm:p-5 border-b border-[#27272a] flex flex-row items-center justify-between">
+              <Card className="lg:col-span-2 bg-card border-border text-card-foreground rounded-xl shadow-xs py-0 gap-0">
+                <CardHeader className="p-4 sm:p-5 border-b border-border flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
                     <AlertTriangle className="w-4 h-4 text-amber-400" />
                     Recent Reports
