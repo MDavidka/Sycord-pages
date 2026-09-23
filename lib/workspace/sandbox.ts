@@ -133,8 +133,17 @@ export async function materializeWorkspace(projectId: string, files: WorkspaceFi
 
 /** Resolve a (possibly "/"-prefixed) cwd against the workspace root, safely. */
 export function resolveCwd(root: string, cwd?: string): string {
-  const rel = (cwd || "/").replace(/^\/+/, "")
+  if (!cwd) return root
+  // Remove leading slashes so path.resolve(root, rel) works as expected.
+  const rel = cwd.replace(/^\/+/, "")
   return safeJoin(root, rel.length > 0 ? rel : ".")
+}
+
+export function validateSafePath(p: string): boolean {
+  if (!p || typeof p !== "string") return false
+  if (p.includes("..") || p.includes("\0")) return false
+  if (path.isAbsolute(p)) return false
+  return true
 }
 
 /** Commands that must never run in the sandbox, regardless of who asks. */
