@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
