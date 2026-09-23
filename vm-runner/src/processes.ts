@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process"
+import { spawn, execFile } from "node:child_process"
+import { promisify } from "node:util"
+const execFileAsync = promisify(execFile)
 import { once } from "node:events"
 import { readFile } from "node:fs/promises"
 import { config } from "./config.js"
@@ -59,12 +61,13 @@ async function loadEnvFile(envFile: string): Promise<Record<string, string>> {
 }
 
 export async function pm2Describe(processName: string) {
-  return runCommand(config.pm2Binary, ["jlist"])
-    .then(({ stdout }) => {
-      const json = JSON.parse(stdout.join("\n") || "[]") as Array<any>
-      return json.find((entry) => entry.name === processName) || null
-    })
-    .catch(() => null)
+  try {
+    const { stdout } = await execFileAsync(config.pm2Binary, ["jlist"]);
+    const json = JSON.parse(stdout || "[]") as Array<any>;
+    return json.find((entry) => entry.name === processName) || null;
+  } catch (error) {
+    return null;
+  }
 }
 
 export async function startOrRestartProcess(projectId: string, processName: string, port: number, cwd: string, envFile: string) {
@@ -75,10 +78,7 @@ export async function startOrRestartProcess(projectId: string, processName: stri
     HOSTNAME: "0.0.0.0",
     ENV_FILE: envFile,
     ...envFileVars,
-    NODE_ENV:
-      envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test"
-        ? envFileVars.NODE_ENV
-        : "production",
+    NODE_ENV: envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test" ? envFileVars.NODE_ENV : "production",
   }
 
   if (existing) {

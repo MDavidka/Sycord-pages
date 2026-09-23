@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
@@ -49,12 +51,14 @@ async function loadEnvFile(envFile) {
     return env;
 }
 export async function pm2Describe(processName) {
-    return runCommand(config.pm2Binary, ["jlist"])
-        .then(({ stdout }) => {
-        const json = JSON.parse(stdout.join("\n") || "[]");
+    try {
+        const { stdout } = await execFileAsync(config.pm2Binary, ["jlist"]);
+        const json = JSON.parse(stdout || "[]");
         return json.find((entry) => entry.name === processName) || null;
-    })
-        .catch(() => null);
+    }
+    catch (error) {
+        return null;
+    }
 }
 export async function startOrRestartProcess(projectId, processName, port, cwd, envFile) {
     const envFileVars = await loadEnvFile(envFile);
@@ -62,9 +66,9 @@ export async function startOrRestartProcess(projectId, processName, port, cwd, e
     const env = {
         PORT: String(port),
         HOSTNAME: "0.0.0.0",
-        NODE_ENV: "production",
         ENV_FILE: envFile,
         ...envFileVars,
+        NODE_ENV: envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test" ? envFileVars.NODE_ENV : "production",
     };
     if (existing) {
         return runCommand(config.pm2Binary, ["restart", processName, "--update-env"], { cwd, env });
