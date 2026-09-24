@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -1266,6 +1266,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Fallback resolution when the agent finishes without a direct assistant text message
+    const resolveFallbackAssistantContent = (actions: StreamingAction[], currentContent: string): string => {
+        if (currentContent && currentContent.trim() && currentContent.trim() !== 'Done.') {
+            return currentContent;
+        }
+        // Look for rich results from completed actions
+        for (let i = actions.length - 1; i >= 0; i--) {
+            const action = actions[i];
+            const res = action?.result;
+            if (typeof res === 'string' && res.trim() && res.trim() !== 'Done.') {
+                // If it's a JSON array or object, or long text (e.g. repo list, search result)
+                return res.trim();
+            }
+        }
+        // Check if there was an action displayName / label describing what was performed
+        const lastAction = actions[actions.length - 1];
+        if (lastAction?.displayName && lastAction.displayName !== 'Agent tool' && lastAction.displayName !== 'Action') {
+            return `Completed ${lastAction.displayName}.`;
+        }
+        return 'Done.';
+    };
+
     // When returning to a host project chat, resume any open Turso agent turn
     // so previous activity is reloaded from the durable database.
     const agentResumeKeyRef = useRef<string | null>(null);
@@ -1574,7 +1596,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 if (!assistantContent && event.text) {
                                     assistantContent = event.text;
                                 }
-                                assistantContent = assistantContent || 'Done.';
+                                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
                                 clearPendingQuestion();
@@ -1610,11 +1632,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     void syncPendingQuestions(projectId, controller.signal);
 
+                    // Check sessionStorage for instant cursor before network lookup
+                    let cachedTursoId = knownTursoId;
+                    let cachedEventId = highestEventId;
+                    try {
+                        if (typeof window !== 'undefined' && projectId) {
+                            const raw = sessionStorage.getItem(`syra_session_${projectId}`);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (parsed?.tursoSessionId) {
+                                    cachedTursoId = parsed.tursoSessionId;
+                                    cachedEventId = Math.max(cachedEventId, Number(parsed.highestEventId) || 0);
+                                }
+                            }
+                        }
+                    } catch {}
+
                     const resumed = await resumeProjectAgent({
                         projectId,
-                        tursoSessionId: knownTursoId || undefined,
-                        afterEventId: lastLooksIncomplete ? highestEventId : 0,
-                        allowCompleted: Boolean(knownTursoId),
+                        tursoSessionId: cachedTursoId || undefined,
+                        afterEventId: lastLooksIncomplete ? cachedEventId : 0,
+                        allowCompleted: Boolean(cachedTursoId),
                         signal: controller.signal,
                         onEvent: applyEvent,
                     });
@@ -1631,13 +1669,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     // streaming forever or render a false interruption error.
                     if (!completed && resumed.status === 'completed') {
                         completed = true;
-                        assistantContent ||= 'Done.';
+                        assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                         if (!replayHistoryOnly) updateLastMessage(assistantContent);
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     } else if (!completed && resumed.status === 'stopped') {
                         completed = true;
                         if (!replayHistoryOnly && !assistantContent) updateLastMessage('Stopped.');
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     }
 
                     if (errorText && !completed) {
@@ -1672,11 +1720,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setCurrentThinking('');
                     setThinkingStartTime(null);
                     if (!cancelled) {
-                        setTimeout(() => replaceActions([], false), 500);
+                        setTimeout(() => replaceActions([], false), 300);
                     }
                 }
             })();
-        }, 700);
+        }, 100);
 
         return () => {
             cancelled = true;
@@ -1725,6 +1773,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
                 setMessages([...state.messages]);
             }
+            try {
+                if (typeof window !== 'undefined' && projectId && tursoSessionId) {
+                    sessionStorage.setItem(`syra_session_${projectId}`, JSON.stringify({
+                        tursoSessionId,
+                        activeSession,
+                        highestEventId,
+                        updatedAt: Date.now(),
+                    }));
+                }
+            } catch {}
         };
 
         const applyEvent = (event: ProjectAgentEvent) => {
@@ -2056,7 +2114,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!assistantContent && doneText) {
                         assistantContent = doneText;
                     }
-                    assistantContent = assistantContent || 'Done.';
+                    assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                     updateLastMessage(assistantContent);
                     completed = true;
                     clearPendingQuestion();
@@ -2130,7 +2188,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             // status before declaring the response incomplete.
             if (!completed && result.status === 'completed') {
                 completed = true;
-                assistantContent ||= 'Done.';
+                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                 updateLastMessage(assistantContent);
                 clearPendingQuestion();
                 markAgentTimelineLoaded();
@@ -3184,17 +3242,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     // safe-area aware spacing. The host injects the real Google avatar + a back
     // handler via window globals (see GlovixBuilder).
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
-    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
-    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
-    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
+    const hostProjectName = typeof window !== 'undefined' ? ((window as any).__glovixProjectName as string | undefined) : undefined;
+    // Prefer host-injected user avatar (Google profile picture) or user photoURL
+    const profileImage = hostUserImage || user?.photoURL;
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
     };
 
+    const AstroAvatar = ({ className = "" }: { className?: string }) => (
+        <div className={`h-6 w-6 shrink-0 flex items-center justify-center ${className}`}>
+            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-contain rounded-full" />
+        </div>
+    );
+
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#151515] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.08),rgba(255,255,255,0))]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3272,31 +3336,33 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </div>
 
                     <div
-                        className="pointer-events-auto relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-4 sm:px-6"
+                        className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
                         style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        <button
-                            type="button"
-                            onClick={handleBack}
-                            aria-label="Back"
-                            className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
-                        >
-                            <ArrowLeft className="size-5" strokeWidth={1.8} />
-                        </button>
+                        <div className="flex items-center gap-2.5 min-w-0 z-10 relative">
+                            <button
+                                type="button"
+                                onClick={handleBack}
+                                aria-label="Toggle Sidebar or Go Back"
+                                className={`relative z-10 flex size-9 items-center justify-center rounded-xl transition-all active:scale-95 ${isDark ? 'text-white/80 hover:bg-white/10 hover:text-white backdrop-blur-sm' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900 backdrop-blur-sm'}`}
+                            >
+                                <PanelLeft className="size-5" strokeWidth={1.8} />
+                            </button>
 
-                        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
-                            <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
-                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {hostProjectName || 'Test project'}
+                            </span>
+                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2">
                             {showPreviewButton && onOpenPreview && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}
                                     aria-label="Open preview"
                                     title="Open preview"
-                                    className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                    className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                                 >
                                     <Eye className="size-[18px]" strokeWidth={1.8} />
                                 </button>
@@ -3305,7 +3371,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 type="button"
                                 onClick={() => setShowDeepMemory(true)}
                                 aria-label="Profile"
-                                className={`flex size-9 items-center justify-center overflow-hidden rounded-xl transition-transform active:scale-95 ${isDark ? 'bg-white/[0.08] text-white' : 'bg-black/[0.05] text-gray-900'}`}
+                                className={`flex size-9 sm:size-10 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-[#523d35] text-white/90 shadow-sm' : 'border border-gray-300 bg-black/[0.05] text-gray-900'}`}
                             >
                                 {profileImage && !profileImgError ? (
                                     <img
@@ -3316,7 +3382,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         className="h-full w-full object-cover"
                                     />
                                 ) : (
-                                    <span className="text-sm font-semibold">M</span>
+                                    <span className="text-sm font-semibold">
+                                        {(user?.email?.[0] || 'M').toUpperCase()}
+                                    </span>
                                 )}
                             </button>
                         </div>
@@ -3334,144 +3402,77 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     className={`mx-auto w-full max-w-[760px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
-                    {groupedMessages.map((group, idx) => (
-                        <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && !group.segments?.some(s => s.type === 'thinking') && (
-                                <ThinkingBlock
-                                    thinking={group.thinking}
-                                    isDark={isDark}
-                                    thinkingTime={group.thinkingDuration || undefined}
-                                    startTime={idx === groupedMessages.length - 1 && isRunning ? thinkingStartTime : undefined}
-                                />
-                            )}
+                    {groupedMessages.length === 0 && !isRunning && (
+                        <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
+                            <AstroAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
+                            <span className={`text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                                Tell me how can i help you?
+                            </span>
+                        </div>
+                    )}
 
-                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && !group.segments?.some(s => s.type === 'tools') && (
-                                <ActionsList
-                                    actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
-                                    isLive={idx === groupedMessages.length - 1 && isRunning}
-                                    isDark={isDark}
-                                />
-                            )}
+                    {groupedMessages.map((group, idx) => {
+                        const isLastGroup = idx === groupedMessages.length - 1;
+                        const isLiveTurn = isRunning && isLastGroup;
 
-                            {group.role === 'user' && group.attachments && group.attachments.length > 0 && (
-                                <div className="flex justify-end mb-1">
-                                    <div className="flex flex-col gap-1.5">
-                                        {group.attachments.map((file, i) => (
-                                            <FileAttachmentBlock key={i} file={file} isDark={isDark} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                        // For assistant messages, extract the latest text content across segments or direct content
+                        let assistantText = '';
+                        if (group.role === 'assistant') {
+                            if (group.segments && group.segments.length > 0) {
+                                // Gather all text segment content
+                                const textSegs = group.segments.filter(s => s.type === 'text' && s.content);
+                                if (textSegs.length > 0) {
+                                    assistantText = textSegs.map(s => typeof s.content === 'string' ? s.content : '').filter(Boolean).join('\n\n');
+                                }
+                            }
+                            if (!assistantText && group.content) {
+                                assistantText = typeof group.content === 'string' ? group.content : '';
+                            }
+                        }
 
-                            {/* Render segments in order for assistant messages */}
-                            {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
-                                <>
-                                    {group.segments.map((seg, segIdx) => {
-                                        if (seg.type === 'thinking') {
-                                            return (
-                                                <div key={`seg-thinking-${segIdx}`}>
-                                                    <ThinkingBlock
-                                                        thinking={seg.thinking || ''}
-                                                        isDark={isDark}
-                                                        thinkingTime={seg.thinkingDuration}
-                                                        startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
-                                                    />
+                        const questionSeg = group.role === 'assistant' && group.segments?.find(s => s.type === 'question' && s.question);
+                        const question = questionSeg ? questionSeg.question : undefined;
+
+                        return (
+                            <div key={idx} className="space-y-3 animate-fade-in-up">
+                                {group.role === 'user' && (
+                                    <>
+                                        {group.attachments && group.attachments.length > 0 && (
+                                            <div className="flex justify-end mb-1">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {group.attachments.map((file, i) => (
+                                                        <FileAttachmentBlock key={i} file={file} isDark={isDark} />
+                                                    ))}
                                                 </div>
-                                            );
-                                        }
-                                        if (seg.type === 'question' && seg.question) {
-                                            return (
-                                                <div key={`seg-q-${segIdx}`} className="my-2.5">
-                                                    <AgentQuestionCard
-                                                        question={seg.question}
-                                                        isDark={isDark}
-                                                        submitting={questionSubmitting}
-                                                        error={questionError}
-                                                        onSubmit={handleAgentQuestionSubmit}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'text' && seg.content) {
-                                            const textContent = typeof seg.content === 'string' ? seg.content : '';
-                                            if (!textContent) return null;
-                                            const isLiveSeg = isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1;
-                                            return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <StreamingResponse
-                                                        status={isLiveSeg ? 'streaming' : 'complete'}
-                                                        copyText={textContent}
-                                                        showActions={!isLiveSeg}
-                                                        className="w-full"
-                                                    >
-                                                        <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
-                                                            {renderAssistantMarkdown(textContent)}
+                                            </div>
+                                        )}
+                                        <div className="flex justify-end">
+                                            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
+                                                <div
+                                                    className={`text-[15px] leading-relaxed break-words ${
+                                                        isDark
+                                                            ? 'bg-[#181818] text-zinc-100 rounded-[20px] px-4 py-3 border border-white/[0.08] shadow-sm'
+                                                            : 'bg-zinc-100 text-zinc-900 rounded-[20px] px-4 py-3 border border-zinc-200/80 shadow-sm'
+                                                    }`}
+                                                >
+                                                    {/* Picked element indicator */}
+                                                    {(group as any).pickedElement && (
+                                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                                            <MousePointer2 className="w-3 h-3 flex-shrink-0" />
+                                                            <span className="font-medium">
+                                                                {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
+                                                            </span>
+                                                            {(group as any).pickedElement.text && (
+                                                                <span className="truncate opacity-70">
+                                                                    {(group as any).pickedElement.text.length > 30
+                                                                        ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                                        : (group as any).pickedElement.text}
+                                                                </span>
+                                                            )}
                                                         </div>
-                                                    </StreamingResponse>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'tools') {
-                                            const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
-                                            const segActions = showLive
-                                                ? actions.filter(a => a.toolName !== 'drawDiagram')
-                                                : (seg.actions && seg.actions.length > 0
-                                                    ? seg.actions.filter(a => a.toolName !== 'drawDiagram')
-                                                    : (seg.toolCalls && seg.toolCalls.length > 0
-                                                        ? seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                            id: `completed_${idx}_${segIdx}_${i}`,
-                                                            toolName: tc.call.function.name,
-                                                            displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                            result: tc.result,
-                                                            args: tc.call.function.arguments || ''
-                                                        }))
-                                                        : []));
-
-                                            if (segActions.length === 0) return null;
-                                            return (
-                                                <div key={`seg-${segIdx}`}>
-                                                    <ActionsList
-                                                        actions={segActions}
-                                                        isLive={showLive}
-                                                        isDark={isDark}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-                                    {/* Live actions if no segments have tools yet */}
-                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                    )}
-                                    <MessageMetaFooter
-                                        content={group.content}
-                                        createdAt={group.createdAt}
-                                        isDark={isDark}
-                                        hide={idx === groupedMessages.length - 1 && isRunning}
-                                        group={group}
-                                        projectId={hostProjectIdForSlash || undefined}
-                                        chatId={currentChatId || undefined}
-                                        selectedModel={selectedModel}
-                                        effortLevel={effortLevel}
-                                    />
-                                </>
-                            ) : (
-                                <>
-                                    {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        {group.role === 'assistant' ? (
-                                            <StreamingResponse
-                                                status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
-                                                copyText={typeof group.content === 'string' ? group.content : ''}
-                                                showActions={!(idx === groupedMessages.length - 1 && isRunning)}
-                                                className="w-full"
-                                            >
-                                                <div className={`text-[14px] leading-relaxed max-w-full ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                    )}
                                                     {group.content && (
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             {Array.isArray(group.content) ? (
                                                                 <div className="space-y-2">
                                                                     {group.content.map((part, i) => {
@@ -3487,91 +3488,117 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                         </div>
                                                     )}
                                                 </div>
-                                            </StreamingResponse>
-                                        ) : (
-                                            <div
-                                                className={`text-[14px] leading-relaxed break-words ${
-                                                    isDark
-                                                        ? 'bg-zinc-800/90 text-zinc-100 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-700/50 shadow-sm'
-                                                        : 'bg-zinc-100 text-zinc-900 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
-                                                }`}
-                                            >
-                                                {/* Picked element indicator */}
-                                                {(group as any).pickedElement && (
-                                                    <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                        <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                        <span className="font-medium">
-                                                            {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                        </span>
-                                                        {(group as any).pickedElement.text && (
-                                                            <span className="truncate opacity-70">
-                                                                {(group as any).pickedElement.text.length > 30
-                                                                    ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                    : (group as any).pickedElement.text}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {group.content && (
-                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                        {Array.isArray(group.content) ? (
-                                                            <div className="space-y-2">
-                                                                {group.content.map((part, i) => {
-                                                                    if (part.type === 'image_url') {
-                                                                        return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                    }
-                                                                    return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
-                                                                })}
-                                                            </div>
-                                                        ) : (
-                                                            renderAssistantMarkdown(String(group.content || ''))
-                                                        )}
-                                                    </div>
+                                                {group.createdAt && (
+                                                    <span className="text-[11px] text-zinc-500 mt-1 px-1 tracking-tight font-mono">
+                                                        {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                    </span>
                                                 )}
                                             </div>
-                                        )}
+                                        </div>
+                                    </>
+                                )}
+
+                                {group.role === 'assistant' && (
+                                    <div className="flex items-start gap-3 w-full">
+                                        <AstroAvatar className="mt-0.5 shrink-0" />
+                                        <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                            {/* Interactive question if present */}
+                                            {question && (
+                                                <div className="my-2">
+                                                    <AgentQuestionCard
+                                                        question={question}
+                                                        isDark={isDark}
+                                                        submitting={questionSubmitting}
+                                                        error={questionError}
+                                                        onSubmit={handleAgentQuestionSubmit}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Non-permanent live thinking indicator */}
+                                            {isLiveTurn && currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) && (
+                                                <ThinkingBlock
+                                                    thinking={currentThinking}
+                                                    isDark={isDark}
+                                                    startTime={thinkingStartTime}
+                                                    effortLevel={effortLevel}
+                                                />
+                                            )}
+
+                                            {/* Live single active tool indicator */}
+                                            {isLiveTurn && actions.length > 0 && (
+                                                <ActionsList
+                                                    actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                                    isLive={true}
+                                                    isDark={isDark}
+                                                />
+                                            )}
+
+                                            {/* Unified permanent assistant text response */}
+                                            {assistantText ? (
+                                                <StreamingResponse
+                                                    status={isLiveTurn ? 'streaming' : 'complete'}
+                                                    copyText={assistantText}
+                                                    showActions={!isLiveTurn}
+                                                    className="w-full"
+                                                >
+                                                    <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                                                        {renderAssistantMarkdown(assistantText)}
+                                                    </div>
+                                                </StreamingResponse>
+                                            ) : isLiveTurn && (!actions.length || actions.length === 0) && (!currentThinking || isSystemProcessingText(currentThinking)) ? (
+                                                <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                                    <Marker role="status" className="px-0">
+                                                        <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                                    </Marker>
+                                                </div>
+                                            ) : null}
+
+                                            <MessageMetaFooter
+                                                content={assistantText || group.content}
+                                                createdAt={group.createdAt}
+                                                isDark={isDark}
+                                                hide={isLiveTurn}
+                                                group={group}
+                                                projectId={hostProjectIdForSlash || undefined}
+                                                chatId={currentChatId || undefined}
+                                                selectedModel={selectedModel}
+                                                effortLevel={effortLevel}
+                                            />
+                                        </div>
                                     </div>
-                                    {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                    )}
-                                    {group.role === 'assistant' && (
-                                        <MessageMetaFooter
-                                            content={group.content}
-                                            createdAt={group.createdAt}
-                                            isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isRunning}
-                                            group={group}
-                                            projectId={hostProjectIdForSlash || undefined}
-                                            chatId={currentChatId || undefined}
-                                            selectedModel={selectedModel}
-                                            effortLevel={effortLevel}
-                                        />
-                                    )}
-                                </>
-                            )}
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* Live Thinking/Action fallback when no assistant message in list yet */}
+                    {isRunning && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
+                        <div className="flex items-start gap-3 w-full">
+                            <AstroAvatar className="mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                {currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) ? (
+                                    <ThinkingBlock
+                                        thinking={currentThinking}
+                                        isDark={isDark}
+                                        startTime={thinkingStartTime}
+                                        effortLevel={effortLevel}
+                                    />
+                                ) : actions.length > 0 ? (
+                                    <ActionsList
+                                        actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                        isLive={true}
+                                        isDark={isDark}
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                        <Marker role="status" className="px-0">
+                                            <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                        </Marker>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    ))}
-
-                    {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
-                    {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
-                        <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
-                    )}
-
-                    {/* Live Actions - only show here if there's no assistant message group yet */}
-                    {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                    )}
-
-                    {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
-                    {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
-                        !groupedMessages.length ||
-                        groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
-                    ) && (
-                        <Marker role="status" className="animate-fade-in-up px-1">
-                            <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                        </Marker>
                     )}
 
                     <div ref={messagesEndRef} />
@@ -3706,44 +3733,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Connected integrations pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
-                            <div className="flex justify-start px-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setLibraryView('mcp')}
-                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
-                                        isDark
-                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
-                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                                    }`}
-                                    aria-label="Connected integrations"
-                                >
-                                    <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
-                                            <span
-                                                key={addon.id}
-                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#181818] bg-[#1c1d1f]' : 'border-white bg-white'
-                                                }`}
-                                            >
-                                                <McpBrandIcon
-                                                    id={addon.id}
-                                                    name={addon.name}
-                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
-                                                />
-                                            </span>
-                                        ))}
-                                    </span>
-                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
-                                </button>
-                            </div>
-                        )}
-
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
+                        <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#151515] border-white/[0.08] focus-within:border-white/20 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -3761,7 +3754,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                     }}
                                     placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                    className={`w-full bg-transparent text-[15.5px] sm:text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-zinc-100 placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
                                     style={{ height: 'auto', minHeight: '76px' }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape' && showSlashMenu) {
@@ -3791,7 +3784,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.05]' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -3799,7 +3792,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#e5e5e5]' : ''}`}
+                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-white/[0.08] bg-[#181818] text-zinc-200' : ''}`}
                                     >
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3810,7 +3803,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <ImageIcon className="h-4 w-4 opacity-70" />
                                             Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/image</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3821,9 +3814,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <FileUp className="h-4 w-4 opacity-70" />
                                             File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/file</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
@@ -3833,7 +3826,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <Sparkles className="h-4 w-4 opacity-70" />
                                             Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/skills</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/skills</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3844,9 +3837,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <Puzzle className="h-4 w-4 opacity-70" />
                                             Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/integrations</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
@@ -4065,22 +4058,6 @@ function MessageMetaFooter({
 
     return (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 px-1">
-            {showDebug && (
-                <button
-                    type="button"
-                    onClick={handleDownloadDebug}
-                    title="Download debug diagnostics JSON"
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-md border transition-all active:scale-95 ${
-                        isDark
-                            ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'
-                            : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700'
-                    }`}
-                >
-                    <Bug className="size-3" />
-                    <Download className="size-3" />
-                    <span>Debug JSON</span>
-                </button>
-            )}
             <span className={`text-xs tabular-nums ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{timeLabel}</span>
             <button
                 type="button"
@@ -4106,45 +4083,22 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [startTime, thinkingTime]);
-
+function ThinkingBlock({ thinking, isDark, thinkingTime, startTime, effortLevel }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null; effortLevel?: string }) {
+    if (effortLevel === 'low') return null;
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
     const isLive = Boolean(startTime) && thinkingTime === undefined;
 
-    const activityItems: AgentActivityItem[] = [
-        {
-            id: 'thinking-stream',
-            type: 'text',
-            content: thinking,
-        },
-    ];
+    if (isLive) {
+        return (
+            <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-1 animate-fade-in">
+                <Brain className="size-4 text-zinc-400 shrink-0 animate-pulse" />
+                <span className="font-normal text-zinc-400">Thinking…</span>
+            </div>
+        );
+    }
 
-    return (
-        <div className="mb-3 animate-fade-in px-1">
-            <AgentActivity
-                items={activityItems}
-                status={isLive ? 'working' : 'complete'}
-                duration={displayTime}
-                activeLabel="Reasoning…"
-            />
-        </div>
-    );
+    return null;
 }
 
 function FileAttachmentBlock({ file, isDark }: { file: FileAttachment; isDark: boolean }) {

@@ -1190,12 +1190,13 @@ export default function SiteSettingsPage() {
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
   }, [])
 
-  // Syra iframe back button → return to project overview tab (desktop iframe only)
+  // Syra iframe back / sidebar button → toggle the real dashboard sidebar
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
       if (event.data?.type === "syra-navigate-back") {
-        setActiveTab("overview")
+        setIsSidebarOpen((prev) => !prev)
+        setIsDesktopSidebarExpanded((prev) => !prev)
       }
     }
     window.addEventListener("message", onMessage)

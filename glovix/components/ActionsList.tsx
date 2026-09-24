@@ -30,6 +30,7 @@ import { SubagentTool } from '@/components/agent-elements/tools/subagent-tool';
 import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { Markdown } from '@/components/agent-elements/markdown';
+import { McpBrandIcon } from './McpBrandIcons';
 import type { GenerationPlan } from '../lib/generation-plan';
 import type { ActionMarkData } from '../lib/project-agent';
 import { useStore } from '../store';
@@ -121,13 +122,65 @@ export function resolveActionMark(action: StreamingAction): ActionMarkData | nul
         };
     }
 
-    // 2. Connecting to github
-    if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push')) {
+    // 2. Integration / MCP tools
+    if (name.includes('gmail') || cmd.includes('gmail') || name.includes('email') || name.includes('mail')) {
+        const isDraftOrSend = name.includes('send') || name.includes('draft') || cmd.includes('send') || cmd.includes('draft');
+        return {
+            kind: 'gmail',
+            label: isDraftOrSend ? 'drafting email' : 'checking your emails',
+            detail: String(args.query || args.subject || args.to || 'Gmail'),
+            badge: 'gmail',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push') || name.includes('github')) {
+        const isRepoList = name.includes('repo') || cmd.includes('repo') || name.includes('list');
         return {
             kind: 'github',
-            label: 'connecting to github',
-            detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : 'GitHub repository sync'),
+            label: isRepoList ? 'fetching github repositories' : 'connecting to github',
+            detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : (args.repo ? String(args.repo) : 'GitHub repository sync')),
             badge: 'github',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('linear')) {
+        return {
+            kind: 'linear',
+            label: 'syncing linear issues',
+            detail: String(args.issue || args.query || args.project || 'Linear'),
+            badge: 'linear',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('slack')) {
+        return {
+            kind: 'slack',
+            label: 'reading slack messages',
+            detail: String(args.channel || args.query || 'Slack'),
+            badge: 'slack',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('supabase')) {
+        return {
+            kind: 'supabase',
+            label: 'connecting to supabase',
+            detail: String(args.table || args.query || 'Supabase DB'),
+            badge: 'supabase',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('drive') || name.includes('google_drive')) {
+        return {
+            kind: 'google-drive',
+            label: 'searching google drive',
+            detail: String(args.query || args.name || 'Google Drive'),
+            badge: 'google-drive',
             status: action.status === 'running' ? 'running' : 'completed',
             is_risk: false,
         };
@@ -226,6 +279,57 @@ export function resolveActionMark(action: StreamingAction): ActionMarkData | nul
     return null;
 }
 
+export const SingleActionIndicator = memo(function SingleActionIndicator({
+    action,
+    isDark = true,
+}: {
+    action: StreamingAction;
+    isDark?: boolean;
+}) {
+    const mark = action.actionMark || resolveActionMark(action);
+    const kind = mark?.kind || classifyAction(action);
+    const label = mark?.label || action.displayName || action.toolName;
+    const isRunning = action.status === 'running' || !action.status || action.status === 'pending';
+    const isRisk = Boolean(mark?.is_risk || mark?.kind === 'security_risk');
+
+    return (
+        <div className="flex items-center gap-2.5 text-[14px] text-zinc-400 select-none py-1 animate-fade-in">
+            {/* Gray Icon for all tools, or integration brand icon */}
+            <div className="shrink-0 flex items-center justify-center text-zinc-400">
+                {isRisk ? (
+                    <Ban className="size-4 text-red-400 shrink-0" />
+                ) : kind === 'gmail' || kind === 'google-drive' || kind === 'linear' || kind === 'slack' || kind === 'supabase' || kind === 'github' ? (
+                    <McpBrandIcon id={kind} className="size-4" />
+                ) : kind === 'server' ? (
+                    <Server className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'browser' ? (
+                    <MousePointer className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'cloud' ? (
+                    <Cloud className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'scrape' || kind === 'search' ? (
+                    <Globe className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'typecheck' || kind === 'validate' ? (
+                    <CheckCircle2 className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'file' || kind === 'read' || kind === 'edit' ? (
+                    <FileText className="size-4 text-zinc-400 shrink-0" />
+                ) : (
+                    <SquareTerminal className="size-4 text-zinc-400 shrink-0" />
+                )}
+            </div>
+
+            {/* Gray label text */}
+            <span className={cn('font-normal tracking-tight', isRisk ? 'text-red-400' : 'text-zinc-400')}>
+                {label}
+            </span>
+
+            {/* Subtle indicator */}
+            {isRunning && (
+                <span className="inline-block size-1.5 rounded-full bg-zinc-400 animate-pulse ml-0.5" />
+            )}
+        </div>
+    );
+});
+
 export const ActionMarkRow = memo(function ActionMarkRow({
     action,
     isDark = true,
@@ -252,22 +356,22 @@ export const ActionMarkRow = memo(function ActionMarkRow({
             )}
         >
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                {/* Visual Icon matching the exact kind */}
-                <div className="shrink-0 flex items-center justify-center">
+                {/* Visual Icon matching the exact kind in monochrome gray */}
+                <div className="shrink-0 flex items-center justify-center text-zinc-400">
                     {isRisk ? (
                         <Ban className="size-4 text-red-500 shrink-0" />
-                    ) : mark.kind === 'github' ? (
-                        <GithubIcon className="size-4 text-zinc-300 shrink-0" />
+                    ) : mark.kind === 'gmail' || mark.kind === 'google-drive' || mark.kind === 'linear' || mark.kind === 'slack' || mark.kind === 'supabase' || mark.kind === 'github' ? (
+                        <McpBrandIcon id={mark.kind} className="size-4" />
                     ) : mark.kind === 'server' ? (
-                        <Server className="size-4 text-amber-400 shrink-0" />
+                        <Server className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'browser' ? (
-                        <MousePointer className="size-4 text-sky-400 shrink-0" />
+                        <MousePointer className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'cloud' ? (
-                        <Cloud className="size-4 text-indigo-400 shrink-0" />
+                        <Cloud className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'scrape' ? (
-                        <Globe className="size-4 text-emerald-400 shrink-0" />
+                        <Globe className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'typecheck' ? (
-                        <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
+                        <CheckCircle2 className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'file' ? (
                         <FileText className="size-4 text-zinc-400 shrink-0" />
                     ) : (
@@ -278,7 +382,7 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 {/* Mark Label */}
                 <span className={cn(
                     'shrink-0 font-medium tracking-tight',
-                    isRisk ? 'text-red-400 font-semibold' : (isDark ? 'text-zinc-200' : 'text-zinc-800')
+                    isRisk ? 'text-red-400 font-semibold' : (isDark ? 'text-zinc-300' : 'text-zinc-700')
                 )}>
                     {mark.label}
                 </span>
@@ -287,7 +391,7 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 {mark.detail && (
                     <span className={cn(
                         'truncate text-[12px] font-mono',
-                        isRisk ? 'text-red-400/90' : (isDark ? 'text-zinc-400' : 'text-zinc-500')
+                        isRisk ? 'text-red-400/90' : (isDark ? 'text-zinc-500' : 'text-zinc-500')
                     )}>
                         {mark.detail}
                     </span>
@@ -298,14 +402,14 @@ export const ActionMarkRow = memo(function ActionMarkRow({
             <div className="flex items-center gap-2 shrink-0">
                 {mark.badge && (
                     mark.badge === 'starting' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                            <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+                            <span className="size-1.5 rounded-full bg-zinc-400 animate-pulse" />
                             starting
                         </span>
                     ) : (
                         <span className={cn(
                             'px-2 py-0.5 rounded-md text-[11px] font-mono border',
-                            isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/60' : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                            isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
                         )}>
                             {mark.badge}
                         </span>
@@ -319,7 +423,7 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 ) : isError ? (
                     <span className="size-1.5 rounded-full bg-red-400" />
                 ) : (
-                    <Check className="size-3.5 text-emerald-400" />
+                    <Check className="size-3.5 text-zinc-400" />
                 )}
             </div>
         </div>
@@ -681,22 +785,54 @@ const ToolStack = memo(function ToolStack({
     chatStatus: string;
     generationPlan: GenerationPlan | null;
 }) {
+    const [expandedAll, setExpandedAll] = useState(false);
+
     if (group.kind === 'action_mark') {
+        const visibleActions = expandedAll ? group.actions : group.actions.slice(0, 3);
+        const hiddenCount = Math.max(0, group.actions.length - 3);
+
         return (
             <div className="space-y-1.5 my-1">
-                {group.actions.map(action => (
+                {visibleActions.map(action => (
                     <ActionMarkRow key={action.id} action={action} isDark={isDark} />
                 ))}
+                {hiddenCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setExpandedAll(v => !v)}
+                        className={cn(
+                            'text-xs font-medium px-2 py-1 rounded-md transition-colors',
+                            isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                        )}
+                    >
+                        {expandedAll ? 'Show less' : `+${hiddenCount} more`}
+                    </button>
+                )}
             </div>
         );
     }
 
     if (group.kind === 'screenshot') {
+        const visibleActions = expandedAll ? group.actions : group.actions.slice(0, 3);
+        const hiddenCount = Math.max(0, group.actions.length - 3);
+
         return (
             <div className="space-y-1.5">
-                {group.actions.map(action => (
+                {visibleActions.map(action => (
                     <ScreenshotCard key={action.id} action={action} isDark={isDark} />
                 ))}
+                {hiddenCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setExpandedAll(v => !v)}
+                        className={cn(
+                            'text-xs font-medium px-2 py-1 rounded-md transition-colors',
+                            isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                        )}
+                    >
+                        {expandedAll ? 'Show less' : `+${hiddenCount} more`}
+                    </button>
+                )}
             </div>
         );
     }
@@ -825,6 +961,7 @@ const ToolStack = memo(function ToolStack({
 
 export const ActionsList = memo(function ActionsList({ actions, isLive = false, isDark = true }: ActionsListProps) {
     const [phaseOpen, setPhaseOpen] = useState(isLive);
+    const [showAllGroups, setShowAllGroups] = useState(false);
     const generationPlan = useStore(s => s.generationPlan);
     const groups = useMemo(() => groupActions(actions), [actions]);
     const phase = useMemo(() => phaseCopy(actions, isLive), [actions, isLive]);
@@ -841,6 +978,9 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     }, [isLive]);
 
     if (actions.length === 0) return null;
+
+    const visibleGroups = showAllGroups ? groups : groups.slice(0, 3);
+    const hiddenGroupCount = Math.max(0, groups.length - 3);
 
     if (!isLive) {
         return (
@@ -862,7 +1002,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                     <div className={cn('mt-1.5 h-px w-full', isDark ? 'bg-white/10' : 'bg-black/10')} />
                     <CollapsibleContent>
                         <div className="mt-1.5 space-y-1.5 pl-0.5 sm:pl-1">
-                            {groups.map((group, index) => (
+                            {visibleGroups.map((group, index) => (
                                 <ToolStack
                                     key={`${group.kind}-${group.actions[0].id}-${index}`}
                                     group={group}
@@ -871,6 +1011,18 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                                     generationPlan={generationPlan}
                                 />
                             ))}
+                            {hiddenGroupCount > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllGroups(v => !v)}
+                                    className={cn(
+                                        'text-xs font-medium px-2 py-1 rounded-md transition-colors mt-1 inline-block',
+                                        isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                                    )}
+                                >
+                                    {showAllGroups ? 'Show less' : `+${hiddenGroupCount} more`}
+                                </button>
+                            )}
                         </div>
                     </CollapsibleContent>
                 </section>
@@ -878,27 +1030,16 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
         );
     }
 
-    return (
-        <section className={cn('agent-feed my-2 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-            <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
-                {running ? <SpiralLoader size={14} /> : <span className="size-3.5" aria-hidden="true" />}
-                <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>
+    if (isLive) {
+        // Only 1 tool displayed during execution (the latest/active tool)
+        const activeAction = actions.slice().reverse().find(a => a.status === 'running' || a.status === 'pending') || actions[actions.length - 1];
+        if (!activeAction) return null;
+        return (
+            <div className="py-0.5">
+                <SingleActionIndicator action={activeAction} isDark={isDark} />
             </div>
+        );
+    }
 
-            <div
-                data-active={running ? 'true' : 'false'}
-                className="mt-1 space-y-1.5 pl-0.5 sm:pl-1"
-            >
-                {groups.map((group, index) => (
-                    <ToolStack
-                        key={`${group.kind}-${group.actions[0].id}-${index}`}
-                        group={group}
-                        isDark={isDark}
-                        chatStatus={chatStatus}
-                        generationPlan={generationPlan}
-                    />
-                ))}
-            </div>
-        </section>
-    );
+    return null;
 });

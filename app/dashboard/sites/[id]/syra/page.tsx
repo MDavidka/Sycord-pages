@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import GlovixBuilder from "@/components/glovix-builder"
 import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
 
@@ -13,11 +14,25 @@ import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
  */
 export default function SyraEmbedPage() {
   const { id } = useParams() as { id: string }
+  const { data: session } = useSession()
   const router = useRouter()
+  const [projectName, setProjectName] = useState<string | null>(null)
 
   useEffect(() => {
     initErudaIfPresent()
   }, [])
+
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/projects/${id}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.businessName) {
+          setProjectName(data.businessName)
+        }
+      })
+      .catch(() => {})
+  }, [id])
 
   const onBack = useCallback(() => {
     if (window.parent !== window) {
@@ -28,8 +43,13 @@ export default function SyraEmbedPage() {
   }, [id, router])
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden bg-[#181818]">
-      <GlovixBuilder projectId={id} onBack={onBack} />
+    <div className="h-[100dvh] w-full overflow-hidden bg-[#151515]">
+      <GlovixBuilder
+        projectId={id}
+        projectName={projectName}
+        userImage={session?.user?.image || undefined}
+        onBack={onBack}
+      />
     </div>
   )
 }

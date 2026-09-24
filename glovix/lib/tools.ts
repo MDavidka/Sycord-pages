@@ -1959,17 +1959,21 @@ function parseErrorsFromOutput(output: string, source: string): ParsedError[] {
 // ============================================================
 
 export async function handleCreateFile(
-    args: { path: string; content: string },
+    args: any,
     ctx: ToolContext
 ): Promise<string> {
-    const { path, content } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const rawContent = args?.content ?? args?.contents ?? args?.code;
 
-    if (!path || typeof path !== 'string') {
+    if (!rawPath || typeof rawPath !== 'string') {
         return 'Error: Invalid file path';
     }
-    if (content === undefined || content === null) {
-        return `Error: Invalid file content for ${path}`;
+    if (rawContent === undefined || rawContent === null) {
+        return `Error: Invalid file content for ${rawPath}`;
     }
+
+    const path = rawPath.replace(/^\/+/, '');
+    const content = typeof rawContent === 'string' ? rawContent : String(rawContent);
 
     try {
         ctx.setSelectedFile(path);
@@ -1990,21 +1994,34 @@ export async function handleCreateFile(
 }
 
 export async function handleEditFile(
-    args: { path: string; oldContent: string; newContent: string }
+    args: any
 ): Promise<string> {
-    const { path, oldContent, newContent } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const oldContent = args?.oldContent ?? args?.old_content ?? args?.original;
+    const newContent = args?.newContent ?? args?.new_content ?? args?.replacement ?? args?.updated;
+
+    if (!rawPath || typeof rawPath !== 'string') {
+        return 'Error: editFile requires a valid path';
+    }
+    if (oldContent === undefined || oldContent === null || newContent === undefined || newContent === null) {
+        return `Error: editFile requires oldContent and newContent for ${rawPath}`;
+    }
+
+    const path = rawPath.replace(/^\/+/, '');
+    const oldStr = typeof oldContent === 'string' ? oldContent : String(oldContent);
+    const newStr = typeof newContent === 'string' ? newContent : String(newContent);
 
     try {
         const currentContent = await readFileResilient(path);
 
         // Exact match first
-        if (currentContent.includes(oldContent)) {
-            const matches = currentContent.split(oldContent).length - 1;
+        if (currentContent.includes(oldStr)) {
+            const matches = currentContent.split(oldStr).length - 1;
             if (matches > 1) {
                 return `Error editing ${path}: Found ${matches} matches for oldContent. Include more surrounding lines to make it unique.\n\nHint: Add 2-3 extra lines before and after the section you want to change.`;
             }
 
-            const newFileContent = currentContent.replace(oldContent, newContent);
+            const newFileContent = currentContent.replace(oldStr, newStr);
             const pageSync = await persistFile(path, newFileContent);
             if (pageSync.status === 'error') {
                 return `Error saving file ${path} to Pages: ${pageSync.message}`;
@@ -2013,13 +2030,13 @@ export async function handleEditFile(
         }
 
         // Fuzzy match: try trimming whitespace from each line
-        const normalizeWs = (s: string) => s.split('\n').map(l => l.trim()).join('\n');
+        const normalizeWs = (s: string) => s.split('\n').map((l: string) => l.trim()).join('\n');
         const normalizedContent = normalizeWs(currentContent);
-        const normalizedOld = normalizeWs(oldContent);
+        const normalizedOld = normalizeWs(oldStr);
 
         if (normalizedContent.includes(normalizedOld)) {
             // Find the actual content by matching line-by-line
-            const oldLines = oldContent.split('\n').map(l => l.trim());
+            const oldLines = oldStr.split('\n').map((l: string) => l.trim());
             const contentLines = currentContent.split('\n');
             let startIdx = -1;
 
@@ -2039,7 +2056,7 @@ export async function handleEditFile(
 
             if (startIdx !== -1) {
                 const actualOld = contentLines.slice(startIdx, startIdx + oldLines.length).join('\n');
-                const newFileContent = currentContent.replace(actualOld, newContent);
+                const newFileContent = currentContent.replace(actualOld, newStr);
                 const pageSync = await persistFile(path, newFileContent);
                 if (pageSync.status === 'error') {
                     return `Error saving file ${path} to Pages: ${pageSync.message}`;
@@ -2290,17 +2307,23 @@ export async function handleSearchInFiles(args: { query: string; filePattern?: s
 }
 
 export async function handleWriteFile(
-    args: { path: string; content: string; startLine?: number; endLine?: number },
+    args: any,
     ctx: ToolContext,
 ): Promise<string> {
-    const { path, content, startLine, endLine } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const rawContent = args?.content ?? args?.contents ?? args?.code;
+    const startLine = typeof args?.startLine === 'number' ? args.startLine : typeof args?.start_line === 'number' ? args.start_line : undefined;
+    const endLine = typeof args?.endLine === 'number' ? args.endLine : typeof args?.end_line === 'number' ? args.end_line : undefined;
 
-    if (!path || typeof path !== 'string') {
+    if (!rawPath || typeof rawPath !== 'string') {
         return 'Error: write_file requires a valid path';
     }
-    if (content === undefined || content === null) {
-        return `Error: write_file requires content for ${path}`;
+    if (rawContent === undefined || rawContent === null) {
+        return `Error: write_file requires content for ${rawPath}`;
     }
+
+    const path = rawPath.replace(/^\/+/, '');
+    const content = typeof rawContent === 'string' ? rawContent : String(rawContent);
 
     try {
         ctx.setSelectedFile(path);
@@ -2834,7 +2857,16 @@ async function _executeToolInternal(
     argsString: string,
     ctx: ToolContext
 ): Promise<string> {
-    const toolName = name === 'Grep' ? 'grep' : name === 'writeFile' ? 'write_file' : name;
+    const rawLower = (name || '').toLowerCase().trim();
+    let toolName = name;
+    if (rawLower === 'grep') toolName = 'grep';
+    else if (rawLower === 'writefile' || rawLower === 'write_file') toolName = 'write_file';
+    else if (rawLower === 'createfile' || rawLower === 'create_file') toolName = 'createFile';
+    else if (rawLower === 'editfile' || rawLower === 'edit_file') toolName = 'editFile';
+    else if (rawLower === 'readfile' || rawLower === 'read_file') toolName = 'readFile';
+    else if (rawLower === 'deletefile' || rawLower === 'delete_file') toolName = 'deleteFile';
+    else if (rawLower === 'renamefile' || rawLower === 'rename_file') toolName = 'renameFile';
+    else if (rawLower === 'listfiles' || rawLower === 'list_files') toolName = 'listFiles';
 
     const argsList = parseToolArguments(argsString);
 

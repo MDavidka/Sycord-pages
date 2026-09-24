@@ -46,14 +46,27 @@ export interface AiClient {
 export const GLOBAL_LOCATION = "global"
 
 function readEnv() {
-  const apiKey = process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || ""
+  const apiKey =
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AIAGENT_API ||
+    process.env.GOOGLE_AIAGENT_API_KEY ||
+    ""
   const project = process.env.GOOGLE_VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ""
   // Default to the GLOBAL endpoint. A specific region can still be pinned via
   // GOOGLE_VERTEX_LOCATION / GOOGLE_CLOUD_LOCATION, but absent that we always
   // use "global".
   const location =
     process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || GLOBAL_LOCATION
-  const useVertex = (process.env.GOOGLE_GENAI_USE_VERTEXAI ?? "true").toLowerCase() !== "false"
+  const explicitUseVertex = process.env.GOOGLE_GENAI_USE_VERTEXAI?.toLowerCase()
+  // Vertex AI mode is enabled if explicitly true, or if project is set and not explicitly "false",
+  // or if no apiKey is provided.
+  const useVertex =
+    explicitUseVertex === "false"
+      ? false
+      : explicitUseVertex === "true"
+      ? true
+      : !!(!apiKey && project)
   return { apiKey, project, location, useVertex }
 }
 
@@ -68,13 +81,17 @@ export function isConfigured(): boolean {
 // explicitly so we always hit the global endpoint when the location is global.
 const VERTEX_GLOBAL_BASE_URL = "https://aiplatform.googleapis.com/"
 
-/** Construct the Gemini client, preferring Vertex AI on the GLOBAL endpoint. */
-export function getAiClient(): AiClient {
+/** Construct the Gemini client, preferring Developer API if an API key is present unless Vertex is explicitly forced. */
+export function getAiClient(preferDev = false): AiClient {
   const { apiKey, project, location, useVertex } = readEnv()
   const isGlobal = location === GLOBAL_LOCATION
   // Force the global base URL whenever we're on the global location so the
   // request never falls back to a regional host (regional hosts 429 sooner).
   const globalHttpOptions = isGlobal ? { httpOptions: { baseUrl: VERTEX_GLOBAL_BASE_URL } } : {}
+
+  if (preferDev && apiKey) {
+    return { ai: new GoogleGenAI({ apiKey }), mode: "developer", model: GEMINI_MODEL }
+  }
 
   if (useVertex && project) {
     // Full Vertex AI mode (Application Default Credentials). Default location is
@@ -103,7 +120,7 @@ export function getAiClient(): AiClient {
     return { ai: new GoogleGenAI({ apiKey }), mode: "developer", model: GEMINI_MODEL }
   }
   throw new Error(
-    "Gemini is not configured: set GOOGLE_VERTEX_PROJECT (Vertex AI + ADC) or GOOGLE_AIAGENT_API (API key).",
+    "Gemini is not configured: set GOOGLE_API_KEY / GOOGLE_AIAGENT_API (API key) or GOOGLE_VERTEX_PROJECT (Vertex AI + ADC).",
   )
 }
 
@@ -439,7 +456,7 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
       const done = () => controller.enqueue(encoder.encode("data: [DONE]\n\n"))
 
       try {
-        const client = getAiClient()
+        let client = getAiClient()
         const { systemInstruction, contents } = convertMessages(req.messages)
         const functionDeclarations = toFunctionDeclarations(req.tools)
         // Honor the client-selected model (syra-nano → flash, syra-havy → pro).
@@ -463,9 +480,35 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
           }
         }
 
-        const genStream = await withRetry(() =>
-          client.ai.models.generateContentStream({ model, contents, config }),
-        )
+        let genStream: any
+        try {
+          genStream = await withRetry(() =>
+            client.ai.models.generateContentStream({ model, contents, config }),
+          )
+        } catch (firstErr: any) {
+          const errMsg = String(firstErr?.message || firstErr || "").toLowerCase()
+          const isAuthOrVertexErr =
+            errMsg.includes("permission") ||
+            errMsg.includes("vertex") ||
+            errMsg.includes("credentials") ||
+            errMsg.includes("unauthenticated") ||
+            errMsg.includes("401") ||
+            errMsg.includes("403")
+
+          // If Vertex AI failed due to IAM permissions or ADC and we have an API key, fallback to Developer API
+          if (client.mode !== "developer" && isAuthOrVertexErr) {
+            try {
+              client = getAiClient(true)
+              genStream = await withRetry(() =>
+                client.ai.models.generateContentStream({ model, contents, config }),
+              )
+            } catch {
+              throw firstErr
+            }
+          } else {
+            throw firstErr
+          }
+        }
 
         let toolIndex = 0
         let sawToolCall = false

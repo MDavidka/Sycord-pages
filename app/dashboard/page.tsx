@@ -5,13 +5,17 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2 } from "lucide-react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone } from "lucide-react"
 import { useState, useEffect, Suspense, useCallback } from "react"
+import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { WebsitePreviewCard } from "@/components/website-preview-card"
+import { ProjectDashboardCard } from "@/components/project-dashboard-card"
+import { DashboardModeToggle, type DashboardMode } from "@/components/dashboard-mode-toggle"
+import { AstroDashboard } from "@/components/astro-dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
@@ -30,19 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 bg-[#1c1d20] border border-[#2a2a30]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1">
-          <Skeleton className="h-10 w-10 rounded-full shrink-0 bg-zinc-800" />
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <Skeleton className="h-4 w-28 bg-zinc-800" />
-            <Skeleton className="h-3 w-20 bg-zinc-800" />
-          </div>
+    <div className="rounded-xl p-4 sm:p-4.5 flex items-center justify-between bg-zinc-900/40 border border-zinc-800/80 shadow-xs">
+      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+        <Skeleton className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg shrink-0 bg-zinc-800/80" />
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <Skeleton className="h-4 w-28 bg-zinc-800/80" />
+          <Skeleton className="h-3 w-36 bg-zinc-800/60" />
         </div>
-        <Skeleton className="h-8 w-8 rounded-full shrink-0 bg-zinc-800" />
       </div>
-      <Skeleton className="h-3.5 w-44 bg-zinc-800" />
-      <Skeleton className="h-3.5 w-36 bg-zinc-800" />
+      <Skeleton className="h-8 w-8 rounded-md shrink-0 bg-zinc-800/60 ml-2" />
     </div>
   )
 }
@@ -58,12 +58,24 @@ function DashboardContent() {
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
   const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
+  const [activeMode, setActiveMode] = useState<DashboardMode>("projects")
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const q = searchQuery.trim().toLowerCase()
+  const filtered: any[] = q
+    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
+    : projects
+  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
+  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
   useEffect(() => {
     const openCreate = searchParams.get("open_create_modal")
     const error = searchParams.get("error")
+    const mode = searchParams.get("mode")
+    if (mode === "astro" || mode === "projects") {
+      setActiveMode(mode)
+    }
     if (error) {
       setDebugError(error)
       const u = new URL(window.location.href); u.searchParams.delete("error"); window.history.replaceState({}, "", u.toString())
@@ -74,14 +86,18 @@ function DashboardContent() {
     }
   }, [searchParams, router])
 
+  const [announcements, setAnnouncements] = useState<any[]>([])
+
   useEffect(() => {
     if (status !== "authenticated") return
     Promise.all([
       fetch("/api/projects", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
       fetch("/api/user/status", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
-    ]).then(([projectsData, statusData]) => {
+      fetch("/api/announcements", { cache: "no-store" }).then(r => r.ok ? r.json() : { announcements: [] }),
+    ]).then(([projectsData, statusData, annData]) => {
       setProjects(projectsData)
       if (statusData) setUserStatus(statusData)
+      if (annData?.announcements) setAnnouncements(annData.announcements)
     }).catch(console.error).finally(() => setIsLoading(false))
   }, [status])
 
@@ -123,10 +139,10 @@ function DashboardContent() {
       <div className="min-h-screen md:ml-16 px-4 pt-6 pb-20 md:pb-6">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
+            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
           </div>
-          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
           </div>
@@ -159,13 +175,6 @@ function DashboardContent() {
     )
   }
 
-  const q = searchQuery.trim().toLowerCase()
-  const filtered: any[] = q
-    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
-    : projects
-  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
-  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
-
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16">
@@ -197,7 +206,15 @@ function DashboardContent() {
                 <DropdownMenuItem><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/subscriptions")}><CreditCard className="mr-2 h-4 w-4" /><span>Plans</span></DropdownMenuItem>
                 <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
-                {session?.user?.email === "dmarton336@gmail.com" && (<><DropdownMenuSeparator /><DropdownMenuItem onClick={() => router.push("/admin")}><Settings className="mr-2 h-4 w-4" /><span className="text-primary font-semibold">Admin Panel</span></DropdownMenuItem></>)}
+                {session?.user?.email === "dmarton336@gmail.com" && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/admin")}>
+                      <Shield className="mr-2 h-4 w-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-semibold">Moderator View</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" /><span>Sign out</span>
@@ -207,98 +224,189 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          <div className="flex flex-col gap-3 mb-5">
-            <div className="flex items-center justify-between">
-              <h1 className="text-base font-semibold text-foreground">Projects</h1>
-              <Button onClick={() => router.push("/dashboard/create")} size="sm" className="rounded-xl gap-1.5">
-                <Plus className="h-3.5 w-3.5" />New Project
-              </Button>
+        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6 space-y-5">
+          {announcements.length > 0 && (
+            <div className="space-y-2">
+              {announcements.map((ann) => (
+                <div
+                  key={ann.id || ann._id}
+                  className={cn(
+                    "flex items-start gap-3 p-3.5 rounded-xl border text-sm",
+                    ann.type === "warning" || ann.type === "maintenance"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                      : ann.type === "important"
+                      ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                      : "bg-blue-500/10 border-blue-500/30 text-blue-200"
+                  )}
+                >
+                  <Megaphone className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-xs tracking-wide uppercase opacity-80">{ann.title}</p>
+                    <p className="text-xs text-foreground/90 mt-0.5">{ann.message}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="flex gap-2.5 items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search projects..."
-                  className="w-full pl-9 pr-4 py-2.5 border border-input rounded-xl bg-background/50 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
-                />
-              </div>
-              <div className="px-3.5 py-2.5 border border-input rounded-xl bg-muted/50 text-sm font-medium whitespace-nowrap tabular-nums">
-                {ownedCount}/{MAX_FREE_PROJECTS}
-              </div>
-            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <h1 className="text-base font-semibold text-foreground">Projects</h1>
+            <Button
+              onClick={() => router.push("/dashboard/create")}
+              size="sm"
+              className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Project</span>
+            </Button>
           </div>
 
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-12 text-center">
-              <div className="max-w-sm mx-auto">
-                <h3 className="text-base font-semibold mb-2">No projects yet</h3>
-                <p className="text-sm text-muted-foreground mb-5">Create your first project and get your site live in minutes.</p>
-                <Button onClick={() => router.push("/dashboard/create")} className="rounded-xl gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />Create First Project
-                </Button>
+          {activeMode === "astro" ? (
+            /* ASTRO MODE: Global Agentic AI Workspace */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              <div className="flex items-center">
+                <DashboardModeToggle
+                  activeMode={activeMode}
+                  onChange={(mode) => {
+                    setActiveMode(mode)
+                    const u = new URL(window.location.href)
+                    if (mode === "projects") {
+                      u.searchParams.delete("mode")
+                    } else {
+                      u.searchParams.set("mode", mode)
+                    }
+                    window.history.replaceState({}, "", u.toString())
+                  }}
+                />
               </div>
-            </div>
-          ) : q && filtered.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-12 text-center">
-              <div className="max-w-sm mx-auto">
-                <Search className="h-5 w-5 text-muted-foreground mx-auto mb-3" />
-                <h3 className="text-base font-semibold mb-1">No results</h3>
-                <p className="text-sm text-muted-foreground">No project matches &quot;{searchQuery}&quot;.</p>
-              </div>
+              <AstroDashboard />
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {canCreateMore && !q && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/create")}
-                  className="group h-full min-h-[220px] border border-dashed border-[#2a2a30] hover:border-zinc-500 rounded-2xl flex flex-col items-center justify-center p-6 text-center bg-[#1c1d20]/50 hover:bg-[#1c1d20] transition-all duration-200"
-                >
-                  <div className="h-12 w-12 rounded-full bg-[#26262c] border border-[#36363e] flex items-center justify-center mb-3 group-hover:border-zinc-400 group-hover:bg-zinc-700/30 transition-all">
-                    <Plus className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>
-                  <h3 className="text-sm font-semibold mb-1">New Project</h3>
-                  <p className="text-xs text-muted-foreground max-w-[200px]">Create a new site in a few clicks</p>
-                  <span className="mt-2 text-[11px] text-muted-foreground/60 tabular-nums">{ownedCount}/{MAX_FREE_PROJECTS} used</span>
-                </button>
-              )}
-              {filtered.map((project: any) => {
-                const liveUrl = getValidProjectUrl(project)
-                const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
-                const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
-                const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
-                const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
-                return (
-                  <WebsitePreviewCard
-                    key={project._id}
-                    domain={projectDomain}
-                    isLive={isLive}
-                    deploymentId={deploymentKey}
-                    projectId={project._id}
-                    businessName={project.businessName}
-                    createdAt={project.createdAt}
-                    chatSession={project.chatSession}
-                    style={project.style || "default"}
-                    fallbackHtml={fallbackHtml}
-                    githubOwner={project.githubOwner}
-                    githubRepo={project.githubRepo}
-                    githubBranch={project.githubBranch}
-                    githubUrl={project.githubUrl}
-                    githubSavedAt={project.githubSavedAt}
-                    githubCommitMessage={project.githubCommitMessage}
-                    profileImage={project.profileImage}
-                    onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+            /* PROJECTS MODE: Projects List & Search */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Search Bar & Counter */}
+              <div className="flex gap-2.5 items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search projects..."
+                    className="h-10 w-full pl-9 pr-4 rounded-lg bg-zinc-900/50 border border-zinc-800/80 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600/30 transition-all shadow-xs"
                   />
-                )
-              })}
+                </div>
+                <div className="h-10 px-3.5 border border-zinc-800/80 rounded-lg bg-zinc-900/50 text-xs font-mono font-medium text-zinc-400 flex items-center justify-center shrink-0 tabular-nums shadow-xs">
+                  {ownedCount}/{MAX_FREE_PROJECTS}
+                </div>
+              </div>
+
+              {/* Segmented Projects / Astro Switch */}
+              <div className="flex items-center">
+                <DashboardModeToggle
+                  activeMode={activeMode}
+                  onChange={(mode) => {
+                    setActiveMode(mode)
+                    const u = new URL(window.location.href)
+                    if (mode === "projects") {
+                      u.searchParams.delete("mode")
+                    } else {
+                      u.searchParams.set("mode", mode)
+                    }
+                    window.history.replaceState({}, "", u.toString())
+                  }}
+                />
+              </div>
+
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <CardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : projects.length === 0 ? (
+                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
+                  <div className="max-w-sm mx-auto">
+                    <h3 className="text-sm font-semibold mb-1.5 text-zinc-200">No projects yet</h3>
+                    <p className="text-xs text-zinc-500 mb-4">
+                      Create your first project and get your site live in minutes.
+                    </p>
+                    <Button
+                      onClick={() => router.push("/dashboard/create")}
+                      size="sm"
+                      className="rounded-lg gap-1.5 text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create First Project
+                    </Button>
+                  </div>
+                </div>
+              ) : q && filtered.length === 0 ? (
+                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
+                  <div className="max-w-sm mx-auto">
+                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-2.5 opacity-60" />
+                    <h3 className="text-sm font-semibold mb-1 text-zinc-200">No results</h3>
+                    <p className="text-xs text-zinc-500">
+                      No project matches &quot;{searchQuery}&quot;.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {/* Modern New Project Card */}
+                  {canCreateMore && !q && (
+                    <button
+                      type="button"
+                      onClick={() => router.push("/dashboard/create")}
+                      className="group relative flex flex-col items-center justify-center min-h-[108px] sm:min-h-[116px] p-4 sm:p-5 rounded-xl border border-dashed border-zinc-800/90 hover:border-zinc-600 bg-zinc-900/20 hover:bg-zinc-900/50 transition-all duration-200 text-center cursor-pointer select-none"
+                    >
+                      <div className="h-9 w-9 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-center mb-1.5 group-hover:border-zinc-600 group-hover:scale-105 transition-all shadow-xs">
+                        <Plus className="h-4 w-4 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
+                      </div>
+                      <h3 className="text-xs sm:text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
+                        New Project
+                      </h3>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        Create a new site in a few clicks
+                      </p>
+                      <span className="mt-1.5 text-[10px] text-zinc-500/80 font-mono">
+                        {ownedCount}/{MAX_FREE_PROJECTS} used
+                      </span>
+                    </button>
+                  )}
+
+                  {filtered.map((project: any) => {
+                    const liveUrl = getValidProjectUrl(project)
+                    const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
+                    const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
+                    const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
+                    const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
+                    return (
+                      <ProjectDashboardCard
+                        key={project._id}
+                        domain={projectDomain}
+                        isLive={isLive}
+                        deploymentId={deploymentKey}
+                        projectId={project._id}
+                        businessName={project.businessName}
+                        createdAt={project.createdAt}
+                        chatSession={project.chatSession}
+                        style={project.style || "default"}
+                        framework={project.framework}
+                        fallbackHtml={fallbackHtml}
+                        githubOwner={project.githubOwner}
+                        githubRepo={project.githubRepo}
+                        githubBranch={project.githubBranch}
+                        githubUrl={project.githubUrl}
+                        githubSavedAt={project.githubSavedAt}
+                        githubCommitMessage={project.githubCommitMessage}
+                        profileImage={project.profileImage}
+                        onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </main>
@@ -341,10 +449,10 @@ export default function DashboardPage() {
       <div className="min-h-screen md:ml-16 px-4 pt-6">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
+            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
           </div>
-          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[1,2,3].map(i=><CardSkeleton key={i}/>)}
           </div>

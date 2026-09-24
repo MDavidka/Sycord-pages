@@ -23,6 +23,7 @@ interface WebsitePreviewCardProps {
   chatSession?: { title?: string; messageCount?: number } | null
   onDelete?: (id?: string) => void
   style?: string
+  framework?: string
   githubOwner?: string | null
   githubRepo?: string | null
   githubBranch?: string | null
@@ -56,6 +57,8 @@ export function WebsitePreviewCard({
   businessName = "Website",
   createdAt = new Date().toISOString(),
   onDelete,
+  style,
+  framework,
   githubOwner,
   githubRepo,
   githubBranch,
@@ -76,6 +79,9 @@ export function WebsitePreviewCard({
     : ""
   const gitTimeAgo = formatTimeAgo(githubSavedAt || createdAt)
 
+  const isAstro = framework === "astro" || style === "astro" || businessName.toLowerCase().includes("astro")
+  const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : "/logo.png")
+
   return (
     <Card className="relative overflow-hidden bg-[#1c1d20] border-[#2a2a30] text-white rounded-[16px] transition-all duration-200 hover:border-zinc-600/60 hover:bg-[#222227] shadow-sm">
       <CardContent className="p-4 sm:p-5 flex flex-col gap-4">
@@ -84,8 +90,8 @@ export function WebsitePreviewCard({
           <div className="flex items-center gap-3 min-w-0">
             {/* Project Avatar / Icon */}
             <div className="h-10 w-10 rounded-[12px] bg-[#26262c] border border-[#36363e] flex items-center justify-center shrink-0 overflow-hidden text-zinc-200 font-semibold text-sm shadow-sm">
-              {profileImage ? (
-                <img src={profileImage} alt={businessName} className="h-full w-full object-cover" />
+              {resolvedIcon ? (
+                <img src={resolvedIcon} alt={businessName} className="h-full w-full object-cover" />
               ) : (
                 (businessName[0] || "P").toUpperCase()
               )}
