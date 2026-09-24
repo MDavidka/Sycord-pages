@@ -92,7 +92,9 @@ export function AstroDashboard() {
       })
 
       if (!res.ok) {
-        throw new Error(`AI request failed: ${res.statusText}`)
+        const errorData = await res.json().catch(() => null)
+        const errMsg = errorData?.error || `AI request failed: ${res.statusText} (${res.status})`
+        throw new Error(errMsg)
       }
 
       // Stream response or read text
@@ -141,11 +143,12 @@ export function AstroDashboard() {
         setMessages((prev) => [...prev, { role: "assistant", content: reply }])
       }
     } catch (err: any) {
+      const errMsg = err?.message || "Something went wrong while connecting to the AI model."
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Astro workspace is active and connected. You can prompt any general agentic tasks here.",
+          content: `⚠️ ${errMsg}`,
         },
       ])
     } finally {
