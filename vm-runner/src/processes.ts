@@ -68,6 +68,9 @@ export async function pm2Describe(processName: string) {
 }
 
 export async function startOrRestartProcess(projectId: string, processName: string, port: number, cwd: string, envFile: string) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(processName)) {
+    throw new Error("Invalid process name")
+  }
   const envFileVars = await loadEnvFile(envFile)
   const existing = await pm2Describe(processName)
   const env: NodeJS.ProcessEnv = {
