@@ -27,49 +27,11 @@ import {
   ArrowDownLeft,
 } from "lucide-react"
 
-// Official SVGL.app brand icons
-export function SvglIcon({ brand, size = 18, className = "" }: { brand: string; size?: number; className?: string }) {
-  const key = (brand || "").toLowerCase()
+import { BrandLogo } from "@/components/sycord-omni-router-modal"
 
-  if (key.includes("google") || key.includes("gemini") || key.includes("vertex") || key.includes("gemma")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
-        <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
-        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-      </svg>
-    )
-  }
-  if (key.includes("anthropic") || key.includes("claude") || key.includes("sonnet") || key.includes("opus") || key.includes("haiku")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="#D97706" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M17.472 3.667h-3.874L20.89 20.333h3.874L17.472 3.667zm-10.944 0L0 20.333h3.874l1.658-4.482h6.988l1.658 4.482h3.874L11.528 3.667H6.528zm.972 9.074l2.028-5.482 2.028 5.482H7.5z" />
-      </svg>
-    )
-  }
-  if (key.includes("openai") || key.includes("gpt") || key.includes("o3") || key.includes("o1")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="#10B981" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zM8.307 15.356l-2.02-1.164a.08.08 0 0 1-.038-.057V8.552a4.5 4.5 0 0 1 7.37-3.454l-.142.08-4.778 2.758a.795.795 0 0 0-.392.681zm1.092-2.58l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5z" />
-      </svg>
-    )
-  }
-  if (key.includes("deepseek")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.93V18c0 .55-.45 1-1 1s-1-.45-1-1v-1.07c-2.83-.48-5-2.94-5-5.93 0-.55.45-1 1-1s1 .45 1 1c0 2.21 1.79 4 4 4s4-1.79 4-4c0-.55.45-1 1-1s1 .45 1 1c0 2.99-2.17 5.45-5 5.93zM12 6c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z" />
-      </svg>
-    )
-  }
-  if (key.includes("nvidia") || key.includes("nim")) {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="#76B900" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path d="M9.756 16.488a5.534 5.534 0 0 1-1.04-.1 3.513 3.513 0 0 1-2.28-1.748 3.518 3.518 0 0 1-.397-2.678 3.504 3.504 0 0 1 1.764-2.296 5.545 5.545 0 0 1 2.94-.652c.983 0 1.93.245 2.766.716l2.12-2.12A8.528 8.528 0 0 0 9.756 6c-3.13 0-5.918 1.636-7.447 4.14A8.524 8.524 0 0 0 .97 14.86c1.53 2.504 4.317 4.14 7.446 4.14 1.83 0 3.52-.56 4.922-1.52l-2.094-2.094a5.526 5.526 0 0 1-1.488.102zm7.14-8.868A11.517 11.517 0 0 0 9.756 3C4.368 3 .001 7.368.001 12.756c0 5.389 4.367 9.756 9.755 9.756 4.673 0 8.57-3.29 9.516-7.669H16.14a6.544 6.544 0 0 1-6.384 4.669c-3.615 0-6.556-2.94-6.556-6.756 0-3.815 2.941-6.756 6.556-6.756 1.81 0 3.45.735 4.64 1.924l2.49-2.49zM24 12.756C24 5.71 18.29 0 11.244 0c-3.22 0-6.17 1.19-8.42 3.153l2.12 2.12C6.54 3.82 8.76 2.99 11.244 2.99 16.634 2.99 21 7.357 21 12.756c0 5.39-4.366 9.756-9.756 9.756-2.484 0-4.704-.83-6.299-2.283l-2.12 2.12C5.074 24.31 8.024 25.5 11.244 25.5 18.29 25.5 24 19.8 24 12.756z" />
-      </svg>
-    )
-  }
-  return <Cpu className={`w-4 h-4 text-zinc-400 ${className}`} />
+// Official LobeHub / SVGL brand icon renderer
+export function SvglIcon({ brand, size = 18, className = "" }: { brand: string; size?: number; className?: string }) {
+  return <BrandLogo brand={brand} size={size} className={className} />
 }
 
 export function AiOmniManager() {
