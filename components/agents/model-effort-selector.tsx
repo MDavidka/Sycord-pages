@@ -74,23 +74,23 @@ export function ModelEffortSelector({
     []
   );
 
-  // Only show models that are turned on at model selector at Syra
+  // Models available in the selector
   const effectiveModels = useMemo(() => {
     if (!modelChoices || modelChoices.length === 0) return defaultModels;
-    const activeOnly = modelChoices.filter((m: any) => m.active !== false && m.enabled !== false);
-    return activeOnly.length > 0 ? activeOnly : modelChoices;
+    return modelChoices;
   }, [modelChoices, defaultModels]);
 
-  // Find active model and effort objects - prefer selectedModel, then isAiTabActive model, then first
+  // Find active model and effort objects - prioritize selectedModel, then active/AI-tab flag, then fallback
   const activeModelObj =
     effectiveModels.find(
       (m) =>
         m.id === selectedModel ||
-        m.label === selectedModel ||
-        m.apiModel === selectedModel
+        m.apiModel === selectedModel ||
+        m.label === selectedModel
     ) ||
     effectiveModels.find((m) => m.isAiTabActive || m.active) ||
-    effectiveModels[0];
+    effectiveModels[0] ||
+    defaultModels[0];
 
   const currentEffortObj =
     EFFORT_LIST.find((e) => e.id === effort) || EFFORT_LIST[3];

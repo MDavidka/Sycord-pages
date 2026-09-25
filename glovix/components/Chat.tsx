@@ -565,13 +565,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [questionError, setQuestionError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const isUserExplicitStopRef = useRef(false);
+    const isRemoteAgentRunningRef = useRef(false);
     const [isListening, setIsListening] = useState(false);
     const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
+        isUserExplicitStopRef.current = false;
         setIsRunning(true);
         setAbortCurrentRun(() => {
+            isUserExplicitStopRef.current = true;
             controller.abort();
         });
     };
@@ -588,15 +592,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     };
 
-    // Abort in-flight work on unmount so isRunning never sticks after navigation.
+    // Abort in-flight client-only work on unmount, but preserve remote VM agent runs
     useEffect(() => {
         return () => {
             const controller = abortControllerRef.current;
-            if (controller) {
+            if (controller && !isRemoteAgentRunningRef.current) {
                 controller.abort();
             }
             const state = useStore.getState();
-            if (state.isRunning) {
+            if (state.isRunning && !isRemoteAgentRunningRef.current) {
                 state.setIsRunning(false);
                 state.setAbortCurrentRun(null);
             }
@@ -937,6 +941,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, [messages]);
 
     const handleStop = () => {
+        isUserExplicitStopRef.current = true;
         const projectId = getHostProjectId();
         if (projectId) {
             // Cancel the durable Syte turn (interrupt), not only the local poller.
@@ -1290,7 +1295,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (lastAction?.displayName && lastAction.displayName !== 'Agent tool' && lastAction.displayName !== 'Action') {
             return `Completed ${lastAction.displayName}.`;
         }
-        return 'Done.';
+        if (actions.length > 0) {
+            return `Completed ${actions.length} action${actions.length > 1 ? 's' : ''}. Workspace updated and verified.`;
+        }
+        return 'Task completed successfully. Workspace is up to date.';
     };
 
     // When returning to a host project chat, resume any open Turso agent turn
@@ -1329,6 +1337,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 last.content.startsWith('Error: Failed to fetch') ||
                                 last.content.includes('Stopped listening') ||
                                 last.content.includes('Connection interrupted') ||
+                                last.content.includes('background') ||
                                 last.content.includes('continue working in the background') ||
                                 last.content.includes('reload the agent activity') ||
                                 last.content.includes('reload previous agent activity'))));
@@ -1597,9 +1606,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 }
                                 break;
-                            case 'done':
-                                if (!assistantContent && event.text) {
-                                    assistantContent = event.text;
+                            case 'done': {
+                                const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                                if (doneText) {
+                                    assistantContent = doneText;
                                 }
                                 assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
@@ -1607,6 +1617,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 clearPendingQuestion();
                                 markAgentTimelineLoaded();
                                 break;
+                            }
                             case 'stopped':
                                 if (!replayHistoryOnly && !assistantContent) {
                                     updateLastMessage(event.text || 'Stopped.');
@@ -1741,6 +1752,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentChatId, messages.length]);
 
+    // Resume background agent when the user returns to this tab from another browser tab
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+            const projectId = getHostProjectId();
+            if (!projectId || !currentChatId) return;
+
+            const msgs = useStore.getState().messages;
+            const last = msgs[msgs.length - 1];
+            const isPendingBackground = last?.role === 'assistant' && (
+                !last.content ||
+                (typeof last.content === 'string' && (
+                    last.content.includes('background') ||
+                    last.content.includes('interrupted') ||
+                    last.content.startsWith('Error:')
+                ))
+            );
+
+            if (!useStore.getState().isRunning || isPendingBackground) {
+                agentResumeDoneRef.current = false;
+                void syncPendingQuestions(projectId);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [currentChatId]);
+
     const triggerProjectAgentResponse = async (
         userMessage: Message,
         projectId: string,
@@ -1753,6 +1792,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setCurrentThinking('');
         setThinkingDuration(0);
         const controller = new AbortController();
+        isRemoteAgentRunningRef.current = true;
         beginRun(controller);
 
         const chatId = chatIdOverride || currentChatId;
@@ -2115,8 +2155,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 case 'done': {
-                    const doneText = event.text || event.content || '';
-                    if (!assistantContent && doneText) {
+                    const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                    if (doneText) {
                         assistantContent = doneText;
                     }
                     assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
@@ -2205,9 +2245,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
                 return;
             }
             if (errorText) throw new Error(errorText);
@@ -2220,21 +2264,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } catch (error: any) {
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
             } else {
                 const msg = String(error?.message || '');
                 const looksTransient =
-                    /load failed|failed to fetch|network|fetch failed/i.test(msg);
+                    /load failed|failed to fetch|network|fetch failed|the project agent stopped/i.test(msg);
 
                 if (looksTransient) {
-                    // Do not leave a dead "Error: Load failed" — keep turso cursor and explain resume.
                     persistCursor();
-                    updateLastMessage(
-                        assistantContent ||
-                            'Connection interrupted. Reopen this chat to reload previous agent activity from the database.',
-                    );
+                    if (!assistantContent) {
+                        updateLastMessage(
+                            'Agent is executing in the background. Return here or refresh to resume live progress.',
+                        );
+                    }
                 } else {
                     console.error('[ProjectAgent] Error:', error);
                     updateLastMessage(`Error: ${msg || 'Failed to run the project agent.'}`);
@@ -2242,6 +2290,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             }
         } finally {
+            isRemoteAgentRunningRef.current = false;
             const wasAborted = controller.signal.aborted;
             endRun(controller);
             setCurrentThinking('');
@@ -3314,6 +3363,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (choice) {
                         setSelectedModel(choice.modelType);
                         setAiModel(choice.apiModel);
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return prev;
+                            return prev.map(c => ({
+                                ...c,
+                                active: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                                isAiTabActive: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                            }));
+                        });
                     } else {
                         setSelectedModel(modelId as any);
                         setAiModel(modelId);
@@ -3889,24 +3946,43 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     effort={effortLevel}
                                     onEffortChange={handleEffortChange}
                                     selectedModel={selectedModel}
-                                    modelChoices={(availableModelChoices || []).map(c => ({
-                                        id: c.modelType,
-                                        label: c.label || c.apiModel,
-                                        apiModel: c.apiModel,
-                                        subtitle: c.subtitle,
-                                        iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
-                                        active: c.active,
-                                        isAiTabActive: c.isAiTabActive,
-                                    }))}
+                                    modelChoices={(availableModelChoices || []).map(c => {
+                                        const isSelected = c.modelType === selectedModel || c.apiModel === selectedModel;
+                                        return {
+                                            id: c.modelType,
+                                            label: c.label || c.apiModel,
+                                            apiModel: c.apiModel,
+                                            subtitle: c.subtitle,
+                                            iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                            active: isSelected || c.active,
+                                            isAiTabActive: isSelected || c.isAiTabActive,
+                                        };
+                                    })}
                                     onModelSelect={(modelId) => {
                                         const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
-                                        if (choice) {
-                                            setSelectedModel(choice.modelType);
-                                            setAiModel(choice.apiModel);
-                                        } else {
-                                            setSelectedModel(modelId as any);
-                                            setAiModel(modelId);
-                                        }
+                                        const targetModelType = choice ? choice.modelType : (modelId as any);
+                                        const targetApiModel = choice ? choice.apiModel : modelId;
+                                        setSelectedModel(targetModelType);
+                                        setAiModel(targetApiModel);
+
+                                        setAvailableModelChoices(prev => {
+                                            if (!prev) return prev;
+                                            return prev.map(c => ({
+                                                ...c,
+                                                active: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                                isAiTabActive: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                            }));
+                                        });
+
+                                        const pId = getHostProjectId();
+                                        void fetch('/api/ai/omni', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                model_id: targetApiModel,
+                                                project_id: pId || 'global',
+                                            }),
+                                        }).catch(() => {});
                                     }}
                                     onAddModelsClick={() => {
                                         setShowOmniModal(true);

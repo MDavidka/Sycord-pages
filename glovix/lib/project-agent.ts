@@ -258,7 +258,8 @@ function isTransientNetworkError(error: unknown): boolean {
 }
 
 function eventText(event: TursoSessionEvent): string {
-    const payload = event.payload || {};
+    const anyEvt = event as any;
+    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : anyEvt) || {};
     const extractString = (val: unknown): string | null => {
         if (typeof val === 'string' && val.trim()) return val;
         if (val && typeof val === 'object') {
@@ -268,25 +269,30 @@ function eventText(event: TursoSessionEvent): string {
             if (typeof obj.content === 'string' && obj.content.trim()) return obj.content;
             if (typeof obj.message === 'string' && obj.message.trim()) return obj.message;
             if (typeof obj.text === 'string' && obj.text.trim()) return obj.text;
+            if (typeof obj.reply === 'string' && obj.reply.trim()) return obj.reply;
         }
         return null;
     };
 
     const preferred =
         extractString(payload.reply) ??
+        extractString(anyEvt.reply) ??
+        extractString(payload.text) ??
+        extractString(anyEvt.text) ??
+        extractString(payload.content) ??
+        extractString(anyEvt.content) ??
         extractString(payload.output) ??
         extractString(payload.result) ??
         extractString(payload.delta) ??
-        extractString(payload.content) ??
-        extractString(payload.text) ??
         extractString(payload.message) ??
+        extractString(anyEvt.message) ??
         extractString(payload.error) ??
         extractString(event.detail) ??
         extractString(event.title);
 
     if (preferred !== null) return preferred;
 
-    const raw = payload.reply ?? payload.output ?? payload.result ?? payload.error ?? payload.delta ?? payload.content ?? payload.text ?? payload.message ?? event.detail ?? '';
+    const raw = payload.reply ?? anyEvt.reply ?? payload.text ?? anyEvt.text ?? payload.content ?? anyEvt.content ?? payload.output ?? payload.result ?? payload.error ?? payload.delta ?? payload.message ?? anyEvt.message ?? event.detail ?? '';
     if (typeof raw === 'string') return raw;
     if (raw && typeof raw === 'object') {
         try {
@@ -482,22 +488,24 @@ function normalizeTursoEvent(
     projectId?: string,
     fromStream = false,
 ): ProjectAgentEvent | null {
-    const payload = event.payload || {};
-    const rawToolCallId = payload.tool_call_id ?? payload.call_id;
+    const anyEvt = event as any;
+    const evType = (event.event_type || anyEvt.event || '').trim();
+    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : anyEvt) || {};
+    const rawToolCallId = payload.tool_call_id ?? payload.call_id ?? anyEvt.tool_call_id;
     const payloadSession =
         typeof payload.session === 'number'
             ? payload.session
             : Number(payload.session) || undefined;
     const payloadTurso =
-        typeof payload.turso_session_id === 'string' ? payload.turso_session_id : undefined;
+        typeof payload.turso_session_id === 'string' ? payload.turso_session_id : anyEvt.turso_session_id;
     const payloadRequestId =
-        typeof payload.request_id === 'string' ? payload.request_id : undefined;
+        typeof payload.request_id === 'string' ? payload.request_id : anyEvt.request_id;
     const rawSubagentId = payload.subagent_task_id ?? payload.task_id;
     const common = {
         session: payloadSession || session,
         eventId: Number(event.id) || undefined,
         text: eventText(event),
-        title: event.title,
+        title: event.title || anyEvt.tool_name,
         toolCallId:
             typeof rawToolCallId === 'string' || typeof rawToolCallId === 'number'
                 ? String(rawToolCallId)
@@ -517,7 +525,7 @@ function normalizeTursoEvent(
                     : undefined,
     };
 
-    switch (event.event_type) {
+    switch (evType) {
         case 'request_started':
         case 'processing':
         case 'status':
@@ -1139,10 +1147,12 @@ export async function pollTursoAgentSession(options: {
                 let latestReply = '';
                 for (const ev of (doc.events || []).slice().reverse()) {
                     const txt = eventText(ev);
-                    if (!latestError && (ev.event_type === 'error' || ev.event_type === 'error_log' || (ev.payload && (ev.payload as any).error))) {
-                        latestError = txt || String((ev.payload as any)?.error || '');
+                    const anyEv = ev as any;
+                    const et = ev.event_type || anyEv.event || '';
+                    if (!latestError && (et === 'error' || et === 'error_log' || (ev.payload && (ev.payload as any).error) || anyEv.error)) {
+                        latestError = txt || String((ev.payload as any)?.error || anyEv.error || '');
                     }
-                    if (!latestReply && (ev.event_type === 'done' || ev.event_type === 'assistant_message' || ev.event_type === 'message_snapshot' || ev.event_type === 'tool_call_result' || ev.event_type === 'tool_call_finished')) {
+                    if (!latestReply && (et === 'done' || et === 'assistant_message' || et === 'message_snapshot' || et === 'tool_call_result' || et === 'tool_call_finished' || et === 'token_delta')) {
                         latestReply = txt;
                     }
                 }

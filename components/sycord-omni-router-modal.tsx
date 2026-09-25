@@ -754,18 +754,10 @@ export function SycordOmniRouterModal({
                           <div className="space-y-1.5">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2.5 min-w-0">
-                                {/* Model Brand Logo using LobeHub icons JSON (clicking directly on icon adds model) */}
+                                {/* Model Brand Logo using LobeHub icons JSON */}
                                 <div
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    if (isMultiSelectMode) {
-                                      toggleModelSelection(model.id)
-                                    } else {
-                                      handleSelectModel(model)
-                                    }
-                                  }}
-                                  className="w-7 h-7 rounded-lg bg-muted/60 border border-border flex items-center justify-center shrink-0 hover:scale-105 hover:border-primary/50 transition-all cursor-pointer"
-                                  title={`Click to select ${model.name}`}
+                                  className="w-7 h-7 rounded-lg bg-muted/60 border border-border flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-primary/50 transition-all pointer-events-none"
+                                  title={model.name}
                                 >
                                   {isVideoModel(model) ? (
                                     <Video className="w-4 h-4 text-purple-400" />
