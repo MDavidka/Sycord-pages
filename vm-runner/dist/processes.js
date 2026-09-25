@@ -57,14 +57,19 @@ export async function pm2Describe(processName) {
         .catch(() => null);
 }
 export async function startOrRestartProcess(projectId, processName, port, cwd, envFile) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(processName)) {
+        throw new Error("Invalid process name");
+    }
     const envFileVars = await loadEnvFile(envFile);
     const existing = await pm2Describe(processName);
     const env = {
         PORT: String(port),
         HOSTNAME: "0.0.0.0",
-        NODE_ENV: "production",
         ENV_FILE: envFile,
         ...envFileVars,
+        NODE_ENV: envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test"
+            ? envFileVars.NODE_ENV
+            : "production",
     };
     if (existing) {
         return runCommand(config.pm2Binary, ["restart", processName, "--update-env"], { cwd, env });
