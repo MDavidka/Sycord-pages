@@ -9,7 +9,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SycordOmniRouterModal } from "@/components/sycord-omni-router-modal";
 
 export type EffortLevel = "low" | "medium" | "high" | "extra_high" | "max";
 
@@ -63,7 +62,6 @@ export function ModelEffortSelector({
 }: ModelEffortSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<SubView>("none");
-  const [showOmniModal, setShowOmniModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Default models if choices are empty
@@ -402,7 +400,6 @@ export function ModelEffortSelector({
                     <button
                       type="button"
                       onClick={() => {
-                        setShowOmniModal(true);
                         onAddModelsClick?.();
                         setActiveSubView("none");
                         setIsOpen(false);
@@ -484,17 +481,6 @@ export function ModelEffortSelector({
           )}
         </div>
       )}
-      {/* Sycord Omni Route / Models Library Modal */}
-      <SycordOmniRouterModal
-        open={showOmniModal}
-        onOpenChange={setShowOmniModal}
-        selectedModel={selectedModel || activeModelObj.id || activeModelObj.apiModel}
-        onSelectModel={(modelId) => {
-          onModelSelect?.(modelId);
-        }}
-        modelChoices={modelChoices}
-        isDark={isDark}
-      />
     </div>
   );
 }

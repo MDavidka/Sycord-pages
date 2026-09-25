@@ -265,27 +265,23 @@ export function SycordOmniRouterModal({
       .catch(() => {})
   }, [open, projectId, selectedModel])
 
-  const handleSelectModel = async (model: OmniModelItem) => {
+  const handleSelectModel = (model: OmniModelItem) => {
     setActiveModelId(model.id)
-    try {
-      await fetch("/api/ai/omni", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model_id: model.id,
-          project_id: projectId,
-          provider: model.provider,
-        }),
-      }).catch(() => {})
+    // 1-click instantaneous response: immediately update parent & close modal
+    toast.success(`Model ${model.name || model.id} added & set as active!`)
+    onSelectModel?.(model.id, model)
+    onOpenChange(false)
 
-      toast.success(`Model ${model.name || model.id} added & set as active!`)
-      onSelectModel?.(model.id, model)
-      onOpenChange(false)
-    } catch {
-      toast.success(`Selected ${model.name || model.id}`)
-      onSelectModel?.(model.id, model)
-      onOpenChange(false)
-    }
+    // Fire API sync in the background without blocking the UI
+    void fetch("/api/ai/omni", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model_id: model.id,
+        project_id: projectId,
+        provider: model.provider,
+      }),
+    }).catch(() => {})
   }
 
   // Toggle selection of a model in multi-select mode

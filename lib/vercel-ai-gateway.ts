@@ -235,6 +235,7 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          "Accept-Encoding": "identity",
         }
         if (apiKey) {
           headers["Authorization"] = `Bearer ${apiKey}`
@@ -244,6 +245,7 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
+          cache: "no-store",
           signal: options.signal
             ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
             : AbortSignal.timeout(180_000),
@@ -274,16 +276,31 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
           throw new Error("No response body from Vercel AI Gateway")
         }
 
+        // Byte-for-byte stream forwarding preserves SSE framing and reduces TTFB
         const reader = res.body.getReader()
-        while (true) {
-          const { done: streamDone, value } = await reader.read()
-          if (streamDone) break
-          if (value && value.length > 0) {
-            enqueue(value)
+        try {
+          while (!options.signal?.aborted) {
+            const { done: streamDone, value } = await reader.read()
+            if (streamDone) break
+            if (value && value.byteLength > 0) {
+              enqueue(value)
+            }
           }
+        } finally {
+          if (options.signal?.aborted) {
+            await reader.cancel().catch(() => undefined)
+          }
+          reader.releaseLock()
         }
         done()
       } catch (err: any) {
+        if (options.signal?.aborted) {
+          if (!closed) {
+            closed = true
+            controller.close()
+          }
+          return
+        }
         if (!closed) {
           sendEvent(
             JSON.stringify({
@@ -309,9 +326,10 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
+      "Cache-Control": "no-cache, no-store, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+      "Content-Encoding": "identity",
     },
   })
 }

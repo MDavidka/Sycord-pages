@@ -251,7 +251,7 @@ import { useStore } from '../store';
 // CONFIGURATION
 // ============================================================
 
-const STREAM_TIMEOUT_MS = 60000;       // 60s max silence before considering stream dead
+const STREAM_TIMEOUT_MS = 120000;      // 120s max silence before considering stream dead (handles deep thinking models)
 const MAX_RETRIES = 4;                 // Retry failed API calls (429 rate limits need extra attempts)
 const RETRY_DELAY_MS = 2000;           // Base wait between retries
 const RETRY_429_DELAY_MS = 5000;       // Longer backoff for Vertex rate limits

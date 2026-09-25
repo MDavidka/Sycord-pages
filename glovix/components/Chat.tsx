@@ -455,10 +455,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active);
-        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || activeAiTabChoice || availableModelChoices[0];
-        if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
-        setAiModel(selected.apiModel);
+        const matchingChoice = availableModelChoices.find(choice => choice.modelType === selectedModel || choice.apiModel === selectedModel);
+        if (matchingChoice) {
+            if (matchingChoice.modelType !== selectedModel) setSelectedModel(matchingChoice.modelType);
+            setAiModel(matchingChoice.apiModel);
+        } else if (!selectedModel) {
+            const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active) || availableModelChoices[0];
+            setSelectedModel(activeAiTabChoice.modelType);
+            setAiModel(activeAiTabChoice.apiModel);
+        }
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
     // Live execution actions. Remote project-agent actions are also copied onto
@@ -3304,7 +3309,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId={hostProjectIdForSlash || 'global'}
                 isDark={isDark}
                 modelChoices={availableModelChoices || []}
-                onSelectModel={(modelId) => {
+                onSelectModel={(modelId, modelObj) => {
                     const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
                     if (choice) {
                         setSelectedModel(choice.modelType);
@@ -3312,6 +3317,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     } else {
                         setSelectedModel(modelId as any);
                         setAiModel(modelId);
+                        // Optimistically insert into availableModelChoices so the model selector and dropdowns display it instantly
+                        const newChoice: ModelChoice = {
+                            id: modelId,
+                            label: modelObj?.name || modelId,
+                            subtitle: modelObj?.provider_display || modelObj?.provider || 'Omni',
+                            modelType: modelId as any,
+                            apiModel: modelId,
+                            icon: getProviderIconUrl(modelId, isDark) || '/model-logos/gemini.svg',
+                            iconAlt: modelObj?.name || modelId,
+                            active: true,
+                            isAiTabActive: true,
+                        };
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return [newChoice];
+                            const filtered = prev.filter(c => c.modelType !== modelId && c.apiModel !== modelId);
+                            return [newChoice, ...filtered];
+                        });
                     }
                     void loadAvailableModels();
                 }}
