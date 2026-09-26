@@ -53,6 +53,8 @@ export type ProjectAgentEvent = {
         | 'question'
         | 'question_answered'
         | 'plan'
+        | 'plan_update'
+        | 'plan_step'
         | 'subagent_started'
         | 'subagent_completed'
         | 'subagent_failed'
@@ -582,9 +584,11 @@ function normalizeTursoEvent(
                 text: typeof payload.thought === 'string' ? payload.thought : event.detail || '',
             };
         case 'plan':
+        case 'plan_update':
+        case 'plan_step':
         case 'plan_approval_required':
             return {
-                type: 'plan',
+                type: (evType === 'plan_update' ? 'plan_update' : evType === 'plan_step' ? 'plan_step' : 'plan') as any,
                 ...common,
                 plan: payload.plan ?? payload,
                 arguments: payload,
