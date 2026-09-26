@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 export interface AnsweredQuestionBoxProps {
   prompt: string;
-  answer: string | number | string[];
+  answer?: any;
   isDark?: boolean;
   questionId?: string;
   className?: string;
@@ -18,7 +18,9 @@ export function AnsweredQuestionBox({
   isDark = true,
   className = '',
 }: AnsweredQuestionBoxProps) {
-  const displayAnswer = Array.isArray(answer) ? answer.join(', ') : String(answer ?? '');
+  const displayAnswer = typeof answer === 'object' && answer !== null
+    ? (Array.isArray(answer) ? answer.join(', ') : JSON.stringify(answer))
+    : String(answer ?? '');
 
   return (
     <div

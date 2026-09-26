@@ -3672,7 +3672,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                                 <AnsweredQuestionBox
                                                                     key={q.id || `q-${qIdx}`}
                                                                     prompt={q.prompt}
-                                                                    answer={q.answer ?? qSeg.answer ?? ''}
+                                                                    answer={(q.answer ?? qSeg.answer ?? '') as any}
                                                                     isDark={isDark}
                                                                     questionId={q.id}
                                                                 />
