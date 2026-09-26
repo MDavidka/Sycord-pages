@@ -17,6 +17,7 @@ export type GenerationPlanStep = {
   description: string
   strict: boolean
   status: PlanStepStatus
+  progress?: number
   hints?: string[]
 }
 

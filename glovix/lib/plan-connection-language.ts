@@ -31,6 +31,7 @@ export interface PlanStep {
   title: string;
   description?: string;
   status: PlanStepStatus;
+  progress?: number;
   notes?: string;
   strict?: boolean;
 }

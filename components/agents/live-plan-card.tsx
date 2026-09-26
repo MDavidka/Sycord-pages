@@ -144,7 +144,7 @@ export const LivePlanCard = memo(function LivePlanCard({
               <div className="flex-shrink-0 flex items-center justify-center w-4 h-4">
                 {isInProgress ? (
                   <ProgressCircle
-                    progress={step.progress ?? 65}
+                    progress={(step as any)?.progress ?? 65}
                     className="w-4 h-4"
                   />
                 ) : isCompleted ? (
