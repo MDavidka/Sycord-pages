@@ -3,7 +3,7 @@
  * AI may define its own steps; default pipeline is suggested, not mandatory semantics.
  */
 
-export type PlanStepStatus = "pending" | "in_progress" | "completed" | "skipped"
+export type PlanStepStatus = "pending" | "in_progress" | "completed" | "failed" | "skipped"
 
 export type PlannedPage = {
   route: string
