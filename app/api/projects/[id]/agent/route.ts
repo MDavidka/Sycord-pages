@@ -145,7 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? body.planMode
     : agentMode === "plan"
       ? "always"
-      : "off"
+      : "auto"
   const thinkingLevel = typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined
   const executionSpeed = typeof body?.executionSpeed === "string" ? body.executionSpeed : undefined
 

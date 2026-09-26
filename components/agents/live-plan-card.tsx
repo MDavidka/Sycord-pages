@@ -1,13 +1,45 @@
 'use client';
 
 import React, { memo, useEffect, useState } from 'react';
-import { Target, Loader2, Circle, CheckCircle2, XCircle } from 'lucide-react';
+import { Target, Circle, CheckCircle2, XCircle } from 'lucide-react';
 import type { PlanStep, StreamingPlan } from '@/glovix/lib/plan-connection-language';
+
+function ProgressCircle({ progress = 65, className = 'w-4 h-4' }: { progress?: number; className?: string }) {
+  const radius = 6;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (Math.min(100, Math.max(5, progress)) / 100) * circumference;
+
+  return (
+    <svg className={`${className} -rotate-90`} viewBox="0 0 16 16" fill="none">
+      {/* Background circle outline */}
+      <circle
+        cx="8"
+        cy="8"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth="1.75"
+        className="text-zinc-700/60"
+      />
+      {/* Active progress arc (white) */}
+      <circle
+        cx="8"
+        cy="8"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeDasharray={circumference}
+        strokeDashoffset={strokeDashoffset}
+        strokeLinecap="round"
+        className="text-white"
+      />
+    </svg>
+  );
+}
 
 export interface LivePlanCardProps {
   plan?: StreamingPlan | null;
   title?: string;
-  steps?: PlanStep[];
+  steps?: (PlanStep & { progress?: number })[];
   status?: 'active' | 'completed' | 'failed';
   isDark?: boolean;
   className?: string;
@@ -111,10 +143,9 @@ export const LivePlanCard = memo(function LivePlanCard({
               {/* Status indicator icon */}
               <div className="flex-shrink-0 flex items-center justify-center w-4 h-4">
                 {isInProgress ? (
-                  <Loader2
-                    className={`w-4 h-4 animate-spin stroke-[2] ${
-                      isDark ? 'text-zinc-200' : 'text-gray-800'
-                    }`}
+                  <ProgressCircle
+                    progress={step.progress ?? 65}
+                    className="w-4 h-4"
                   />
                 ) : isCompleted ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 stroke-[2]" />
@@ -123,7 +154,7 @@ export const LivePlanCard = memo(function LivePlanCard({
                 ) : (
                   <Circle
                     className={`w-4 h-4 stroke-[1.5] ${
-                      isDark ? 'text-zinc-500/80' : 'text-gray-400'
+                      isDark ? 'text-zinc-600' : 'text-gray-400'
                     }`}
                   />
                 )}

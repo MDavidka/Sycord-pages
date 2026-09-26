@@ -26,6 +26,7 @@ import {
     answerProjectAgentQuestion,
     type AgentQuestionAnswerValue,
 } from './AgentQuestionCard';
+import { AnsweredQuestionBox } from '@/components/agents/modern-tools/answered-question-box';
 import {
     CreditsPanel,
     HelpSupportPanel,
@@ -863,6 +864,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
                         currentGroup.agentActions = Array.from(byId.values());
                     }
+                    if (Array.isArray((msg as any).segments) && (msg as any).segments.length > 0) {
+                        if (!currentGroup.segments) currentGroup.segments = [];
+                        for (const seg of (msg as any).segments as AssistantSegment[]) {
+                            if (seg.type === 'question' && seg.question) {
+                                const exists = currentGroup.segments.some(
+                                    s => s.type === 'question' && s.question?.id === seg.question?.id
+                                );
+                                if (!exists) {
+                                    currentGroup.segments.push(seg);
+                                }
+                            }
+                        }
+                    }
                     if (!currentGroup.createdAt && (msg as any).createdAt) {
                         currentGroup.createdAt = (msg as any).createdAt;
                     }
@@ -1009,23 +1023,33 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         );
         setQuestionSubmitting(false);
 
-        // Also update the inline segment in messages so user sees the answered state right away
+        // Also update all message segments in state so user sees the answered state right away
         const state = useStore.getState();
-        const lastMsg = state.messages[state.messages.length - 1] as any;
-        if (lastMsg && lastMsg.role === 'assistant') {
-            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-            let updated = false;
-            for (const s of segs) {
-                if (s.type === 'question' && s.question?.id === question.id) {
-                    s.question = { ...s.question, status: 'answered', answer };
-                    s.answered = true;
-                    s.answer = answer;
-                    updated = true;
+        let anyUpdated = false;
+        const updatedMessages = state.messages.map((m: any) => {
+            if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                let msgUpdated = false;
+                const segs = m.segments.map((s: AssistantSegment) => {
+                    if (s.type === 'question' && (!question.id || s.question?.id === question.id)) {
+                        msgUpdated = true;
+                        anyUpdated = true;
+                        return {
+                            ...s,
+                            question: { ...s.question, status: 'answered', answer },
+                            answered: true,
+                            answer,
+                        };
+                    }
+                    return s;
+                });
+                if (msgUpdated) {
+                    return { ...m, segments: segs };
                 }
             }
-            if (updated) {
-                updateLastMessage(lastMsg.content || '', undefined, undefined, undefined, segs);
-            }
+            return m;
+        });
+        if (anyUpdated) {
+            useStore.setState({ messages: updatedMessages });
         }
 
         // Prefer clearing bottom bar card immediately; inline question segment stays visible and answered
@@ -2127,19 +2151,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setQuestionError(null);
 
                     const state = useStore.getState();
-                    const lastMsg = state.messages[state.messages.length - 1] as any;
-                    if (lastMsg && lastMsg.role === 'assistant') {
-                        const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-                        for (const s of segs) {
-                            if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
-                                if (s.question) {
-                                    s.question = { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text };
+                    let anyUpdated = false;
+                    const updatedMessages = state.messages.map((m: any) => {
+                        if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                            let msgUpdated = false;
+                            const segs = m.segments.map((s: AssistantSegment) => {
+                                if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
+                                    msgUpdated = true;
+                                    anyUpdated = true;
+                                    return {
+                                        ...s,
+                                        question: s.question ? { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text } : s.question,
+                                        answered: true,
+                                        answer: event.question?.answer ?? event.text,
+                                    };
                                 }
-                                s.answered = true;
-                                s.answer = event.question?.answer ?? event.text;
+                                return s;
+                            });
+                            if (msgUpdated) {
+                                return { ...m, segments: segs };
                             }
                         }
-                        updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                        return m;
+                    });
+                    if (anyUpdated) {
+                        useStore.setState({ messages: updatedMessages });
                     }
                     break;
                 }
@@ -2233,6 +2269,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId,
                 message: userMessage,
                 modelProfile: activeModelProfile,
+                planMode: 'auto',
+                agentMode: 'build',
                 thinkingLevel: effortLevel,
                 executionSpeed: effortLevel === 'low' ? 'ultra_fast' : effortLevel === 'extra_high' ? 'deep_reasoning' : 'balanced',
                 afterSession,
@@ -3550,8 +3588,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             }
                         }
 
-                        const questionSeg = group.role === 'assistant' && group.segments?.find(s => s.type === 'question' && s.question);
-                        const question = questionSeg ? questionSeg.question : undefined;
+                        const questionSegments = group.role === 'assistant' && Array.isArray(group.segments)
+                            ? group.segments.filter(s => s.type === 'question' && s.question)
+                            : [];
 
                         return (
                             <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -3622,16 +3661,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <div className="flex items-start gap-3 w-full">
                                         <AstroAvatar className="mt-0.5 shrink-0" />
                                         <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
-                                            {/* Interactive question if present */}
-                                            {question && (
-                                                <div className="my-2">
-                                                    <AgentQuestionCard
-                                                        question={question}
-                                                        isDark={isDark}
-                                                        submitting={questionSubmitting}
-                                                        error={questionError}
-                                                        onSubmit={handleAgentQuestionSubmit}
-                                                    />
+                                            {/* Questions / Answered Questions */}
+                                            {questionSegments.length > 0 && (
+                                                <div className="my-2 space-y-2">
+                                                    {questionSegments.map((qSeg, qIdx) => {
+                                                        const q = qSeg.question!;
+                                                        const isAnswered = q.status === 'answered' || qSeg.answered || (q.answer !== undefined && q.answer !== null);
+                                                        if (isAnswered) {
+                                                            return (
+                                                                <AnsweredQuestionBox
+                                                                    key={q.id || `q-${qIdx}`}
+                                                                    prompt={q.prompt}
+                                                                    answer={q.answer ?? qSeg.answer ?? ''}
+                                                                    isDark={isDark}
+                                                                    questionId={q.id}
+                                                                />
+                                                            );
+                                                        }
+                                                        return (
+                                                            <AgentQuestionCard
+                                                                key={q.id || `q-${qIdx}`}
+                                                                question={q}
+                                                                isDark={isDark}
+                                                                submitting={questionSubmitting}
+                                                                error={questionError}
+                                                                onSubmit={handleAgentQuestionSubmit}
+                                                            />
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
 
@@ -3853,34 +3910,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Live Plan Card pinned above composer (exact UI from screenshot) */}
-                        {generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
-                            <LivePlanCard
-                                title={generationPlan.title || 'plan'}
-                                steps={generationPlan.steps.map((s) => ({
-                                    id: s.id,
-                                    title: s.title,
-                                    description: s.description,
-                                    status: s.status,
-                                    notes: (s as any).notes,
-                                }))}
-                                status={
-                                    generationPlan.steps.some((s) => s.status === 'failed')
-                                        ? 'failed'
-                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
-                                        ? 'completed'
-                                        : 'active'
-                                }
-                                isDark={isDark}
-                                startTime={generationPlan.createdAt}
-                                className="mb-2.5"
-                            />
-                        )}
-
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#151515] border-white/[0.08] focus-within:border-white/20 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#18181b] border-zinc-800/80 focus-within:border-zinc-700 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4093,6 +4126,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 </div>
                             </div>
                         </div>
+
+                        {/* Live Plan Card pinned under input (blow) - exact UI & matching background color */}
+                        {generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
+                            <LivePlanCard
+                                title={generationPlan.title || 'plan'}
+                                steps={generationPlan.steps.map((s) => ({
+                                    id: s.id,
+                                    title: s.title,
+                                    description: s.description,
+                                    status: s.status,
+                                    notes: (s as any).notes,
+                                }))}
+                                status={
+                                    generationPlan.steps.some((s) => s.status === 'failed')
+                                        ? 'failed'
+                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
+                                        ? 'completed'
+                                        : 'active'
+                                }
+                                isDark={isDark}
+                                startTime={generationPlan.createdAt}
+                                className="mt-1"
+                            />
+                        )}
                     </form>
                 </div>
             </div>
