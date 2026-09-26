@@ -46,6 +46,38 @@ export interface StreamingPlan {
   updatedAt: number;
 }
 
+export type PlanCompatible = {
+  id?: string;
+  title?: string;
+  steps?: Array<{ id?: string; title: string; description?: string; status?: any; notes?: string; strict?: boolean }>;
+  status?: 'active' | 'completed' | 'failed' | string;
+  notes?: string;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export function toStreamingPlan(p?: PlanCompatible | null): StreamingPlan | null {
+  if (!p) return null;
+  const isCompleted = (p.steps || []).length > 0 && (p.steps || []).every((s: any) => s.status === 'completed' || s.status === 'skipped');
+  const hasFailed = (p.steps || []).some((s: any) => s.status === 'failed');
+  return {
+    id: p.id || `plan-${Date.now()}`,
+    title: p.title || 'plan',
+    steps: (p.steps || []).map((s: any, idx: number) => ({
+      id: s.id || `step-${idx + 1}`,
+      title: s.title || '',
+      description: s.description,
+      status: normalizeStepStatus(s.status),
+      notes: s.notes,
+      strict: s.strict,
+    })),
+    status: p.status === 'failed' || hasFailed ? 'failed' : p.status === 'completed' || isCompleted ? 'completed' : 'active',
+    notes: p.notes,
+    createdAt: p.createdAt || Date.now(),
+    updatedAt: p.updatedAt || Date.now(),
+  };
+}
+
 export function normalizeStepStatus(value: unknown): PlanStepStatus {
   if (!value) return 'pending';
   const str = String(value).trim().toLowerCase();
@@ -62,10 +94,10 @@ export function normalizeStepStatus(value: unknown): PlanStepStatus {
  */
 export function parsePlanFromConnectionStream(
   text: string,
-  existingPlan?: StreamingPlan | null
+  existingPlan?: PlanCompatible | null
 ): { plan: StreamingPlan | null; cleanText: string; hasPlanBlock: boolean } {
   if (!text || typeof text !== 'string') {
-    return { plan: existingPlan || null, cleanText: text || '', hasPlanBlock: false };
+    return { plan: toStreamingPlan(existingPlan), cleanText: text || '', hasPlanBlock: false };
   }
 
   // 1. Check for XML/Tag syntax: <plan ...> ... </plan> (or open <plan ...> ...)
@@ -136,7 +168,7 @@ export function parsePlanFromConnectionStream(
     }
   }
 
-  return { plan: existingPlan || null, cleanText: text, hasPlanBlock: false };
+  return { plan: toStreamingPlan(existingPlan), cleanText: text, hasPlanBlock: false };
 }
 
 function parseStepsFromXml(xmlBody: string): PlanStep[] {
