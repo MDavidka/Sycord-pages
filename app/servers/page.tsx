@@ -1,10 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { headers } from "next/headers"
-import { Inter } from "next/font/google"
 import { ServerStatusCard } from "@/components/server-status-card"
-
-const inter = Inter({ subsets: ["latin"], weight: ['400', '500', '600', '700'] })
 
 type ServerStatus = {
   id: string
@@ -38,7 +35,7 @@ export default async function ServersPage() {
   const isOperational = globalStatus !== "outage"
 
   return (
-    <div className={`min-h-screen bg-[#1a1a1a] ${inter.className}`}>
+    <div className="min-h-screen bg-[#1a1a1a] font-sans">
       {/* Header */}
       <header className="px-6 py-6">
         <div className="flex items-center gap-3">
