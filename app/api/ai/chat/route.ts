@@ -47,6 +47,7 @@ import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
 export const maxDuration = 300
 
 function isDeepSeekModel(model: string | undefined): boolean {

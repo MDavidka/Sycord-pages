@@ -26,6 +26,7 @@ import {
     answerProjectAgentQuestion,
     type AgentQuestionAnswerValue,
 } from './AgentQuestionCard';
+import { AnsweredQuestionBox } from '@/components/agents/modern-tools/answered-question-box';
 import {
     CreditsPanel,
     HelpSupportPanel,
@@ -53,6 +54,8 @@ import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
 import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
+import { LivePlanCard } from '@/components/agents/live-plan-card';
+import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -455,10 +458,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active);
-        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || activeAiTabChoice || availableModelChoices[0];
-        if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
-        setAiModel(selected.apiModel);
+        const matchingChoice = availableModelChoices.find(choice => choice.modelType === selectedModel || choice.apiModel === selectedModel);
+        if (matchingChoice) {
+            if (matchingChoice.modelType !== selectedModel) setSelectedModel(matchingChoice.modelType);
+            setAiModel(matchingChoice.apiModel);
+        } else if (!selectedModel) {
+            const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active) || availableModelChoices[0];
+            setSelectedModel(activeAiTabChoice.modelType);
+            setAiModel(activeAiTabChoice.apiModel);
+        }
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
     // Live execution actions. Remote project-agent actions are also copied onto
@@ -560,13 +568,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [questionError, setQuestionError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const isUserExplicitStopRef = useRef(false);
+    const isRemoteAgentRunningRef = useRef(false);
     const [isListening, setIsListening] = useState(false);
     const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
+        isUserExplicitStopRef.current = false;
         setIsRunning(true);
         setAbortCurrentRun(() => {
+            isUserExplicitStopRef.current = true;
             controller.abort();
         });
     };
@@ -583,15 +595,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     };
 
-    // Abort in-flight work on unmount so isRunning never sticks after navigation.
+    // Abort in-flight client-only work on unmount, but preserve remote VM agent runs
     useEffect(() => {
         return () => {
             const controller = abortControllerRef.current;
-            if (controller) {
+            if (controller && !isRemoteAgentRunningRef.current) {
                 controller.abort();
             }
             const state = useStore.getState();
-            if (state.isRunning) {
+            if (state.isRunning && !isRemoteAgentRunningRef.current) {
                 state.setIsRunning(false);
                 state.setAbortCurrentRun(null);
             }
@@ -852,6 +864,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
                         currentGroup.agentActions = Array.from(byId.values());
                     }
+                    if (Array.isArray((msg as any).segments) && (msg as any).segments.length > 0) {
+                        if (!currentGroup.segments) currentGroup.segments = [];
+                        for (const seg of (msg as any).segments as AssistantSegment[]) {
+                            if (seg.type === 'question' && seg.question) {
+                                const exists = currentGroup.segments.some(
+                                    s => s.type === 'question' && s.question?.id === seg.question?.id
+                                );
+                                if (!exists) {
+                                    currentGroup.segments.push(seg);
+                                }
+                            }
+                        }
+                    }
                     if (!currentGroup.createdAt && (msg as any).createdAt) {
                         currentGroup.createdAt = (msg as any).createdAt;
                     }
@@ -932,6 +957,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, [messages]);
 
     const handleStop = () => {
+        isUserExplicitStopRef.current = true;
         const projectId = getHostProjectId();
         if (projectId) {
             // Cancel the durable Syte turn (interrupt), not only the local poller.
@@ -997,23 +1023,33 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         );
         setQuestionSubmitting(false);
 
-        // Also update the inline segment in messages so user sees the answered state right away
+        // Also update all message segments in state so user sees the answered state right away
         const state = useStore.getState();
-        const lastMsg = state.messages[state.messages.length - 1] as any;
-        if (lastMsg && lastMsg.role === 'assistant') {
-            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-            let updated = false;
-            for (const s of segs) {
-                if (s.type === 'question' && s.question?.id === question.id) {
-                    s.question = { ...s.question, status: 'answered', answer };
-                    s.answered = true;
-                    s.answer = answer;
-                    updated = true;
+        let anyUpdated = false;
+        const updatedMessages = state.messages.map((m: any) => {
+            if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                let msgUpdated = false;
+                const segs = m.segments.map((s: AssistantSegment) => {
+                    if (s.type === 'question' && (!question.id || s.question?.id === question.id)) {
+                        msgUpdated = true;
+                        anyUpdated = true;
+                        return {
+                            ...s,
+                            question: { ...s.question, status: 'answered', answer },
+                            answered: true,
+                            answer,
+                        };
+                    }
+                    return s;
+                });
+                if (msgUpdated) {
+                    return { ...m, segments: segs };
                 }
             }
-            if (updated) {
-                updateLastMessage(lastMsg.content || '', undefined, undefined, undefined, segs);
-            }
+            return m;
+        });
+        if (anyUpdated) {
+            useStore.setState({ messages: updatedMessages });
         }
 
         // Prefer clearing bottom bar card immediately; inline question segment stays visible and answered
@@ -1285,7 +1321,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (lastAction?.displayName && lastAction.displayName !== 'Agent tool' && lastAction.displayName !== 'Action') {
             return `Completed ${lastAction.displayName}.`;
         }
-        return 'Done.';
+        if (actions.length > 0) {
+            return `Completed ${actions.length} action${actions.length > 1 ? 's' : ''}. Workspace updated and verified.`;
+        }
+        return 'Task completed successfully. Workspace is up to date.';
     };
 
     // When returning to a host project chat, resume any open Turso agent turn
@@ -1324,6 +1363,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 last.content.startsWith('Error: Failed to fetch') ||
                                 last.content.includes('Stopped listening') ||
                                 last.content.includes('Connection interrupted') ||
+                                last.content.includes('background') ||
                                 last.content.includes('continue working in the background') ||
                                 last.content.includes('reload the agent activity') ||
                                 last.content.includes('reload previous agent activity'))));
@@ -1433,7 +1473,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 }
                                 break;
                             }
-                            case 'plan': {
+                            case 'plan':
+                            case 'plan_update':
+                            case 'plan_step': {
                                 syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
@@ -1582,19 +1624,26 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 setQuestionError(null);
                                 break;
                             }
-                            case 'delta':
+                            case 'delta': {
                                 assistantContent += event.text || '';
+                                const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                                if (pcl.hasPlanBlock && pcl.plan) {
+                                    const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                                    if (nextPlan) setGenerationPlan(nextPlan);
+                                }
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
+                            }
                             case 'message':
                                 if (!assistantContent) {
                                     assistantContent = event.text || '';
                                     if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 }
                                 break;
-                            case 'done':
-                                if (!assistantContent && event.text) {
-                                    assistantContent = event.text;
+                            case 'done': {
+                                const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                                if (doneText) {
+                                    assistantContent = doneText;
                                 }
                                 assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
@@ -1602,6 +1651,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 clearPendingQuestion();
                                 markAgentTimelineLoaded();
                                 break;
+                            }
                             case 'stopped':
                                 if (!replayHistoryOnly && !assistantContent) {
                                     updateLastMessage(event.text || 'Stopped.');
@@ -1736,6 +1786,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentChatId, messages.length]);
 
+    // Resume background agent when the user returns to this tab from another browser tab
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+            const projectId = getHostProjectId();
+            if (!projectId || !currentChatId) return;
+
+            const msgs = useStore.getState().messages;
+            const last = msgs[msgs.length - 1];
+            const isPendingBackground = last?.role === 'assistant' && (
+                !last.content ||
+                (typeof last.content === 'string' && (
+                    last.content.includes('background') ||
+                    last.content.includes('interrupted') ||
+                    last.content.startsWith('Error:')
+                ))
+            );
+
+            if (!useStore.getState().isRunning || isPendingBackground) {
+                agentResumeDoneRef.current = false;
+                void syncPendingQuestions(projectId);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [currentChatId]);
+
     const triggerProjectAgentResponse = async (
         userMessage: Message,
         projectId: string,
@@ -1748,6 +1826,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setCurrentThinking('');
         setThinkingDuration(0);
         const controller = new AbortController();
+        isRemoteAgentRunningRef.current = true;
         beginRun(controller);
 
         const chatId = chatIdOverride || currentChatId;
@@ -1909,7 +1988,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 }
-                case 'plan': {
+                case 'plan':
+                case 'plan_update':
+                case 'plan_step': {
                     syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
@@ -2070,19 +2151,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setQuestionError(null);
 
                     const state = useStore.getState();
-                    const lastMsg = state.messages[state.messages.length - 1] as any;
-                    if (lastMsg && lastMsg.role === 'assistant') {
-                        const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-                        for (const s of segs) {
-                            if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
-                                if (s.question) {
-                                    s.question = { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text };
+                    let anyUpdated = false;
+                    const updatedMessages = state.messages.map((m: any) => {
+                        if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                            let msgUpdated = false;
+                            const segs = m.segments.map((s: AssistantSegment) => {
+                                if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
+                                    msgUpdated = true;
+                                    anyUpdated = true;
+                                    return {
+                                        ...s,
+                                        question: s.question ? { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text } : s.question,
+                                        answered: true,
+                                        answer: event.question?.answer ?? event.text,
+                                    };
                                 }
-                                s.answered = true;
-                                s.answer = event.question?.answer ?? event.text;
+                                return s;
+                            });
+                            if (msgUpdated) {
+                                return { ...m, segments: segs };
                             }
                         }
-                        updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                        return m;
+                    });
+                    if (anyUpdated) {
+                        useStore.setState({ messages: updatedMessages });
                     }
                     break;
                 }
@@ -2090,6 +2183,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const deltaPiece = event.delta || event.tokenDelta || event.text || '';
                     if (deltaPiece) {
                         assistantContent += deltaPiece;
+                        const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                        if (pcl.hasPlanBlock && pcl.plan) {
+                            const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                            if (nextPlan) setGenerationPlan(nextPlan);
+                        }
                         const state = useStore.getState();
                         const lastMsg = state.messages[state.messages.length - 1] as any;
                         const segs: AssistantSegment[] = Array.isArray(lastMsg?.segments) ? [...lastMsg.segments] : [];
@@ -2110,8 +2208,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 case 'done': {
-                    const doneText = event.text || event.content || '';
-                    if (!assistantContent && doneText) {
+                    const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                    if (doneText) {
                         assistantContent = doneText;
                     }
                     assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
@@ -2171,6 +2269,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId,
                 message: userMessage,
                 modelProfile: activeModelProfile,
+                planMode: 'auto',
+                agentMode: 'build',
                 thinkingLevel: effortLevel,
                 executionSpeed: effortLevel === 'low' ? 'ultra_fast' : effortLevel === 'extra_high' ? 'deep_reasoning' : 'balanced',
                 afterSession,
@@ -2200,9 +2300,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
                 return;
             }
             if (errorText) throw new Error(errorText);
@@ -2215,21 +2319,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } catch (error: any) {
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
             } else {
                 const msg = String(error?.message || '');
                 const looksTransient =
-                    /load failed|failed to fetch|network|fetch failed/i.test(msg);
+                    /load failed|failed to fetch|network|fetch failed|the project agent stopped/i.test(msg);
 
                 if (looksTransient) {
-                    // Do not leave a dead "Error: Load failed" — keep turso cursor and explain resume.
                     persistCursor();
-                    updateLastMessage(
-                        assistantContent ||
-                            'Connection interrupted. Reopen this chat to reload previous agent activity from the database.',
-                    );
+                    if (!assistantContent) {
+                        updateLastMessage(
+                            'Agent is executing in the background. Return here or refresh to resume live progress.',
+                        );
+                    }
                 } else {
                     console.error('[ProjectAgent] Error:', error);
                     updateLastMessage(`Error: ${msg || 'Failed to run the project agent.'}`);
@@ -2237,6 +2345,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             }
         } finally {
+            isRemoteAgentRunningRef.current = false;
             const wasAborted = controller.signal.aborted;
             endRun(controller);
             setCurrentThinking('');
@@ -3225,6 +3334,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const renderAssistantMarkdown = (raw: string) => {
         const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
+
+        const pcl = parsePlanFromConnectionStream(content);
+        if (pcl.hasPlanBlock && pcl.plan && pcl.plan.steps.length > 0) {
+            return (
+                <div className="space-y-3 w-full">
+                    <LivePlanCard
+                        plan={pcl.plan}
+                        isDark={isDark}
+                    />
+                    {pcl.cleanText ? (
+                        /```mermaid/.test(pcl.cleanText) ? (
+                            <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                    {pcl.cleanText}
+                                </ReactMarkdown>
+                            </div>
+                        ) : (
+                            <Markdown content={pcl.cleanText} className="an-markdown w-full max-w-none" />
+                        )
+                    ) : null}
+                </div>
+            );
+        }
+
         if (/```mermaid/.test(content)) {
             return (
                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
@@ -3304,14 +3437,39 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId={hostProjectIdForSlash || 'global'}
                 isDark={isDark}
                 modelChoices={availableModelChoices || []}
-                onSelectModel={(modelId) => {
+                onSelectModel={(modelId, modelObj) => {
                     const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
                     if (choice) {
                         setSelectedModel(choice.modelType);
                         setAiModel(choice.apiModel);
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return prev;
+                            return prev.map(c => ({
+                                ...c,
+                                active: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                                isAiTabActive: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                            }));
+                        });
                     } else {
                         setSelectedModel(modelId as any);
                         setAiModel(modelId);
+                        // Optimistically insert into availableModelChoices so the model selector and dropdowns display it instantly
+                        const newChoice: ModelChoice = {
+                            id: modelId,
+                            label: modelObj?.name || modelId,
+                            subtitle: modelObj?.provider_display || modelObj?.provider || 'Omni',
+                            modelType: modelId as any,
+                            apiModel: modelId,
+                            icon: getProviderIconUrl(modelId, isDark) || '/model-logos/gemini.svg',
+                            iconAlt: modelObj?.name || modelId,
+                            active: true,
+                            isAiTabActive: true,
+                        };
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return [newChoice];
+                            const filtered = prev.filter(c => c.modelType !== modelId && c.apiModel !== modelId);
+                            return [newChoice, ...filtered];
+                        });
                     }
                     void loadAvailableModels();
                 }}
@@ -3430,8 +3588,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             }
                         }
 
-                        const questionSeg = group.role === 'assistant' && group.segments?.find(s => s.type === 'question' && s.question);
-                        const question = questionSeg ? questionSeg.question : undefined;
+                        const questionSegments = group.role === 'assistant' && Array.isArray(group.segments)
+                            ? group.segments.filter(s => s.type === 'question' && s.question)
+                            : [];
 
                         return (
                             <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -3502,16 +3661,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <div className="flex items-start gap-3 w-full">
                                         <AstroAvatar className="mt-0.5 shrink-0" />
                                         <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
-                                            {/* Interactive question if present */}
-                                            {question && (
-                                                <div className="my-2">
-                                                    <AgentQuestionCard
-                                                        question={question}
-                                                        isDark={isDark}
-                                                        submitting={questionSubmitting}
-                                                        error={questionError}
-                                                        onSubmit={handleAgentQuestionSubmit}
-                                                    />
+                                            {/* Questions / Answered Questions */}
+                                            {questionSegments.length > 0 && (
+                                                <div className="my-2 space-y-2">
+                                                    {questionSegments.map((qSeg, qIdx) => {
+                                                        const q = qSeg.question!;
+                                                        const isAnswered = q.status === 'answered' || qSeg.answered || (q.answer !== undefined && q.answer !== null);
+                                                        if (isAnswered) {
+                                                            return (
+                                                                <AnsweredQuestionBox
+                                                                    key={q.id || `q-${qIdx}`}
+                                                                    prompt={q.prompt}
+                                                                    answer={(q.answer ?? qSeg.answer ?? '') as any}
+                                                                    isDark={isDark}
+                                                                    questionId={q.id}
+                                                                />
+                                                            );
+                                                        }
+                                                        return (
+                                                            <AgentQuestionCard
+                                                                key={q.id || `q-${qIdx}`}
+                                                                question={q}
+                                                                isDark={isDark}
+                                                                submitting={questionSubmitting}
+                                                                error={questionError}
+                                                                onSubmit={handleAgentQuestionSubmit}
+                                                            />
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
 
@@ -3736,7 +3913,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#151515] border-white/[0.08] focus-within:border-white/20 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#18181b] border-zinc-800/80 focus-within:border-zinc-700 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -3867,24 +4044,43 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     effort={effortLevel}
                                     onEffortChange={handleEffortChange}
                                     selectedModel={selectedModel}
-                                    modelChoices={(availableModelChoices || []).map(c => ({
-                                        id: c.modelType,
-                                        label: c.label || c.apiModel,
-                                        apiModel: c.apiModel,
-                                        subtitle: c.subtitle,
-                                        iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
-                                        active: c.active,
-                                        isAiTabActive: c.isAiTabActive,
-                                    }))}
+                                    modelChoices={(availableModelChoices || []).map(c => {
+                                        const isSelected = c.modelType === selectedModel || c.apiModel === selectedModel;
+                                        return {
+                                            id: c.modelType,
+                                            label: c.label || c.apiModel,
+                                            apiModel: c.apiModel,
+                                            subtitle: c.subtitle,
+                                            iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                            active: isSelected || c.active,
+                                            isAiTabActive: isSelected || c.isAiTabActive,
+                                        };
+                                    })}
                                     onModelSelect={(modelId) => {
                                         const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
-                                        if (choice) {
-                                            setSelectedModel(choice.modelType);
-                                            setAiModel(choice.apiModel);
-                                        } else {
-                                            setSelectedModel(modelId as any);
-                                            setAiModel(modelId);
-                                        }
+                                        const targetModelType = choice ? choice.modelType : (modelId as any);
+                                        const targetApiModel = choice ? choice.apiModel : modelId;
+                                        setSelectedModel(targetModelType);
+                                        setAiModel(targetApiModel);
+
+                                        setAvailableModelChoices(prev => {
+                                            if (!prev) return prev;
+                                            return prev.map(c => ({
+                                                ...c,
+                                                active: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                                isAiTabActive: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                            }));
+                                        });
+
+                                        const pId = getHostProjectId();
+                                        void fetch('/api/ai/omni', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                model_id: targetApiModel,
+                                                project_id: pId || 'global',
+                                            }),
+                                        }).catch(() => {});
                                     }}
                                     onAddModelsClick={() => {
                                         setShowOmniModal(true);
@@ -3930,6 +4126,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 </div>
                             </div>
                         </div>
+
+                        {/* Live Plan Card pinned under input (blow) - exact UI & matching background color */}
+                        {generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
+                            <LivePlanCard
+                                title={generationPlan.title || 'plan'}
+                                steps={generationPlan.steps.map((s) => ({
+                                    id: s.id,
+                                    title: s.title,
+                                    description: s.description,
+                                    status: s.status,
+                                    notes: (s as any).notes,
+                                }))}
+                                status={
+                                    generationPlan.steps.some((s) => s.status === 'failed')
+                                        ? 'failed'
+                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
+                                        ? 'completed'
+                                        : 'active'
+                                }
+                                isDark={isDark}
+                                startTime={generationPlan.createdAt}
+                                className="mt-1"
+                            />
+                        )}
                     </form>
                 </div>
             </div>

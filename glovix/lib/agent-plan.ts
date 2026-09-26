@@ -4,9 +4,50 @@ import {
   type GenerationPlan,
   type PlanStepStatus,
 } from './generation-plan'
+import {
+  parsePlanFromConnectionStream,
+  normalizeStepStatus as pclNormalizeStatus,
+  type PlanStepStatus as PclStepStatus,
+} from './plan-connection-language'
 
-/** Normalize Syte update_plan / agent_plans payloads into the PlanChecklist model. */
+/** Normalize Syte update_plan / agent_plans / Connection Language payloads into the PlanChecklist model. */
 export function planFromAgentUpdate(args: unknown, existing?: GenerationPlan | null): GenerationPlan | null {
+  if (typeof args === 'string') {
+    const streamParsed = parsePlanFromConnectionStream(args, existing ? {
+      id: existing.id,
+      title: existing.title,
+      steps: existing.steps.map((s) => ({
+        id: s.id,
+        title: s.title,
+        description: s.description,
+        status: s.status as PclStepStatus,
+      })),
+      status: 'active',
+      createdAt: existing.createdAt,
+      updatedAt: existing.updatedAt,
+    } : null)
+
+    if (streamParsed.plan && streamParsed.plan.steps.length > 0) {
+      return {
+        id: streamParsed.plan.id,
+        title: streamParsed.plan.title,
+        appType: existing?.appType || 'website',
+        pages: existing?.pages || [{ route: '/', name: 'Home' }],
+        shadcnComponents: existing?.shadcnComponents || [],
+        steps: streamParsed.plan.steps.map((s) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description || '',
+          strict: false,
+          status: s.status as PlanStepStatus,
+        })),
+        notes: streamParsed.plan.notes || existing?.notes,
+        createdAt: streamParsed.plan.createdAt,
+        updatedAt: streamParsed.plan.updatedAt,
+      }
+    }
+  }
+
   const parsed = parseLooseObject(args)
   if (!parsed) return existing || null
 
@@ -45,7 +86,7 @@ export function planFromAgentUpdate(args: unknown, existing?: GenerationPlan | n
   })
 
   const base = buildGenerationPlan({
-    title: String(parsed.title || parsed.name || existing?.title || 'Plan'),
+    title: String(parsed.title || parsed.name || existing?.title || 'plan'),
     appType: String(parsed.appType || existing?.appType || 'website'),
     pages: existing?.pages,
     notes: typeof parsed.note === 'string' ? parsed.note : typeof parsed.notes === 'string' ? parsed.notes : existing?.notes,
@@ -63,11 +104,7 @@ export function planFromAgentUpdate(args: unknown, existing?: GenerationPlan | n
 }
 
 function normalizeStepStatus(value: unknown): PlanStepStatus {
-  const status = String(value || '').toLowerCase()
-  if (status === 'completed' || status === 'done' || status === 'complete') return 'completed'
-  if (status === 'in_progress' || status === 'running' || status === 'active') return 'in_progress'
-  if (status === 'skipped' || status === 'skip') return 'skipped'
-  return 'pending'
+  return pclNormalizeStatus(value) as PlanStepStatus
 }
 
 function parseLooseObject(args: unknown): Record<string, any> | null {
