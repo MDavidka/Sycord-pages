@@ -53,6 +53,8 @@ import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
 import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
+import { LivePlanCard } from '@/components/agents/live-plan-card';
+import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -1447,7 +1449,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 }
                                 break;
                             }
-                            case 'plan': {
+                            case 'plan':
+                            case 'plan_update':
+                            case 'plan_step': {
                                 syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
@@ -1596,10 +1600,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 setQuestionError(null);
                                 break;
                             }
-                            case 'delta':
+                            case 'delta': {
                                 assistantContent += event.text || '';
+                                const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                                if (pcl.hasPlanBlock && pcl.plan) {
+                                    const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                                    if (nextPlan) setGenerationPlan(nextPlan);
+                                }
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
+                            }
                             case 'message':
                                 if (!assistantContent) {
                                     assistantContent = event.text || '';
@@ -1954,7 +1964,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 }
-                case 'plan': {
+                case 'plan':
+                case 'plan_update':
+                case 'plan_step': {
                     syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
@@ -2135,6 +2147,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const deltaPiece = event.delta || event.tokenDelta || event.text || '';
                     if (deltaPiece) {
                         assistantContent += deltaPiece;
+                        const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                        if (pcl.hasPlanBlock && pcl.plan) {
+                            const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                            if (nextPlan) setGenerationPlan(nextPlan);
+                        }
                         const state = useStore.getState();
                         const lastMsg = state.messages[state.messages.length - 1] as any;
                         const segs: AssistantSegment[] = Array.isArray(lastMsg?.segments) ? [...lastMsg.segments] : [];
@@ -3279,6 +3296,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const renderAssistantMarkdown = (raw: string) => {
         const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
+
+        const pcl = parsePlanFromConnectionStream(content);
+        if (pcl.hasPlanBlock && pcl.plan && pcl.plan.steps.length > 0) {
+            return (
+                <div className="space-y-3 w-full">
+                    <LivePlanCard
+                        plan={pcl.plan}
+                        isDark={isDark}
+                    />
+                    {pcl.cleanText ? (
+                        /```mermaid/.test(pcl.cleanText) ? (
+                            <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                    {pcl.cleanText}
+                                </ReactMarkdown>
+                            </div>
+                        ) : (
+                            <Markdown content={pcl.cleanText} className="an-markdown w-full max-w-none" />
+                        )
+                    ) : null}
+                </div>
+            );
+        }
+
         if (/```mermaid/.test(content)) {
             return (
                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
@@ -3810,6 +3851,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     </button>
                                 </div>
                             </div>
+                        )}
+
+                        {/* Live Plan Card pinned above composer (exact UI from screenshot) */}
+                        {generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
+                            <LivePlanCard
+                                title={generationPlan.title || 'plan'}
+                                steps={generationPlan.steps.map((s) => ({
+                                    id: s.id,
+                                    title: s.title,
+                                    description: s.description,
+                                    status: s.status,
+                                    notes: (s as any).notes,
+                                }))}
+                                status={
+                                    generationPlan.steps.some((s) => s.status === 'failed')
+                                        ? 'failed'
+                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
+                                        ? 'completed'
+                                        : 'active'
+                                }
+                                isDark={isDark}
+                                startTime={generationPlan.createdAt}
+                                className="mb-2.5"
+                            />
                         )}
 
                         {/* Composer — full size by default; minimized when AI asks a question */}
