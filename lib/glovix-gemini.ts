@@ -455,6 +455,9 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`))
       const done = () => controller.enqueue(encoder.encode("data: [DONE]\n\n"))
 
+      // Commit response headers immediately to prevent buffering and timeouts
+      controller.enqueue(encoder.encode(": gemini-stream-ready\n\n"))
+
       try {
         let client = getAiClient()
         const { systemInstruction, contents } = convertMessages(req.messages)

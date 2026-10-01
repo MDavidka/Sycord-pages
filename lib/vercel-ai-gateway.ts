@@ -231,6 +231,14 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
         controller.close()
       }
 
+      // Commit response headers immediately to prevent buffering and timeouts
+      enqueue(encoder.encode(": vercel-gateway-stream-ready\n\n"))
+      const keepaliveTimer = setInterval(() => {
+        if (!closed) {
+          enqueue(encoder.encode(": ping\n\n"))
+        }
+      }, 15000)
+
       try {
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
@@ -319,6 +327,8 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
           )
           done()
         }
+      } finally {
+        clearInterval(keepaliveTimer)
       }
     },
   })

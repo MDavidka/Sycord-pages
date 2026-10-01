@@ -1147,6 +1147,15 @@ export async function pollTursoAgentSession(options: {
 
             status = doc.status || status;
             if (status && status !== 'open') {
+                // If the SSE stream is still streaming in-flight token deltas, give it a brief
+                // window to finish before tearing down the reader and declaring terminal state.
+                if (!terminal) {
+                    await Promise.race([
+                        streamPromise,
+                        sleep(1200, options.signal),
+                    ]).catch(() => null);
+                }
+
                 let latestError = '';
                 let latestReply = '';
                 for (const ev of (doc.events || []).slice().reverse()) {

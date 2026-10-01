@@ -348,6 +348,135 @@ function sanitizeMessages(messages: Message[]): Message[] {
     });
 }
 
+/**
+ * Extracts tool calls from model text output when native function calling deltas
+ * are omitted or formatted into markdown/XML by external providers.
+ */
+export function extractTextToolCalls(text: string): ToolCall[] {
+    if (!text || typeof text !== 'string') return [];
+    const calls: ToolCall[] = [];
+
+    const normalizeName = (rawName: string): string => {
+        const n = (rawName || '').trim();
+        const clean = n.replace(/^syte_/, '');
+        if (clean === 'write_file' || clean === 'writeFile') return 'createFile';
+        if (clean === 'create_file') return 'createFile';
+        if (clean === 'edit_file') return 'editFile';
+        if (clean === 'read_file') return 'readFile';
+        if (clean === 'run_command' || clean === 'execute_command' || clean === 'bash') return 'runCommand';
+        if (clean === 'create_plan' || clean === 'update_plan_step' || clean === 'plan') return 'planning';
+        return clean || n;
+    };
+
+    let idx = 1;
+
+    // 1. XML tags: <tool_call> ... </tool_call> or <function_call> ... </function_call>
+    const xmlRegex = /<(?:tool_call|function_call)>\s*([\s\S]*?)\s*<\/(?:tool_call|function_call)>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = xmlRegex.exec(text)) !== null) {
+        try {
+            const rawBody = match[1].trim();
+            const data = JSON.parse(rawBody);
+            const name = normalizeName(data.name || data.tool || data.function || '');
+            const args = data.arguments ?? data.parameters ?? data.args ?? {};
+            if (name) {
+                calls.push({
+                    id: `call_text_xml_${idx++}`,
+                    type: 'function',
+                    function: {
+                        name,
+                        arguments: typeof args === 'string' ? args : JSON.stringify(args),
+                    },
+                });
+            }
+        } catch { /* ignore invalid json */ }
+    }
+
+    if (calls.length > 0) return calls;
+
+    // 2. Special tokens: <|tool_call_begin|> ... <|tool_call_end|>
+    const specialTokenRegex = /<\|tool_call_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/gi;
+    while ((match = specialTokenRegex.exec(text)) !== null) {
+        try {
+            const data = JSON.parse(match[1].trim());
+            const name = normalizeName(data.name || data.tool || '');
+            const args = data.arguments ?? data.parameters ?? {};
+            if (name) {
+                calls.push({
+                    id: `call_token_${idx++}`,
+                    type: 'function',
+                    function: {
+                        name,
+                        arguments: typeof args === 'string' ? args : JSON.stringify(args),
+                    },
+                });
+            }
+        } catch { /* ignore */ }
+    }
+
+    if (calls.length > 0) return calls;
+
+    // 3. Claude/Anthropic style: <invoke name="..."> <parameter name="...">...</parameter> </invoke>
+    const invokeRegex = /<invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/invoke>/gi;
+    while ((match = invokeRegex.exec(text)) !== null) {
+        const name = normalizeName(match[1]);
+        const body = match[2];
+        const paramRegex = /<parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/parameter>/gi;
+        let paramMatch: RegExpExecArray | null;
+        const argsObj: Record<string, any> = {};
+        while ((paramMatch = paramRegex.exec(body)) !== null) {
+            argsObj[paramMatch[1]] = paramMatch[2].trim();
+        }
+        if (name) {
+            calls.push({
+                id: `call_invoke_${idx++}`,
+                type: 'function',
+                function: {
+                    name,
+                    arguments: JSON.stringify(argsObj),
+                },
+            });
+        }
+    }
+
+    if (calls.length > 0) return calls;
+
+    // 4. Markdown code blocks: ```json or ```tool_call with {"name": "...", "arguments": ...}
+    const blockRegex = /```(?:json|tool_call)?\s*(\{\s*["'](?:name|tool)["'][\s\S]*?\})\s*```/gi;
+    while ((match = blockRegex.exec(text)) !== null) {
+        try {
+            const data = JSON.parse(match[1].trim());
+            const name = normalizeName(data.name || data.tool || '');
+            const args = data.arguments ?? data.parameters ?? data.args ?? {};
+            if (name) {
+                calls.push({
+                    id: `call_block_${idx++}`,
+                    type: 'function',
+                    function: {
+                        name,
+                        arguments: typeof args === 'string' ? args : JSON.stringify(args),
+                    },
+                });
+            }
+        } catch { /* ignore */ }
+    }
+
+    return calls;
+}
+
+/**
+ * Strips raw tool call tags from assistant reply text for clean display in chat UI.
+ */
+export function stripToolCallMarkup(text: string): string {
+    if (!text || typeof text !== 'string') return '';
+    return text
+        .replace(/<\|tool_calls_section_begin\|>[\s\S]*?(?:<\|tool_calls_section_end\|>|$)/gi, '')
+        .replace(/<\|tool_call_begin\|>[\s\S]*?(?:<\|tool_call_end\|>|$)/gi, '')
+        .replace(/<(?:tool_call|function_call)>[\s\S]*?<\/(?:tool_call|function_call)>/gi, '')
+        .replace(/<invoke\s+name=[^>]*>[\s\S]*?<\/invoke>/gi, '')
+        .replace(/```(?:json|tool_call)?\s*\{\s*["'](?:name|tool)["'][\s\S]*?\}\s*```/gi, '')
+        .trim();
+}
 
 // ============================================================
 // MAIN SEND MESSAGE FUNCTION
@@ -571,33 +700,147 @@ async function _sendMessageInternal(
     }
 
     // ============================================================
-    // STREAM PROCESSING — inline for simplicity and reliability
+    // ROBUST SSE STREAM PROCESSOR — remade from scratch
     // ============================================================
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    let currentToolCalls: Record<number, ToolCall> = {};
+    const currentToolCalls: Record<number, ToolCall> = {};
     let buffer = '';
     let thinkingContent = '';
+    let accumulatedContent = '';
     let totalOutputChars = 0;
     let usage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     let lastDataTime = Date.now();
     let toolCallsSent = false;
 
-    // Stall detection timer
+    // 180s stall timeout — handles long reasoning / thinking models (deepseek-r1, gemini thinking)
+    const EFFECTIVE_STREAM_TIMEOUT_MS = 180000;
     const stallChecker = setInterval(() => {
-        if (Date.now() - lastDataTime > STREAM_TIMEOUT_MS) {
-            console.warn(`[AI] Stream stalled for ${STREAM_TIMEOUT_MS / 1000}s, aborting...`);
+        if (Date.now() - lastDataTime > EFFECTIVE_STREAM_TIMEOUT_MS) {
+            console.warn(`[AI] Stream stalled for ${EFFECTIVE_STREAM_TIMEOUT_MS / 1000}s, aborting...`);
             clearInterval(stallChecker);
             clearRunState();
             controller.abort();
         }
     }, 5000);
 
+    const processSseBlock = (block: string) => {
+        const lines = block.split(/\r?\n/);
+        let dataPayload = '';
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(':')) {
+                // Heartbeat / comment line — keeps stream alive
+                lastDataTime = Date.now();
+                continue;
+            }
+            if (trimmed.startsWith('data:')) {
+                // Strip "data:" and any single optional leading space per W3C SSE standard
+                const content = trimmed.slice(5).replace(/^\s/, '');
+                dataPayload += (dataPayload ? '\n' : '') + content;
+            }
+        }
+
+        if (!dataPayload || dataPayload === '[DONE]') {
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(dataPayload);
+            if (!parsed.choices || parsed.choices.length === 0) {
+                if (parsed.usage) {
+                    usage = {
+                        prompt_tokens: parsed.usage.prompt_tokens || 0,
+                        completion_tokens: parsed.usage.completion_tokens || 0,
+                        total_tokens: parsed.usage.total_tokens || 0,
+                    };
+                }
+                return;
+            }
+
+            const choice = parsed.choices[0];
+            const delta = choice.delta;
+            const finishReason = choice.finish_reason;
+
+            // 1. Thinking / reasoning delta
+            const thinkingDelta = delta?.thinking || delta?.reasoning_content || delta?.reasoning;
+            if (thinkingDelta) {
+                thinkingContent += thinkingDelta;
+                onChunk(null, null, thinkingContent);
+            }
+
+            // 2. Text content delta
+            if (delta?.content) {
+                accumulatedContent += delta.content;
+                totalOutputChars += delta.content.length;
+                onChunk(delta.content, null, null);
+            }
+
+            // 3. Usage tokens if provided
+            if (parsed.usage) {
+                usage = {
+                    prompt_tokens: parsed.usage.prompt_tokens || 0,
+                    completion_tokens: parsed.usage.completion_tokens || 0,
+                    total_tokens: parsed.usage.total_tokens || 0,
+                };
+            }
+
+            // 4. Tool calls streaming
+            if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+                for (const tc of delta.tool_calls) {
+                    const index = typeof tc.index === 'number' ? tc.index : Object.keys(currentToolCalls).length;
+                    if (!currentToolCalls[index]) {
+                        currentToolCalls[index] = {
+                            id: tc.id || `tool_${index}_${Date.now()}`,
+                            type: 'function',
+                            function: { name: tc.function?.name || '', arguments: '' },
+                        };
+                    }
+
+                    if (tc.id && !currentToolCalls[index].id) {
+                        currentToolCalls[index].id = tc.id;
+                    }
+
+                    if (tc.function?.name && !currentToolCalls[index].function.name) {
+                        currentToolCalls[index].function.name = tc.function.name;
+                    }
+
+                    if (tc.function?.arguments) {
+                        currentToolCalls[index].function.arguments += tc.function.arguments;
+                    }
+
+                    if (onToolCallStream) {
+                        onToolCallStream(
+                            currentToolCalls[index].function.name || '',
+                            currentToolCalls[index].function.arguments || '',
+                            currentToolCalls[index].id
+                        );
+                    }
+                }
+            }
+
+            // 5. Emit tool calls on finish
+            if (finishReason === 'tool_calls') {
+                const finalToolCalls = Object.values(currentToolCalls).filter(t => t.function.name);
+                if (finalToolCalls.length > 0) {
+                    console.log(`[AI] Emitting ${finalToolCalls.length} tool calls on finish_reason: tool_calls`);
+                    onChunk(null, finalToolCalls, null);
+                    toolCallsSent = true;
+                }
+            }
+        } catch (err) {
+            // Malformed chunk warning
+            if (dataPayload.length < 200) {
+                console.warn('[AI] SSE JSON parse warning:', dataPayload);
+            }
+        }
+    };
+
     try {
         while (true) {
-            let done: boolean;
+            let done = false;
             let value: Uint8Array | undefined;
             try {
                 ({ done, value } = await reader.read());
@@ -614,122 +857,55 @@ async function _sendMessageInternal(
 
             lastDataTime = Date.now();
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
 
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (!trimmed.startsWith('data: ')) continue;
+            // Standard SSE event boundary: double newline
+            let separator = /\r?\n\r?\n/.exec(buffer);
+            while (separator && separator.index >= 0) {
+                const block = buffer.slice(0, separator.index);
+                buffer = buffer.slice(separator.index + separator[0].length);
+                if (block.trim()) {
+                    processSseBlock(block);
+                }
+                separator = /\r?\n\r?\n/.exec(buffer);
+            }
+        }
 
-                const data = trimmed.slice(6);
-                try {
-                    const parsed = JSON.parse(data);
-                    if (!parsed.choices || parsed.choices.length === 0) continue;
+        // Process any trailing bytes if provider closed connection without trailing double-newline
+        if (buffer.trim()) {
+            processSseBlock(buffer);
+            buffer = '';
+        }
 
-                    const choice = parsed.choices[0];
-                    const delta = choice.delta;
-                    const finishReason = choice.finish_reason;
-
-                    // Handle thinking/reasoning
-                    const thinkingDelta = delta?.thinking || delta?.reasoning_content || delta?.reasoning;
-                    if (thinkingDelta) {
-                        thinkingContent += thinkingDelta;
-                        onChunk(null, null, thinkingContent);
-                    }
-
-                    // Handle content
-                    if (delta?.content) {
-                        totalOutputChars += delta.content.length;
-                        onChunk(delta.content, null, null);
-                    }
-
-                    // Capture usage
-                    if (parsed.usage) {
-                        usage = {
-                            prompt_tokens: parsed.usage.prompt_tokens || 0,
-                            completion_tokens: parsed.usage.completion_tokens || 0,
-                            total_tokens: parsed.usage.total_tokens || 0
-                        };
-                    }
-
-                    // Handle tool calls streaming
-                    if (delta?.tool_calls) {
-                        for (const tc of delta.tool_calls) {
-                            const index = tc.index ?? 0;
-                            if (!currentToolCalls[index]) {
-                                currentToolCalls[index] = {
-                                    id: tc.id || `tool_${index}_${Date.now()}`,
-                                    type: 'function',
-                                    function: { name: tc.function?.name || '', arguments: '' },
-                                };
-                            }
-
-                            if (tc.function?.name && !currentToolCalls[index].function.name) {
-                                currentToolCalls[index].function.name = tc.function.name;
-                            }
-
-                            if (tc.function?.arguments) {
-                                currentToolCalls[index].function.arguments += tc.function.arguments;
-                            }
-
-                            // Stream tool call progress to UI
-                            if (onToolCallStream) {
-                                onToolCallStream(
-                                    currentToolCalls[index].function.name || '',
-                                    currentToolCalls[index].function.arguments || '',
-                                    currentToolCalls[index].id
-                                );
-                            }
-                        }
-                    }
-
-                    // When stream finishes with tool_calls, send them
-                    if (finishReason === 'tool_calls') {
-                        const finalToolCalls = Object.values(currentToolCalls);
-                        if (finalToolCalls.length > 0) {
-                            console.log(`[AI] Sending ${finalToolCalls.length} tool calls`);
-                            onChunk(null, finalToolCalls);
-                            toolCallsSent = true;
-                            // Clear after sending
-                            currentToolCalls = {};
-                        }
-                    }
-
-                    if (finishReason) {
-                        console.log(`[AI] Stream finished: ${finishReason}`);
-                    }
-                } catch (e) {
-                    // JSON parse error on a chunk — skip it
-                    if (data.trim()) {
-                        console.warn('[AI] Parse error on chunk:', data.substring(0, 100));
-                    }
+        // Post-stream tool call flush:
+        if (!toolCallsSent) {
+            const accumulatedCalls = Object.values(currentToolCalls).filter(t => t.function.name);
+            if (accumulatedCalls.length > 0) {
+                console.log(`[AI] Emitting ${accumulatedCalls.length} tool calls (post-stream)`);
+                onChunk(null, accumulatedCalls, null);
+                toolCallsSent = true;
+            } else {
+                // Check if model generated tool calls as raw text
+                const textToolCalls = extractTextToolCalls(accumulatedContent);
+                if (textToolCalls.length > 0) {
+                    console.log(`[AI] Extracted and emitting ${textToolCalls.length} tool calls from text response`);
+                    onChunk(null, textToolCalls, null);
+                    toolCallsSent = true;
                 }
             }
         }
 
-        // After stream ends, send any remaining tool calls that weren't sent yet
-        if (!toolCallsSent) {
-            const remainingToolCalls = Object.values(currentToolCalls);
-            if (remainingToolCalls.length > 0) {
-                console.log(`[AI] Sending ${remainingToolCalls.length} remaining tool calls (post-stream)`);
-                onChunk(null, remainingToolCalls);
-            }
-        }
-
-        // Estimate usage if API didn't provide it
+        // Estimate token usage if not provided
         if (usage.total_tokens === 0) {
             const estimatedOutput = Math.ceil(totalOutputChars / 4);
             usage = {
                 prompt_tokens: inputTokens,
                 completion_tokens: estimatedOutput,
-                total_tokens: inputTokens + estimatedOutput
+                total_tokens: inputTokens + estimatedOutput,
             };
         }
 
         console.log(`[AI] Done. Usage: ${usage.prompt_tokens} in + ${usage.completion_tokens} out = ${usage.total_tokens} total`);
         return usage;
-
     } finally {
         clearInterval(stallChecker);
         try { reader.releaseLock(); } catch { /* ignore */ }

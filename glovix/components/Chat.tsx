@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } f
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, extractTextToolCalls, stripToolCallMarkup, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -2706,8 +2706,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
 
-                // Clean tool_call tags that some models output incorrectly
-                cleanContent = cleanContent.replace(/<tool_call>/g, '').trim();
+                // Clean tool_call markup using stripToolCallMarkup
+                cleanContent = stripToolCallMarkup(cleanContent);
+
+                // If no native tool calls were sent by the provider, extract any text-formatted tool calls
+                if (toolCalls.length === 0) {
+                    const textToolCalls = extractTextToolCalls(assistantMessageContent);
+                    if (textToolCalls.length > 0) {
+                        console.log(`[Chat] Extracted ${textToolCalls.length} tool call(s) from text response`);
+                        toolCalls = textToolCalls;
+                        // Ensure extracted tools are registered in UI actions
+                        toolCalls.forEach(tc => {
+                            if (!toolIdToActionId.has(tc.id)) {
+                                const displayName = getActionDisplayName(tc.function.name, tc.function.arguments || '');
+                                const id = addAction(tc.function.name, displayName);
+                                toolIdToActionId.set(tc.id, id);
+                                updateAction(id, { status: 'running' });
+                            }
+                        });
+                        updateLastMessage(cleanContent, toolCalls, thinkingContent || undefined, undefined);
+                    }
+                }
 
                 // If AI responded with tool_calls but no text on the first turn,
                 // add an auto-generated status message so the user sees something
@@ -2740,16 +2759,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     (assistantMessage as any).thinking = thinkingContent;
                 }
 
-                // Store thinking separately (not sent to API but shown in UI)
-                if (thinkingContent) {
-                    (assistantMessage as any).thinking = thinkingContent;
-                }
-
                 // Message is already in store via updateLastMessage, just add to context
                 currentMessages.push(assistantMessage);
 
                 if (toolCalls.length === 0) {
-                    // No tool calls - AI is done or just responded with text
+                    // Check if the AI expressed continuation intent or has unfinished plan steps before ending!
+                    const continuationMatch = /(?:i\s+am\s+continuing|i\'m\s+continuing|i\s+will\s+now|proceeding\s+(?:at|to|with)|continuing\s+(?:at|with|to)|let\s*(?:\'s|us|me)\s+now|next\s+(?:step|i\s+will|we\s+will)|moving\s+on\s+to|step\s+\d+:|in\s+the\s+next\s+turn|now\s+(?:implementing|creating|editing|running|proceeding))/i.test(cleanContent || '');
+                    const currentPlan = useStore.getState().generationPlan;
+                    const pendingSteps = currentPlan?.steps?.filter(s => s.status === 'in_progress' || s.status === 'pending') || [];
+                    const hasPendingSteps = pendingSteps.length > 0;
+
+                    if ((continuationMatch || hasPendingSteps) && turns < MAX_TURNS - 1) {
+                        const nextStepDesc = pendingSteps[0]?.title ? `'${pendingSteps[0].title}'` : 'the next planned task';
+                        console.log(`[Chat] Continuation intent (${continuationMatch}) or pending steps (${hasPendingSteps}) without tools on turn ${turns + 1}. Continuing loop for ${nextStepDesc}.`);
+                        currentMessages.push({
+                            role: 'user',
+                            content: `[Autonomous Execution Directive]: Incomplete plan steps remain for ${nextStepDesc}. Proceed immediately by invoking the required tool calls (createFile, editFile, runCommand, planning). Do not output text promises without tool calls.`,
+                        });
+                        continue;
+                    }
+
+                    // No tool calls and no continuation required — agent has finished
                     console.log('[Chat] AI response (no tool calls):', cleanContent?.slice(0, 200));
                     console.log('[Chat] Done - no tool calls received, ending loop');
                     break;

@@ -211,6 +211,14 @@ export function streamNimCompatible(req: GenerateNimRequest): Response {
         controller.close()
       }
 
+      // Commit response headers immediately to prevent buffering and timeouts
+      enqueue(encoder.encode(": nim-stream-ready\n\n"))
+      const keepaliveTimer = setInterval(() => {
+        if (!closed) {
+          enqueue(encoder.encode(": ping\n\n"))
+        }
+      }, 15000)
+
       try {
         if (!apiKey) {
           sendEvent(
@@ -339,6 +347,8 @@ export function streamNimCompatible(req: GenerateNimRequest): Response {
           })
         )
         done()
+      } finally {
+        clearInterval(keepaliveTimer)
       }
     },
   })
