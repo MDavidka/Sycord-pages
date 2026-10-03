@@ -754,9 +754,9 @@ function normalizeTursoEvent(
     }
 }
 
-function isMatchingRequestId(expected?: string, actual?: unknown): boolean {
+function isMatchingRequestId(expected?: string, actual?: unknown, requireExplicitMatch = false): boolean {
     if (!expected) return true;
-    if (!actual || typeof actual !== 'string') return true;
+    if (!actual || typeof actual !== 'string') return !requireExplicitMatch;
     if (actual === expected) return true;
     const cleanActual = actual.replace(/[-_]/g, '').toLowerCase();
     const cleanExpected = expected.replace(/[-_]/g, '').toLowerCase();
@@ -858,12 +858,21 @@ export async function streamAgentActivitySse(options: {
             options.onEventId?.(lastEventId);
         }
 
-        const eventRequestId = raw.payload?.request_id;
+        const eventRequestId = raw.payload?.request_id || (raw as any).request_id;
+        const rawType = (raw.event_type || (raw as any).event || '').trim();
+        const isTerminalType =
+            rawType === 'done' ||
+            rawType === 'request_completed' ||
+            rawType === 'error' ||
+            rawType === 'request_failed' ||
+            rawType === 'stopped' ||
+            rawType === 'session_stopped' ||
+            rawType === 'agent_stopped' ||
+            rawType === 'cancelled';
+
         if (
             options.requestId &&
-            typeof eventRequestId === 'string' &&
-            eventRequestId &&
-            !isMatchingRequestId(options.requestId, eventRequestId)
+            !isMatchingRequestId(options.requestId, eventRequestId, isTerminalType)
         ) {
             return;
         }
@@ -987,6 +996,7 @@ export async function pollTursoAgentSession(options: {
     let transientFailures = 0;
     let idlePolls = 0;
     let pollIntervalMs = POLL_INTERVAL_FAST_MS;
+    let sawEventForCurrentRequest = false;
     const startedAt = Date.now();
     const seenEventIds = new Set<number>();
 
@@ -1013,6 +1023,18 @@ export async function pollTursoAgentSession(options: {
                     sessionAuthoritative = true;
                 }
             }
+        }
+        if (
+            options.requestId &&
+            (normalized.type === 'delta' ||
+                normalized.type === 'thinking' ||
+                normalized.type === 'action_mark' ||
+                normalized.type === 'tool_started' ||
+                normalized.type === 'tool_finished' ||
+                normalized.type === 'plan' ||
+                normalized.type === 'message')
+        ) {
+            sawEventForCurrentRequest = true;
         }
         options.onEvent(normalized);
         if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
@@ -1044,7 +1066,12 @@ export async function pollTursoAgentSession(options: {
         requestId: options.requestId,
         tursoSessionId: options.tursoSessionId,
         signal: streamAbort.signal,
-        onEvent: emitNormalized,
+        onEvent: (event) => {
+            if (options.requestId && event.type !== 'processing') {
+                sawEventForCurrentRequest = true;
+            }
+            emitNormalized(event);
+        },
         onEventId: (id) => {
             sinceId = Math.max(sinceId, id);
             eventId = Math.max(eventId, id);
@@ -1111,12 +1138,21 @@ export async function pollTursoAgentSession(options: {
                     continue;
                 }
 
-                const eventRequestId = event.payload?.request_id;
+                const eventRequestId = event.payload?.request_id || (event as any).request_id;
+                const rawType = (event.event_type || (event as any).event || '').trim();
+                const isTerminalType =
+                    rawType === 'done' ||
+                    rawType === 'request_completed' ||
+                    rawType === 'error' ||
+                    rawType === 'request_failed' ||
+                    rawType === 'stopped' ||
+                    rawType === 'session_stopped' ||
+                    rawType === 'agent_stopped' ||
+                    rawType === 'cancelled';
+
                 if (
                     options.requestId &&
-                    typeof eventRequestId === 'string' &&
-                    eventRequestId &&
-                    !isMatchingRequestId(options.requestId, eventRequestId)
+                    !isMatchingRequestId(options.requestId, eventRequestId, isTerminalType)
                 ) {
                     if (id) sinceId = Math.max(sinceId, id);
                     continue;
@@ -1145,8 +1181,19 @@ export async function pollTursoAgentSession(options: {
 
             if (terminal) break;
 
-            status = doc.status || status;
-            if (status && status !== 'open') {
+            const docStatus = doc.status || '';
+            const elapsedMs = Date.now() - startedAt;
+            // Only treat doc.status !== 'open' as terminal if:
+            // 1. We saw activity for this request, OR
+            // 2. We have no requestId constraint, OR
+            // 3. We have polled for at least 15 seconds (giving the backend time to start the worker)
+            const isAuthoritativeTerminalStatus =
+                docStatus &&
+                docStatus !== 'open' &&
+                (!options.requestId || sawEventForCurrentRequest || elapsedMs > 15000);
+
+            if (isAuthoritativeTerminalStatus) {
+                status = docStatus;
                 // If the SSE stream is still streaming in-flight token deltas, give it a brief
                 // window to finish before tearing down the reader and declaring terminal state.
                 if (!terminal) {

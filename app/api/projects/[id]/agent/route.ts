@@ -8,7 +8,7 @@ import {
   syteAgentChange,
   syteAgentSessions,
 } from "@/lib/deploy/syte-client"
-import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { requireSyteWorkspaceUuid, ensureSyteWorkspaceForProject } from "@/lib/deploy/syte-workspace"
 import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
@@ -160,7 +160,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: "Project not found" }, { status: 404 })
   }
 
-  const workspace = await requireSyteWorkspaceUuid(project, projectId)
+  const workspace = await ensureSyteWorkspaceForProject(db, session.user.id, projectId, project)
   if ("error" in workspace) {
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }

@@ -232,15 +232,11 @@ export async function requireSyteWorkspaceUuid(
   project: any,
   projectId?: string,
 ): Promise<{ uuid: string } | { error: string; needsCreate: true }> {
-  // Trust a stored UUID directly — it was saved by our own code (syteProjectConnect).
-  // Do not call syteWorkspaceGet: workspaces created via the new /sycord/api/ live in
-  // a different namespace than the old /api/workspace_get, causing spurious 404s.
   const stored = getStoredSyteUuid(project)
   if (stored) {
     return { uuid: stored }
   }
 
-  // Try the canonical UUID via the legacy workspace_get as a fallback.
   if (projectId) {
     const canonical = resolveCanonicalSyteUuid(project, projectId)
     const existing = await syteWorkspaceGet(canonical)
@@ -252,4 +248,26 @@ export async function requireSyteWorkspaceUuid(
       "No Syte workspace UUID yet. Open Preview — the platform creates the workspace automatically.",
     needsCreate: true,
   }
+}
+
+/**
+ * Resolve or automatically create the Syte workspace for a project.
+ */
+export async function ensureSyteWorkspaceForProject(
+  db: { collection: (name: string) => any },
+  userId: string,
+  projectId: string,
+  project: any,
+): Promise<{ uuid: string } | { error: string }> {
+  const existing = await requireSyteWorkspaceUuid(project, projectId)
+  if (!("error" in existing)) {
+    return { uuid: existing.uuid }
+  }
+
+  const created = await createSyteWorkspaceForProject(db, userId, projectId, project)
+  if (created.ok && created.data?.uuid) {
+    return { uuid: created.data.uuid }
+  }
+
+  return { error: created.error || "Failed to initialize Syte workspace." }
 }
