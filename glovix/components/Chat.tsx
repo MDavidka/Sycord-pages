@@ -2351,6 +2351,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             setCurrentThinking('');
             setThinkingStartTime(null);
             setTimeout(() => replaceActions([], false), 500);
+            setGenerationPlan(null);
 
             if (!wasAborted && completed && onAiComplete) {
                 onAiComplete('remote');
@@ -3122,6 +3123,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const wasAborted = controller.signal.aborted;
             endRun(controller);
             setCurrentThinking('');
+            setGenerationPlan(null);
 
             // Notify parent that AI finished a complete response (not aborted)
             if (!wasAborted && onAiComplete) {
@@ -3296,6 +3298,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setInput('');
         setSelectedImages([]);
         setSelectedDocuments([]);
+        setPendingQuestion(null);
+        setQuestionError(null);
+        setQuestionSubmitting(false);
+        setGenerationPlan(null);
+        isUserExplicitStopRef.current = false;
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
         }
@@ -3939,6 +3946,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
+                        {/* Live Plan Card pinned ABOVE input card (matching Image 1 target design) */}
+                        {isRunning && generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
+                            <LivePlanCard
+                                title={generationPlan.title || 'plan'}
+                                steps={generationPlan.steps.map((s) => ({
+                                    id: s.id,
+                                    title: s.title,
+                                    description: s.description,
+                                    status: s.status,
+                                    notes: (s as any).notes,
+                                }))}
+                                status={
+                                    generationPlan.steps.some((s) => s.status === 'failed')
+                                        ? 'failed'
+                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
+                                        ? 'completed'
+                                        : 'active'
+                                }
+                                isDark={isDark}
+                                startTime={generationPlan.createdAt}
+                                className="mb-2"
+                            />
+                        )}
+
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
@@ -4167,29 +4198,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         </div>
 
-                        {/* Live Plan Card pinned under input (blow) - exact UI & matching background color */}
-                        {generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
-                            <LivePlanCard
-                                title={generationPlan.title || 'plan'}
-                                steps={generationPlan.steps.map((s) => ({
-                                    id: s.id,
-                                    title: s.title,
-                                    description: s.description,
-                                    status: s.status,
-                                    notes: (s as any).notes,
-                                }))}
-                                status={
-                                    generationPlan.steps.some((s) => s.status === 'failed')
-                                        ? 'failed'
-                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
-                                        ? 'completed'
-                                        : 'active'
-                                }
-                                isDark={isDark}
-                                startTime={generationPlan.createdAt}
-                                className="mt-1"
-                            />
-                        )}
                     </form>
                 </div>
             </div>

@@ -68,3 +68,36 @@ export async function upsertModelConfig(
     return false
   }
 }
+
+/**
+ * Strips provider prefixes and cleans raw IDs into human-readable model display names.
+ * Example:
+ * - "google/gemma-4-26b-a4b-it" -> "Gemma 4 26B"
+ * - "arcee-ai/trinity-large" -> "Trinity Large"
+ * - "anthropic/claude-3.5-sonnet" -> "Claude 3.5 Sonnet"
+ */
+export function cleanModelDisplayName(rawModelOrId: string): string {
+  if (!rawModelOrId) return ""
+  // If user already specified a human-friendly display name (without slash)
+  let name = rawModelOrId.includes("/")
+    ? rawModelOrId.split("/").slice(1).join("/")
+    : rawModelOrId
+
+  // Clean trailing -it, -instruct, -preview if present for cleaner display
+  // But preserve recognizable numbers like 3.5, 4, 26B, etc.
+  name = name
+    .replace(/-a\d+b-it$/i, "")
+    .replace(/-it$/i, "")
+    .replace(/-instruct$/i, "")
+    .replace(/-preview$/i, "")
+
+  // Format into capitalized words (e.g. gemma-4-26b -> Gemma 4 26B)
+  const parts = name.split(/[-_]+/).map((part) => {
+    // If it's a version or size like 26b, 70b, uppercase the b
+    if (/^\d+[bB]$/.test(part)) return part.toUpperCase()
+    // Capitalize first letter
+    return part.charAt(0).toUpperCase() + part.slice(1)
+  })
+
+  return parts.join(" ")
+}

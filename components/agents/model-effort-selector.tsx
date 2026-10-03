@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { cleanModelDisplayName } from "@/lib/models-config";
 
 export type EffortLevel = "low" | "medium" | "high" | "extra_high" | "max";
 
@@ -139,7 +140,8 @@ export function ModelEffortSelector({
   }, [isOpen]);
 
   // Model family display name
-  const modelFamilyName = activeModelObj.label.split(" ")[0] || "Ara";
+  const modelFamilyName =
+    cleanModelDisplayName(activeModelObj.label || activeModelObj.apiModel || "Ara").split(" ")[0] || "Ara";
 
   return (
     <div ref={containerRef} className={cn("relative inline-block", className)}>
@@ -211,8 +213,8 @@ export function ModelEffortSelector({
             : "bg-transparent text-zinc-700 hover:text-zinc-950 hover:bg-black/5"
         )}
       >
-        <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[125px] sm:max-w-[180px] whitespace-nowrap inline-block text-left">
-          {activeModelObj.label || activeModelObj.apiModel || "Ara"}
+        <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[120px] sm:max-w-[160px] md:max-w-[200px] whitespace-nowrap inline-block text-left">
+          {cleanModelDisplayName(activeModelObj.label || activeModelObj.apiModel || "Ara")}
         </span>
         <ChevronDown
           className={cn(
@@ -380,7 +382,7 @@ export function ModelEffortSelector({
                           )}
                         >
                           <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                            <span className="truncate">{model.label}</span>
+                            <span className="truncate">{cleanModelDisplayName(model.label || model.apiModel)}</span>
                             {(model.isAiTabActive || model.active) && (
                               <span className="shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                 AI Tab
