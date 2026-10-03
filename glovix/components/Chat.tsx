@@ -458,14 +458,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const matchingChoice = availableModelChoices.find(choice => choice.modelType === selectedModel || choice.apiModel === selectedModel);
+        const savedModel = typeof window !== 'undefined' ? localStorage.getItem('sycord_selected_model') : null;
+        const candidateModel = selectedModel || savedModel;
+        const matchingChoice = availableModelChoices.find(
+            choice => choice.modelType === candidateModel || choice.apiModel === candidateModel
+        );
         if (matchingChoice) {
-            if (matchingChoice.modelType !== selectedModel) setSelectedModel(matchingChoice.modelType);
+            if (matchingChoice.modelType !== selectedModel) {
+                setSelectedModel(matchingChoice.modelType);
+            }
             setAiModel(matchingChoice.apiModel);
-        } else if (!selectedModel) {
-            const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active) || availableModelChoices[0];
-            setSelectedModel(activeAiTabChoice.modelType);
-            setAiModel(activeAiTabChoice.apiModel);
+        } else {
+            const activeAiTabChoice =
+                availableModelChoices.find(c => c.isAiTabActive || c.active) || availableModelChoices[0];
+            if (activeAiTabChoice) {
+                setSelectedModel(activeAiTabChoice.modelType);
+                setAiModel(activeAiTabChoice.apiModel);
+            }
         }
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
@@ -1328,9 +1337,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     // When returning to a host project chat, resume any open Turso agent turn
-    // so previous activity is reloaded from the durable database.
+    // so previous activity is reloaded from the durable database and streaming continues.
     const agentResumeKeyRef = useRef<string | null>(null);
     const agentResumeDoneRef = useRef(false);
+    const [resumeTrigger, setResumeTrigger] = useState(0);
+
     useEffect(() => {
         const projectId = getHostProjectId();
         if (!projectId || !currentChatId) return;
@@ -1340,7 +1351,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             agentResumeKeyRef.current = resumeKey;
             agentResumeDoneRef.current = false;
         }
-        if (agentResumeDoneRef.current) return;
+        if (agentResumeDoneRef.current && resumeTrigger === 0) return;
 
         let cancelled = false;
         const controller = new AbortController();
@@ -1781,37 +1792,32 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             window.clearTimeout(timer);
             controller.abort();
         };
-        // Resume after messages hydrate for this chat. Do not depend on isRunning —
-        // toggling it would cancel an in-flight resume.
+        // Resume after messages hydrate for this chat or when returning to tab
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentChatId, messages.length]);
+    }, [currentChatId, messages.length, resumeTrigger]);
 
-    // Resume background agent when the user returns to this tab from another browser tab
+    // Automatically reconnect & continue streaming when returning to this tab or website
     useEffect(() => {
-        const handleVisibilityChange = () => {
+        const handleVisibilityOrFocus = () => {
             if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
             const projectId = getHostProjectId();
             if (!projectId || !currentChatId) return;
 
-            const msgs = useStore.getState().messages;
-            const last = msgs[msgs.length - 1];
-            const isPendingBackground = last?.role === 'assistant' && (
-                !last.content ||
-                (typeof last.content === 'string' && (
-                    last.content.includes('background') ||
-                    last.content.includes('interrupted') ||
-                    last.content.startsWith('Error:')
-                ))
-            );
-
-            if (!useStore.getState().isRunning || isPendingBackground) {
+            if (!abortControllerRef.current && !isRemoteAgentRunningRef.current) {
                 agentResumeDoneRef.current = false;
+                setResumeTrigger(c => c + 1);
                 void syncPendingQuestions(projectId);
             }
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.addEventListener('focus', handleVisibilityOrFocus);
+        window.addEventListener('online', handleVisibilityOrFocus);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.removeEventListener('focus', handleVisibilityOrFocus);
+            window.removeEventListener('online', handleVisibilityOrFocus);
+        };
     }, [currentChatId]);
 
     const triggerProjectAgentResponse = async (
@@ -3971,9 +3977,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         )}
 
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[24px] border px-2.5 transition-colors ${
+                        <div className={`rounded-[24px] border px-3 transition-all ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#18181b] border-zinc-800/80 focus-within:border-zinc-700 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#1b1c1e] border-[#2a2c30] focus-within:border-[#3a3c42] shadow-md shadow-black/20' : 'bg-white border-zinc-200 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4032,7 +4038,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.05]' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06]' : 'border-zinc-300 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -4133,6 +4139,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         const targetApiModel = choice ? choice.apiModel : modelId;
                                         setSelectedModel(targetModelType);
                                         setAiModel(targetApiModel);
+                                        try {
+                                            if (typeof window !== 'undefined') {
+                                                localStorage.setItem('sycord_selected_model', String(targetModelType));
+                                            }
+                                        } catch {}
 
                                         setAvailableModelChoices(prev => {
                                             if (!prev) return prev;
@@ -4166,7 +4177,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         aria-label="Voice input"
                                         aria-pressed={isListening}
                                         onClick={handleVoiceInput}
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-zinc-400 hover:text-white hover:bg-white/5' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
                                     >
                                         <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
@@ -4176,9 +4187,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
+                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-zinc-950 transition-all active:scale-95 hover:bg-zinc-200 shadow-sm"
                                         >
-                                            <div className="h-3 w-3 rounded-sm bg-black" />
+                                            <div className="h-3 w-3 rounded-sm bg-zinc-950" />
                                         </button>
                                     ) : (
                                         <button
@@ -4187,8 +4198,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             aria-label="Send"
                                             className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
                                                 !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-white text-black hover:bg-gray-200'
-                                                    : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'
+                                                    ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm'
+                                                    : isDark ? 'bg-white/10 text-white/30 border border-white/[0.05]' : 'bg-zinc-200 text-zinc-400'
                                             }`}
                                         >
                                             <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
