@@ -48,10 +48,14 @@ import {
   MoreHorizontal,
   Check,
   ChevronsUpDown,
+  Edit3,
+  Save,
+  CheckCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -100,7 +104,7 @@ import type {
   MonitoringAnomalyItem,
 } from "@/lib/moderator-types"
 
-type ModeratorTab = "general" | "users" | "providers" | "servers" | "tickets"
+type ModeratorTab = "general" | "users" | "models" | "providers" | "servers" | "tickets"
 
 export default function ModeratorPage() {
   const router = useRouter()
@@ -152,6 +156,27 @@ export default function ModeratorPage() {
     { value: "30d", label: "Last 30 Days" },
   ]
 
+  // Admin Models Library Management State
+  const [adminModels, setAdminModels] = useState<Array<{
+    id: string
+    originalName: string
+    displayName: string
+    provider: string
+    providerDisplay?: string
+    enabledInLibrary: boolean
+    contextWindow?: number
+    inputCost?: number
+    outputCost?: number
+    inputCostDisplay?: string
+    outputCostDisplay?: string
+    tags?: string[]
+  }>>([])
+  const [adminModelsLoading, setAdminModelsLoading] = useState(false)
+  const [modelSearch, setModelSearch] = useState("")
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  const [editDisplayName, setEditDisplayName] = useState("")
+  const [savingModelId, setSavingModelId] = useState<string | null>(null)
+
   // Servers monitoring state
   const [serverMonitoring, setServerMonitoring] = useState<{
     overview?: any
@@ -188,6 +213,7 @@ export default function ModeratorPage() {
   // Tab-specific data fetching
   useEffect(() => {
     if (activeTab === "users") fetchUsers()
+    if (activeTab === "models") fetchAdminModels()
     if (activeTab === "providers") fetchUsage()
     if (activeTab === "servers") fetchServerMonitoring()
     if (activeTab === "tickets") {
@@ -224,6 +250,92 @@ export default function ModeratorPage() {
       console.error("Error fetching overview:", e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAdminModels = async () => {
+    setAdminModelsLoading(true)
+    try {
+      const res = await fetch("/api/admin/models")
+      const data = await res.json()
+      if (data?.ok && Array.isArray(data.models)) {
+        setAdminModels(data.models)
+      } else {
+        toast.error(data?.error || "Failed to load models")
+      }
+    } catch (e: any) {
+      console.error("Error fetching admin models:", e)
+      toast.error("Failed to fetch admin models")
+    } finally {
+      setAdminModelsLoading(false)
+    }
+  }
+
+  const handleToggleModelInLibrary = async (modelId: string, currentEnabled: boolean) => {
+    const newEnabled = !currentEnabled
+    // Optimistic update
+    setAdminModels((prev) =>
+      prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: newEnabled } : m))
+    )
+    try {
+      const res = await fetch("/api/admin/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          enabledInLibrary: newEnabled,
+        }),
+      })
+      const data = await res.json()
+      if (data?.ok) {
+        toast.success(`${modelId} ${newEnabled ? "shown in" : "hidden from"} library`)
+      } else {
+        // Revert on error
+        setAdminModels((prev) =>
+          prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: currentEnabled } : m))
+        )
+        toast.error(data?.error || "Failed to update model visibility")
+      }
+    } catch (e: any) {
+      setAdminModels((prev) =>
+        prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: currentEnabled } : m))
+      )
+      toast.error("Network error updating model visibility")
+    }
+  }
+
+  const handleSaveModelDisplayName = async (modelId: string, newDisplayName: string) => {
+    const trimmed = newDisplayName.trim()
+    if (!trimmed) {
+      toast.error("Display name cannot be empty")
+      return
+    }
+
+    setSavingModelId(modelId)
+    try {
+      const res = await fetch("/api/admin/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          displayName: trimmed,
+        }),
+      })
+      const data = await res.json()
+      if (data?.ok) {
+        setAdminModels((prev) =>
+          prev.map((m) => (m.id === modelId ? { ...m, displayName: trimmed } : m))
+        )
+        setEditingModelId(null)
+        setEditDisplayName("")
+        toast.success(`Display name updated for ${modelId}`)
+      } else {
+        toast.error(data?.error || "Failed to update display name")
+      }
+    } catch (e: any) {
+      toast.error("Network error updating display name")
+    } finally {
+      setSavingModelId(null)
     }
   }
 
@@ -374,6 +486,7 @@ export default function ModeratorPage() {
   const navItems = [
     { id: "general" as ModeratorTab, label: "General", icon: LayoutDashboard },
     { id: "users" as ModeratorTab, label: "Users", icon: Users },
+    { id: "models" as ModeratorTab, label: "Models Library", icon: Sparkles },
     { id: "providers" as ModeratorTab, label: "Providers & Usage", icon: Cpu },
     { id: "servers" as ModeratorTab, label: "Servers", icon: Server },
     { id: "tickets" as ModeratorTab, label: "Tickets & Broadcasts", icon: LifeBuoy },
@@ -446,6 +559,7 @@ export default function ModeratorPage() {
               onClick={() => {
                 fetchOverview()
                 if (activeTab === "users") fetchUsers(userSearch)
+                if (activeTab === "models") fetchAdminModels()
                 if (activeTab === "providers") fetchUsage()
                 if (activeTab === "servers") fetchServerMonitoring()
                 if (activeTab === "tickets") {
@@ -897,6 +1011,272 @@ export default function ModeratorPage() {
                   </div>
                 ))
               )}
+            </Card>
+          </div>
+        )}
+
+        {/* =========================================================================
+            TAB: MODELS LIBRARY (CONTROLS VISIBILITY AND DISPLAY NAMES)
+           ========================================================================= */}
+        {activeTab === "models" && (
+          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                  <Sparkles className="w-6 h-6 text-indigo-400" />
+                  Model Library Configuration
+                </h1>
+                <p className="text-xs md:text-sm text-zinc-400 mt-0.5">
+                  Control which models show up in the model library selector and customize their display names.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchAdminModels}
+                  className="h-8 px-2.5 text-xs border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", adminModelsLoading && "animate-spin")} />
+                  <span>Reload Catalog</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4">
+                <div className="text-xs text-zinc-400 font-medium">Total Available Models</div>
+                <div className="text-xl font-bold text-white mt-1">{adminModels.length}</div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">Vercel AI Gateway catalog</div>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4">
+                <div className="text-xs text-zinc-400 font-medium">Active in Model Library</div>
+                <div className="text-xl font-bold text-emerald-400 mt-1">
+                  {adminModels.filter((m) => m.enabledInLibrary).length}
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">Visible to users</div>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4 col-span-2 sm:col-span-1">
+                <div className="text-xs text-zinc-400 font-medium">Hidden from Library</div>
+                <div className="text-xl font-bold text-zinc-400 mt-1">
+                  {adminModels.filter((m) => !m.enabledInLibrary).length}
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">Excluded from dropdowns</div>
+              </div>
+            </div>
+
+            {/* Search & Filter */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <Input
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  placeholder="Filter models by ID, display name, or provider..."
+                  className="pl-9 h-9 text-xs bg-[#161618] border-zinc-800 text-white placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-700"
+                />
+              </div>
+              {modelSearch && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setModelSearch("")}
+                  className="h-9 px-2 text-xs text-zinc-400 hover:text-white"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            {/* Models Table */}
+            <Card className="bg-[#161618] border-zinc-800 text-zinc-200 rounded-xl shadow-sm overflow-hidden">
+              <CardHeader className="p-4 border-b border-zinc-800/80 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold text-white">Models & Display Names</CardTitle>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Toggle visibility switch to show/hide from library. Edit display name to change how it appears.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[10px] text-zinc-400 border-zinc-800">
+                  {adminModels.length} models
+                </Badge>
+              </CardHeader>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#1f1f23] border-b border-zinc-800 text-zinc-400 font-medium">
+                    <tr>
+                      <th className="py-2.5 px-4 w-16">In Library</th>
+                      <th className="py-2.5 px-4">Display Name (Exact in Selector)</th>
+                      <th className="py-2.5 px-3">Gateway Model ID</th>
+                      <th className="py-2.5 px-3">Provider</th>
+                      <th className="py-2.5 px-3">Pricing (In/Out 1M)</th>
+                      <th className="py-2.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/80">
+                    {adminModelsLoading ? (
+                      <tr>
+                        <td colSpan={6} className="p-12 text-center text-zinc-400">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
+                          Loading models catalog...
+                        </td>
+                      </tr>
+                    ) : adminModels.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-12 text-center text-zinc-400">
+                          No models found. Check Vercel AI Gateway configuration.
+                        </td>
+                      </tr>
+                    ) : (
+                      adminModels
+                        .filter((m) => {
+                          if (!modelSearch.trim()) return true
+                          const query = modelSearch.toLowerCase()
+                          return (
+                            m.id.toLowerCase().includes(query) ||
+                            m.displayName.toLowerCase().includes(query) ||
+                            m.provider.toLowerCase().includes(query) ||
+                            (m.providerDisplay && m.providerDisplay.toLowerCase().includes(query))
+                          )
+                        })
+                        .map((m) => {
+                          const isEditing = editingModelId === m.id
+                          return (
+                            <tr
+                              key={m.id}
+                              className={cn(
+                                "hover:bg-[#1a1a1d] transition-colors",
+                                !m.enabledInLibrary && "opacity-60 bg-black/20"
+                              )}
+                            >
+                              {/* Switcher: Control which models show up at model library */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={m.enabledInLibrary}
+                                    onCheckedChange={() =>
+                                      handleToggleModelInLibrary(m.id, m.enabledInLibrary)
+                                    }
+                                    aria-label={`Toggle ${m.displayName} in library`}
+                                  />
+                                </div>
+                              </td>
+
+                              {/* Editable Display Name */}
+                              <td className="py-3 px-4">
+                                {isEditing ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={editDisplayName}
+                                      onChange={(e) => setEditDisplayName(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault()
+                                          handleSaveModelDisplayName(m.id, editDisplayName)
+                                        }
+                                        if (e.key === "Escape") {
+                                          setEditingModelId(null)
+                                        }
+                                      }}
+                                      autoFocus
+                                      className="h-7 text-xs bg-zinc-900 border-zinc-700 text-white w-48 sm:w-64"
+                                      placeholder="Custom display name..."
+                                    />
+                                    <Button
+                                      size="sm"
+                                      disabled={savingModelId === m.id}
+                                      onClick={() => handleSaveModelDisplayName(m.id, editDisplayName)}
+                                      className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
+                                    >
+                                      {savingModelId === m.id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3 h-3" />
+                                      )}
+                                      <span>Save</span>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingModelId(null)}
+                                      className="h-7 px-2 text-xs text-zinc-400 hover:text-white"
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 group">
+                                    <span className="font-semibold text-white text-xs">
+                                      {m.displayName}
+                                    </span>
+                                    {m.displayName !== m.originalName && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1 py-0 border-indigo-500/30 text-indigo-400 bg-indigo-500/10 font-mono"
+                                      >
+                                        Custom
+                                      </Badge>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingModelId(m.id)
+                                        setEditDisplayName(m.displayName)
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-white transition-opacity"
+                                      title="Edit display name"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Exact Model ID */}
+                              <td className="py-3 px-3">
+                                <span className="font-mono text-[11px] text-zinc-400">{m.id}</span>
+                              </td>
+
+                              {/* Provider */}
+                              <td className="py-3 px-3">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1.5 py-0 border-zinc-700 text-zinc-300 capitalize"
+                                >
+                                  {m.providerDisplay || m.provider}
+                                </Badge>
+                              </td>
+
+                              {/* Cost */}
+                              <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">
+                                {m.inputCostDisplay || "$0"} / {m.outputCostDisplay || "$0"}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3 px-4 text-right">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setEditingModelId(m.id)
+                                    setEditDisplayName(m.displayName)
+                                  }}
+                                  className="h-7 px-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 gap-1"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Rename</span>
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </div>
         )}

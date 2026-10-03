@@ -211,12 +211,12 @@ export function ModelEffortSelector({
             : "bg-transparent text-zinc-700 hover:text-zinc-950 hover:bg-black/5"
         )}
       >
-        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+        <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[125px] sm:max-w-[180px] whitespace-nowrap inline-block text-left">
           {activeModelObj.label || activeModelObj.apiModel || "Ara"}
         </span>
         <ChevronDown
           className={cn(
-            "size-3.5 text-zinc-400 transition-transform duration-150",
+            "size-3.5 text-zinc-400 shrink-0 transition-transform duration-150",
             isOpen && "rotate-180"
           )}
         />

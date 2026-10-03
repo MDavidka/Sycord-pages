@@ -3947,6 +3947,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 <textarea
                                     ref={textareaRef}
                                     value={input}
+                                    disabled={isRunning}
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         setInput(value);
@@ -3959,9 +3960,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                         target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                     }}
-                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[15.5px] sm:text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-zinc-100 placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                    style={{ height: 'auto', minHeight: '76px' }}
+                                    placeholder={
+                                        isRunning
+                                            ? "AI is working on your task..."
+                                            : "Help you write code, debug and ship production-ready work. Type / for skills & integrations."
+                                    }
+                                    className={`w-full bg-transparent text-[15.5px] sm:text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${
+                                        isRunning
+                                            ? 'cursor-not-allowed text-zinc-400 placeholder:text-zinc-500'
+                                            : isDark
+                                            ? 'text-zinc-100 placeholder:text-zinc-500'
+                                            : 'text-gray-900 placeholder:text-gray-400'
+                                    }`}
+                                    style={{ height: 'auto', minHeight: isRunning ? '44px' : '76px' }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape' && showSlashMenu) {
                                             e.preventDefault();
