@@ -2763,15 +2763,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 currentMessages.push(assistantMessage);
 
                 if (toolCalls.length === 0) {
-                    // Check if the AI expressed continuation intent or has unfinished plan steps before ending!
-                    const continuationMatch = /(?:i\s+am\s+continuing|i\'m\s+continuing|i\s+will\s+now|proceeding\s+(?:at|to|with)|continuing\s+(?:at|with|to)|let\s*(?:\'s|us|me)\s+now|next\s+(?:step|i\s+will|we\s+will)|moving\s+on\s+to|step\s+\d+:|in\s+the\s+next\s+turn|now\s+(?:implementing|creating|editing|running|proceeding))/i.test(cleanContent || '');
+                    const continuationMatch = /(?:i\s*['’]?\s*m\s+(?:starting|continuing|inspecting|reviewing|going|working|implementing|creating)|starting\s+(?:with|step|at|to)|i\s+will\s+(?:now|start|inspect|continue|create|build|edit|run)|proceeding|continuing|let\s*['’]?\s*(?:s|us|me)|next\s+(?:step|i\s+will|we\s+will)|moving\s+on\s+to|step\s*\d+|in\s+the\s+next\s+turn|now\s+(?:implementing|creating|editing|running|proceeding|inspecting))/i.test(cleanContent || '');
                     const currentPlan = useStore.getState().generationPlan;
                     const pendingSteps = currentPlan?.steps?.filter(s => s.status === 'in_progress' || s.status === 'pending') || [];
                     const hasPendingSteps = pendingSteps.length > 0;
 
-                    if ((continuationMatch || hasPendingSteps) && turns < MAX_TURNS - 1) {
+                    if ((continuationMatch || hasPendingSteps || turns === 0) && turns < MAX_TURNS - 1) {
                         const nextStepDesc = pendingSteps[0]?.title ? `'${pendingSteps[0].title}'` : 'the next planned task';
-                        console.log(`[Chat] Continuation intent (${continuationMatch}) or pending steps (${hasPendingSteps}) without tools on turn ${turns + 1}. Continuing loop for ${nextStepDesc}.`);
+                        console.log(`[Chat] Continuation intent (${continuationMatch}), pending steps (${hasPendingSteps}) or initial turn (${turns === 0}) without tools on turn ${turns + 1}. Continuing loop for ${nextStepDesc}.`);
                         currentMessages.push({
                             role: 'user',
                             content: `[Autonomous Execution Directive]: Incomplete plan steps remain for ${nextStepDesc}. Proceed immediately by invoking the required tool calls (createFile, editFile, runCommand, planning). Do not output text promises without tool calls.`,
