@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import GlovixBuilder from "@/components/glovix-builder"
-import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
+import AstroChat from "@/components/astro-chat"
 
 /**
  * Isolated Syra shell at /dashboard/sites/[id]/syra.
@@ -17,10 +16,6 @@ export default function SyraEmbedPage() {
   const { data: session } = useSession()
   const router = useRouter()
   const [projectName, setProjectName] = useState<string | null>(null)
-
-  useEffect(() => {
-    initErudaIfPresent()
-  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -43,8 +38,8 @@ export default function SyraEmbedPage() {
   }, [id, router])
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden bg-[#151515]">
-      <GlovixBuilder
+    <div className="h-[100dvh] w-full overflow-hidden bg-[#121214]">
+      <AstroChat
         projectId={id}
         projectName={projectName}
         userImage={session?.user?.image || undefined}

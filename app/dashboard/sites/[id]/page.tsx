@@ -2750,8 +2750,8 @@ export default function SiteSettingsPage() {
                     <iframe
                       key={id}
                       src={`/dashboard/sites/${id}/syra`}
-                      className="absolute inset-0 h-full w-full border-0 bg-[#181818]"
-                      title="Syra AI Builder"
+                      className="absolute inset-0 h-full w-full border-0 bg-[#18181b]"
+                      title="Astro AI Architect"
                       allow="cross-origin-isolated; clipboard-read; clipboard-write"
                     />
                   ) : (
