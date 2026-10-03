@@ -227,7 +227,7 @@ export function ModelEffortSelector({
         <div
           role="dialog"
           aria-label="Model and Effort configuration"
-          className="absolute bottom-full mb-2 left-0 z-50 flex flex-col sm:flex-row items-start gap-1.5 animate-in fade-in-0 zoom-in-95 duration-150"
+          className="absolute bottom-full mb-2 left-0 z-[100] flex flex-col sm:flex-row items-start gap-1.5 animate-in fade-in-0 zoom-in-95 duration-150 drop-shadow-2xl"
         >
           {/* Primary Popover Card (Fast [toggle], Effort [Extra High >], Model [Ara >]) */}
           <div
