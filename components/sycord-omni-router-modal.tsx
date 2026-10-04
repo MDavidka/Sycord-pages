@@ -13,6 +13,15 @@ import {
   Cpu,
   BarChart3,
   Coins,
+  Star,
+  FileText,
+  ImageIcon,
+  Video,
+  Mic,
+  Brain,
+  Layers,
+  ChevronRight,
+  Info,
 } from "lucide-react"
 
 // Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
@@ -36,6 +45,7 @@ export interface OmniModelItem {
   supports_cache?: boolean
   supports_video?: boolean
   supports_reasoning?: boolean
+  supports_audio?: boolean
   description?: string
   is_active?: boolean
   rank?: number
@@ -48,10 +58,11 @@ const LOBEHUB_CDN_BASE = "https://unpkg.com/@lobehub/icons-static-svg@latest/ico
 const LOBEHUB_MAP: Record<string, string> = {
   ace: "ace",
   ai21: "ai21",
+  anthropic: "claude",
+  claude: "claude",
   aya: "aya",
   baichuan: "baichuan",
   chatglm: "chatglm",
-  claude: "claude",
   codegeex: "codegeex",
   cogvideo: "cogvideo",
   cogview: "cogview",
@@ -67,9 +78,11 @@ const LOBEHUB_MAP: Record<string, string> = {
   "fish-audio": "fish-audio",
   flux: "flux",
   gemini: "gemini",
+  google: "gemini",
   gemma: "gemma",
   "glm-v": "glm-v",
   grok: "grok",
+  xai: "grok",
   hunyuan: "hunyuan",
   kimi: "kimi",
   kolors: "kolors",
@@ -90,6 +103,7 @@ const LOBEHUB_MAP: Record<string, string> = {
   phind: "phind",
   poolside: "poolside",
   qwen: "qwen",
+  alibaba: "qwen",
   reka: "reka",
   rwkv: "rwkv",
   sora: "sora",
@@ -197,8 +211,18 @@ export function ModelBrowserView({
   const [models, setModels] = useState<OmniModelItem[]>([])
   const [loading, setLoading] = useState(false)
   const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
+  const [starredModelIds, setStarredModelIds] = useState<Set<string>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("starred_model_ids")
+        if (saved) return new Set(JSON.parse(saved))
+      } catch {}
+    }
+    return new Set(["anthropic/claude-3.5-sonnet", "openai/gpt-4o", "google/gemini-2.5-flash"])
+  })
   const [activeTab, setActiveTab] = useState<string>("All")
   const [searchQuery, setSearchQuery] = useState("")
+  const [inspectingModel, setInspectingModel] = useState<OmniModelItem | null>(null)
 
   const loadModels = (forceRefresh = false) => {
     setLoading(true)
@@ -223,6 +247,27 @@ export function ModelBrowserView({
   useEffect(() => {
     loadModels()
   }, [projectId, selectedModel])
+
+  // Save starred models to localStorage
+  const toggleStarModel = (modelId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
+    setStarredModelIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(modelId)) {
+        next.delete(modelId)
+        toast.info("Model removed from favorites")
+      } else {
+        next.add(modelId)
+        toast.success("Model starred as favorite")
+      }
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("starred_model_ids", JSON.stringify(Array.from(next)))
+        } catch {}
+      }
+      return next
+    })
+  }
 
   // Benchmark top models for the bar chart
   const topSweModels = useMemo(() => {
@@ -276,6 +321,7 @@ export function ModelBrowserView({
   // Filter tabs
   const filterTabs = [
     "All",
+    "Starred",
     "Anthropic",
     "OpenAI",
     "Google",
@@ -287,7 +333,9 @@ export function ModelBrowserView({
   const filteredModels = useMemo(() => {
     let list = models
 
-    if (activeTab === "Anthropic") {
+    if (activeTab === "Starred") {
+      list = list.filter((m) => starredModelIds.has(m.id))
+    } else if (activeTab === "Anthropic") {
       list = list.filter((m) => (m.provider || "").toLowerCase().includes("anthropic") || m.id.toLowerCase().includes("claude"))
     } else if (activeTab === "OpenAI") {
       list = list.filter((m) => (m.provider || "").toLowerCase().includes("openai") || m.id.toLowerCase().includes("gpt") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3"))
@@ -316,18 +364,14 @@ export function ModelBrowserView({
         (m.description && m.description.toLowerCase().includes(q))
       )
     })
-  }, [models, activeTab, searchQuery])
+  }, [models, activeTab, searchQuery, starredModelIds])
 
-  const handleToggleModel = (model: OmniModelItem) => {
-    const isCurrentlyActive = activeModelId === model.id
-    const newId = isCurrentlyActive ? "" : model.id
-    setActiveModelId(newId)
-
-    if (!isCurrentlyActive) {
-      toast.success(`${model.name || model.id} activated`)
-      onSelectModel?.(model.id, model)
-    } else {
-      toast.info(`${model.name || model.id} deactivated`)
+  const handleSelectActiveModel = (model: OmniModelItem) => {
+    setActiveModelId(model.id)
+    toast.success(`${model.name || model.id} set as active model`)
+    onSelectModel?.(model.id, model)
+    if (!isStandalone && onClose) {
+      onClose()
     }
 
     void fetch("/api/ai/omni", {
@@ -337,12 +381,12 @@ export function ModelBrowserView({
         model_id: model.id,
         project_id: projectId,
         provider: model.provider,
-        action: isCurrentlyActive ? "deactivate" : "activate",
+        action: "activate",
       }),
     }).catch(() => {})
   }
 
-  // Format pricing string like "$0.50 in / $1.50 out"
+  // Format pricing string like "$0.50 / 1M in • $1.50 / 1M out"
   const formatPricing = (model: OmniModelItem) => {
     const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
     const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
@@ -360,8 +404,28 @@ export function ModelBrowserView({
     return "Foundation Model"
   }
 
+  // Modal modality indicator badges helper (OpenRouter-style Text, Image, Audio, Video)
+  const getModalities = (model: OmniModelItem) => {
+    const list: Array<{ label: string; icon: any; color: string }> = [
+      { label: "Text", icon: FileText, color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+    ]
+    if (model.supports_vision || model.supports_image || model.id.toLowerCase().includes("vision") || model.id.toLowerCase().includes("flux")) {
+      list.push({ label: "Image", icon: ImageIcon, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" })
+    }
+    if (model.supports_video || model.id.toLowerCase().includes("video") || model.id.toLowerCase().includes("sora")) {
+      list.push({ label: "Video", icon: Video, color: "text-purple-400 bg-purple-500/10 border-purple-500/20" })
+    }
+    if (model.supports_audio || model.id.toLowerCase().includes("audio") || model.id.toLowerCase().includes("speech")) {
+      list.push({ label: "Audio", icon: Mic, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" })
+    }
+    if (model.supports_reasoning || model.id.toLowerCase().includes("r1") || model.id.toLowerCase().includes("o1") || model.id.toLowerCase().includes("o3")) {
+      list.push({ label: "Reasoning", icon: Brain, color: "text-pink-400 bg-pink-500/10 border-pink-500/20" })
+    }
+    return list
+  }
+
   return (
-    <div className="w-full h-full flex flex-col bg-zinc-950 text-zinc-100 select-none overflow-y-auto">
+    <div className="w-full h-full flex flex-col bg-[#151515] text-zinc-100 select-none overflow-y-auto">
       {/* Top Navbar */}
       <header className="w-full max-w-4xl mx-auto px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
@@ -409,7 +473,7 @@ export function ModelBrowserView({
           </button>
         </div>
 
-        {/* Top Models SWE-Bench Relative Bar Chart (No % markers on top) */}
+        {/* Top Models SWE-Bench Relative Bar Chart */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
@@ -424,7 +488,7 @@ export function ModelBrowserView({
                 <button
                   type="button"
                   onClick={() => {
-                    if (item.model) handleToggleModel(item.model)
+                    if (item.model) setInspectingModel(item.model)
                   }}
                   style={{ height: `${item.heightPx}px` }}
                   className="w-full rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 active:scale-[0.98] transition-all flex flex-col items-center justify-center relative overflow-hidden shadow-xs cursor-pointer group"
@@ -484,24 +548,25 @@ export function ModelBrowserView({
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 flex items-center gap-1.5 ${
                     isSelected
                       ? "bg-white text-black font-semibold shadow-xs"
                       : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
                   }`}
                 >
-                  {tab}
+                  {tab === "Starred" && <Star className={`w-3.5 h-3.5 ${isSelected ? "fill-black" : "fill-amber-400 text-amber-400"}`} />}
+                  <span>{tab}</span>
                 </button>
               )
             })}
           </div>
         </div>
 
-        {/* Model Cards List (Removed background box from icons, added full color icons & explicit pricing) */}
+        {/* Model Cards List (Star Action replace toggle switch) */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-xs font-semibold text-zinc-300">Available AI Models</span>
-            <span className="text-[11px] text-zinc-500">Includes live pricing & capabilities</span>
+            <span className="text-[11px] text-zinc-500">Click card for OpenRouter specifications</span>
           </div>
 
           {loading && models.length === 0 ? (
@@ -517,29 +582,31 @@ export function ModelBrowserView({
           ) : (
             filteredModels.map((model) => {
               const isActive = activeModelId === model.id
+              const isStarred = starredModelIds.has(model.id)
               const subtitle = getModelSubtitle(model)
               const pricing = formatPricing(model)
 
               return (
                 <div
                   key={model.id}
-                  className={`w-full rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all border ${
+                  onClick={() => setInspectingModel(model)}
+                  className={`w-full rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all border cursor-pointer group ${
                     isActive
                       ? "bg-zinc-900/90 border-zinc-700 ring-1 ring-white/10"
                       : "bg-zinc-900/40 hover:bg-zinc-900/70 border-zinc-800/80"
                   }`}
                 >
-                  {/* Left: Direct LobeHub Color Icon (No background box) + Model Name + Subtitle */}
+                  {/* Left: Direct LobeHub Color Icon + Model Name + Provider Subtitle */}
                   <div className="flex items-center gap-3.5 min-w-0">
                     <div className="shrink-0 flex items-center justify-center">
                       <BrandLogo brand={model.provider || model.name} size={28} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white truncate flex items-center gap-2">
+                      <div className="text-sm font-semibold text-white truncate flex items-center gap-2 group-hover:text-amber-300 transition-colors">
                         <span>{model.name}</span>
-                        {model.supports_reasoning && (
-                          <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-md">
-                            Reasoning
+                        {isActive && (
+                          <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
+                            Active
                           </span>
                         )}
                       </div>
@@ -549,28 +616,24 @@ export function ModelBrowserView({
                     </div>
                   </div>
 
-                  {/* Middle: Clear Pricing info badge */}
+                  {/* Middle: Clear Pricing info badge (Input / Output per 1M tokens) */}
                   <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-300 font-mono bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl shrink-0">
                     <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>{pricing}</span>
                   </div>
 
-                  {/* Right: Rounded Pill Toggle Switch */}
+                  {/* Right: Star Action Icon (Favorite toggle) */}
                   <button
                     type="button"
-                    onClick={() => handleToggleModel(model)}
-                    role="switch"
-                    aria-checked={isActive}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      isActive ? "bg-white" : "bg-[#28282b]"
+                    onClick={(e) => toggleStarModel(model.id, e)}
+                    title={isStarred ? "Unstar model" : "Star model as favorite"}
+                    className={`p-2 rounded-xl border transition-all ${
+                      isStarred
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                        : "bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-amber-400 hover:border-amber-500/20"
                     }`}
                   >
-                    <span
-                      aria-hidden="true"
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-black shadow-md ring-0 transition duration-200 ease-in-out ${
-                        isActive ? "translate-x-5 !bg-black" : "translate-x-0 !bg-zinc-400"
-                      }`}
-                    />
+                    <Star className={`w-4 h-4 ${isStarred ? "fill-amber-400" : ""}`} />
                   </button>
                 </div>
               )
@@ -578,6 +641,113 @@ export function ModelBrowserView({
           )}
         </div>
       </main>
+
+      {/* OPENROUTER-STYLE MODEL DETAILS INSPECTOR MODAL */}
+      {inspectingModel && (
+        <Dialog open={!!inspectingModel} onOpenChange={() => setInspectingModel(null)}>
+          <DialogContent className="bg-[#151515] border border-zinc-800 text-zinc-100 max-w-lg rounded-2xl p-6 shadow-2xl space-y-5">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <BrandLogo brand={inspectingModel.provider || inspectingModel.name} size={32} />
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white truncate">{inspectingModel.name}</h3>
+                  <p className="text-xs text-zinc-400 font-mono truncate">{inspectingModel.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingModel(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              {inspectingModel.description || `${inspectingModel.name} foundation AI model hosted via Vercel AI Gateway.`}
+            </p>
+
+            {/* Modalities & Capabilities Badges */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Supported Modalities</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {getModalities(inspectingModel).map((mod) => {
+                  const Icon = mod.icon
+                  return (
+                    <span
+                      key={mod.label}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${mod.color}`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{mod.label}</span>
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* OpenRouter Specifications Grid */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
+                <span className="text-[11px] text-zinc-400 font-medium">Provider</span>
+                <p className="text-xs font-semibold text-white truncate">
+                  {inspectingModel.providerDisplay || inspectingModel.provider}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
+                <span className="text-[11px] text-zinc-400 font-medium">Context Window</span>
+                <p className="text-xs font-semibold text-white font-mono">
+                  {inspectingModel.context_window ? `${Math.round(inspectingModel.context_window / 1000)}k tokens` : "128k tokens"}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
+                <span className="text-[11px] text-zinc-400 font-medium">Input Pricing / 1M</span>
+                <p className="text-xs font-semibold text-emerald-400 font-mono">
+                  ${inspectingModel.input_cost !== undefined ? inspectingModel.input_cost.toFixed(2) : "0.50"}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
+                <span className="text-[11px] text-zinc-400 font-medium">Output Pricing / 1M</span>
+                <p className="text-xs font-semibold text-amber-400 font-mono">
+                  ${inspectingModel.output_cost !== undefined ? inspectingModel.output_cost.toFixed(2) : "1.50"}
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={(e) => toggleStarModel(inspectingModel.id, e)}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                  starredModelIds.has(inspectingModel.id)
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Star className={`w-3.5 h-3.5 ${starredModelIds.has(inspectingModel.id) ? "fill-amber-400" : ""}`} />
+                <span>{starredModelIds.has(inspectingModel.id) ? "Starred Favorite" : "Add to Favorites"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleSelectActiveModel(inspectingModel)
+                  setInspectingModel(null)
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 transition-all shadow-xs"
+              >
+                Set as Active Model
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
@@ -612,7 +782,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-zinc-950 text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#151515] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         <ModelBrowserView

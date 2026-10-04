@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { isAdminEmail } from "@/lib/is-admin"
 import { fetchVercelGatewayModels } from "@/lib/vercel-ai-gateway"
-import { getAllModelConfigs, upsertModelConfig } from "@/lib/models-config"
+import { getAllModelConfigs, upsertModelConfig, setBulkModelEnabled } from "@/lib/models-config"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -56,6 +56,26 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+
+    // Case 1: Bulk disable / enable all
+    if (typeof body.action === "string" && (body.action === "disable_all" || body.action === "enable_all")) {
+      const isEnable = body.action === "enable_all"
+      const gatewayModels = await fetchVercelGatewayModels()
+      const allIds = gatewayModels.map((m) => m.id)
+
+      const success = await setBulkModelEnabled(allIds, isEnable)
+      if (!success) {
+        return NextResponse.json({ ok: false, error: "Failed to bulk update model status" }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action: body.action,
+        count: allIds.length,
+      })
+    }
+
+    // Case 2: Single model update
     const { modelId, displayName, enabledInLibrary } = body
 
     if (!modelId) {

@@ -133,7 +133,7 @@ export function AdminModeratorModelSetup() {
 
   const handleToggleModelEnabled = async (modelId: string, currentEnabled: boolean) => {
     try {
-      const res = await fetch("/api/admin/ai/models", {
+      const res = await fetch("/api/admin/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -149,6 +149,24 @@ export function AdminModeratorModelSetup() {
       }
     } catch {
       toast.error("Failed to update model status")
+    }
+  }
+
+  const handleBulkAction = async (action: "disable_all" | "enable_all") => {
+    try {
+      const res = await fetch("/api/admin/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+      if (res.ok) {
+        toast.success(action === "disable_all" ? "Disabled all models" : "Enabled all models")
+        fetchModels()
+      } else {
+        toast.error("Bulk action failed")
+      }
+    } catch {
+      toast.error("Failed to perform bulk action")
     }
   }
 
@@ -176,15 +194,33 @@ export function AdminModeratorModelSetup() {
           </p>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={fetchModels}
-          className="h-9 text-xs border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white gap-2 rounded-xl shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh Active Catalog</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleBulkAction("disable_all")}
+            className="h-9 text-xs border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 gap-1.5 rounded-xl"
+          >
+            <span>Disable All</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleBulkAction("enable_all")}
+            className="h-9 text-xs border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 gap-1.5 rounded-xl"
+          >
+            <span>Enable All</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchModels}
+            className="h-9 text-xs border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white gap-2 rounded-xl"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
+        </div>
       </div>
 
       {/* Quick Add Model Form with Smart Guessing */}
