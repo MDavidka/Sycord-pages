@@ -4285,7 +4285,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-3 transition-all ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1e1e20] border-white/[0.08] focus-within:border-white/[0.18] shadow-lg shadow-black/25' : 'bg-white border-zinc-200 focus-within:border-zinc-300 shadow-sm'}`}>
+                        } ${isDark ? 'bg-[#181818] border-white/[0.08] focus-within:border-white/[0.18] shadow-lg shadow-black/25' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4344,7 +4344,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06]' : 'border-zinc-300 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] bg-[#181818] text-zinc-400 hover:text-white hover:bg-white/[0.06]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -4352,25 +4352,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,20rem)] p-3.5 rounded-3xl ${isDark ? "border-white/[0.1] bg-[#18181b] text-zinc-200 shadow-2xl shadow-black/80" : "bg-white border-zinc-200 text-zinc-800 shadow-xl"}`}
+                                        className={`w-[min(88vw,16.5rem)] p-2.5 rounded-2xl ${isDark ? "border-white/[0.08] bg-[#181818] text-zinc-200 shadow-2xl shadow-black/80" : "bg-zinc-100 border-zinc-200/80 text-zinc-800 shadow-xl"}`}
                                     >
                                         {/* Credit Segment */}
                                         <div
-                                            className={`p-3 rounded-2xl cursor-pointer transition-colors ${
-                                                isDark ? "bg-white/[0.03] hover:bg-white/[0.06]" : "bg-zinc-50 hover:bg-zinc-100"
+                                            className={`p-2.5 rounded-xl cursor-pointer transition-colors ${
+                                                isDark ? "bg-white/[0.04] hover:bg-white/[0.07]" : "bg-zinc-200/60 hover:bg-zinc-200"
                                             }`}
                                             onClick={() => {
                                                 setShowSlashMenu(false);
                                                 setLibraryView("credits");
                                             }}
                                         >
-                                            <div className="flex items-center justify-between mb-1.5">
-                                                <span className="text-[13px] font-bold tracking-tight text-white">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[12px] font-bold tracking-tight text-white">
                                                     {userCredits ? `${userCredits.credits} credit left` : "5 credit left"}
                                                 </span>
 
                                                 {/* Blue Pill Progress Bar */}
-                                                <div className="w-28 bg-zinc-700/60 rounded-full h-2 overflow-hidden flex items-center p-0.5">
+                                                <div className="w-24 bg-zinc-700/60 rounded-full h-1.5 overflow-hidden flex items-center p-0.5">
                                                     <div
                                                         className="bg-[#00a3ff] h-full rounded-full transition-all duration-300"
                                                         style={{
@@ -4386,45 +4386,45 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between text-[11px] text-zinc-400 font-normal">
+                                            <div className="flex items-center justify-between text-[10px] text-zinc-400 font-normal">
                                                 <span>Remaining balance.</span>
                                                 <span>{userCredits?.resetTime || "Resets daily at 00:00 UTC"}</span>
                                             </div>
                                         </div>
 
-                                        <div className={`my-2 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200"}`} />
+                                        <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
 
                                         {/* Segment 1: Upload file */}
                                         <DropdownMenuItem
-                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 documentInputRef.current?.click();
                                                 if (input.startsWith("/")) setInput("");
                                             }}
                                         >
-                                            <FileUp className="h-4 w-4 text-zinc-400" />
+                                            <FileUp className="h-3.5 w-3.5 text-zinc-400" />
                                             Upload file
-                                            <span className="ml-auto text-xs font-mono text-zinc-500">/file</span>
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/file</span>
                                         </DropdownMenuItem>
 
                                         {/* Segment 2: Upload image */}
                                         <DropdownMenuItem
-                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 fileInputRef.current?.click();
                                                 if (input.startsWith("/")) setInput("");
                                             }}
                                         >
-                                            <ImageIcon className="h-4 w-4 text-zinc-400" />
+                                            <ImageIcon className="h-3.5 w-3.5 text-zinc-400" />
                                             Upload image
-                                            <span className="ml-auto text-xs font-mono text-zinc-500">/image</span>
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/image</span>
                                         </DropdownMenuItem>
 
-                                        <div className={`my-2 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200"}`} />
+                                        <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
 
                                         {/* Segment 3: Debug Information */}
                                         <DropdownMenuItem
-                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={async () => {
                                                 if (input.startsWith("/")) setInput("");
                                                 setShowDebugModal(true);
@@ -4437,22 +4437,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 }
                                             }}
                                         >
-                                            <Bug className="h-4 w-4 text-zinc-400" />
+                                            <Bug className="h-3.5 w-3.5 text-zinc-400" />
                                             Debug information
-                                            <span className="ml-auto text-xs font-mono text-zinc-500">/debug</span>
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/debug</span>
                                         </DropdownMenuItem>
 
                                         {/* Segment 4: Support */}
                                         <DropdownMenuItem
-                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 if (input.startsWith("/")) setInput("");
                                                 setShowStandaloneShareWarning(true);
                                             }}
                                         >
-                                            <HelpCircle className="h-4 w-4 text-zinc-400" />
+                                            <HelpCircle className="h-3.5 w-3.5 text-zinc-400" />
                                             Support
-                                            <span className="ml-auto text-xs font-mono text-zinc-500">/support</span>
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/support</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>

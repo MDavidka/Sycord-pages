@@ -236,8 +236,8 @@ export function ModelEffortSelector({
             className={cn(
               "w-[210px] sm:w-[220px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border",
               isDark
-                ? "bg-[#1e1f22] border-[#2b2d31] text-[#e5e5e5]"
-                : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
+                ? "bg-[#181818] border-white/[0.08] text-[#e5e5e5]"
+                : "bg-zinc-100 border-zinc-200/80 text-zinc-900 shadow-zinc-200/50"
             )}
           >
             {/* Row 1: Fast + Switch Toggle */}
@@ -343,8 +343,8 @@ export function ModelEffortSelector({
               className={cn(
                 "w-[230px] sm:w-[240px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border transition-all animate-in fade-in-0 slide-in-from-left-2 duration-150",
                 isDark
-                  ? "bg-[#1e1f22] border-[#2b2d31] text-[#e5e5e5]"
-                  : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
+                  ? "bg-[#181818] border-white/[0.08] text-[#e5e5e5]"
+                  : "bg-zinc-100 border-zinc-200/80 text-zinc-900 shadow-zinc-200/50"
               )}
             >
               {/* Models Submenu View */}
