@@ -155,10 +155,65 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
   return null
 }
 
-// Brand SVG logos with full vibrant color and fallback
+// Arc UI Tokens
+// --background: #131313
+// --surface: #171717
+// --surface-raised: #1D1D1D
+// --surface-muted: #202020
+// --foreground: #F5F5F5
+// --text-secondary: #A3A3A3
+// --text-muted: #737373
+// --border: #292929
+// --border-subtle: #222222
+// --border-strong: #383838
+
+// Provider icon abstraction complying with Section 5
+export function ModelIcon({
+  provider,
+  modelName,
+  size = 22,
+  className = "",
+  onClick,
+}: {
+  provider?: string
+  modelName?: string
+  size?: number
+  className?: string
+  onClick?: (e: React.MouseEvent) => void
+}) {
+  const iconKey = getLobeHubIconKey(provider || modelName || "")
+  const [error, setError] = useState(false)
+
+  if (iconKey && !error) {
+    const iconUrl = `${LOBEHUB_CDN_BASE}${iconKey}.svg`
+    return (
+      <img
+        src={iconUrl}
+        alt={provider || modelName || "Model provider"}
+        width={size}
+        height={size}
+        onError={() => setError(true)}
+        onClick={onClick}
+        className={`object-contain inline-block shrink-0 brightness-0 invert opacity-90 transition-opacity ${onClick ? "cursor-pointer" : ""} ${className}`}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={onClick}
+      className={`inline-flex items-center justify-center text-[#A3A3A3] ${onClick ? "cursor-pointer" : ""} ${className}`}
+    >
+      <Cpu style={{ width: size, height: size }} strokeWidth={1.75} />
+    </div>
+  )
+}
+
+// Brand SVG logos backward compatibility wrapper
 export function BrandLogo({
   brand,
-  size = 24,
+  size = 22,
   className = "",
   onClick,
 }: {
@@ -167,30 +222,7 @@ export function BrandLogo({
   className?: string
   onClick?: (e: React.MouseEvent) => void
 }) {
-  const iconKey = getLobeHubIconKey(brand)
-  const [error, setError] = useState(false)
-
-  if (iconKey && !error) {
-    const iconUrl = `${LOBEHUB_CDN_BASE}${iconKey}.svg`
-    return (
-      <img
-        src={iconUrl}
-        alt={brand}
-        width={size}
-        height={size}
-        onError={() => setError(true)}
-        onClick={onClick}
-        className={`object-contain inline-block shrink-0 ${onClick ? "cursor-pointer" : ""} ${className}`}
-        style={{ width: size, height: size }}
-      />
-    )
-  }
-
-  return (
-    <div onClick={onClick} className={`inline-flex items-center justify-center ${onClick ? "cursor-pointer" : ""} ${className}`}>
-      <Cpu className="text-emerald-400 shrink-0" style={{ width: size, height: size }} />
-    </div>
-  )
+  return <ModelIcon provider={brand} modelName={brand} size={size} className={className} onClick={onClick} />
 }
 
 export interface ModelBrowserViewProps {
@@ -425,19 +457,19 @@ export function ModelBrowserView({
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#151515] text-zinc-100 select-none overflow-y-auto">
+    <div className="w-full h-full flex flex-col bg-[#131313] text-[#F5F5F5] select-none overflow-y-auto">
       {/* Top Navbar */}
-      <header className="w-full max-w-4xl mx-auto px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
+      <header className="w-full max-w-4xl mx-auto px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
           <Image
             src="/logo.png"
             alt="Sycord"
             width={24}
             height={24}
-            className="rounded object-contain shrink-0"
+            className="rounded-[6px] object-contain shrink-0"
             priority
           />
-          <span className="text-sm font-semibold tracking-tight text-white">Sycord</span>
+          <span className="text-sm font-medium tracking-tight text-[#F5F5F5]">Sycord</span>
         </div>
 
         {onClose && !isStandalone && (
@@ -445,86 +477,96 @@ export function ModelBrowserView({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="flex size-11 items-center justify-center rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929] transition-all active:scale-[0.97]"
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" strokeWidth={1.75} />
           </button>
         )}
       </header>
 
       {/* Main Content Container */}
-      <main className="w-full max-w-4xl mx-auto px-6 pb-12 flex-1 flex flex-col space-y-7">
-        {/* Page Title & Settings */}
-        <div className="flex items-center justify-between pt-1">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-12 flex-1 flex flex-col space-y-8">
+        {/* Page Title & Settings Area */}
+        <div className="flex items-start justify-between gap-4 pt-1">
+          <div className="space-y-1">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">
               Model Browser
             </h1>
-            <p className="text-xs text-zinc-400 mt-0.5">
+            <p className="text-xs sm:text-[13px] text-[#737373] leading-relaxed">
               Explore foundation AI models, pricing specifications, and benchmark metrics.
             </p>
           </div>
           <button
             type="button"
             aria-label="Settings"
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="size-4" strokeWidth={1.75} />
           </button>
         </div>
 
-        {/* Top Models SWE-Bench Relative Bar Chart */}
-        <div className="space-y-2.5">
+        {/* Top Models SWE-Bench Carousel / Featured Models */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between px-0.5">
-            <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-              <BarChart3 className="w-3.5 h-3.5 text-zinc-400" />
-              Top Models Benchmark Capabilities
+            <span className="text-xs font-medium text-[#A3A3A3] flex items-center gap-2">
+              <BarChart3 className="size-3.5 text-[#737373]" strokeWidth={1.75} />
+              Top models benchmark capabilities
             </span>
           </div>
 
-          <div className="grid grid-cols-6 gap-2.5 sm:gap-3.5 items-end pt-2">
+          {/* Horizontal scrollable featured cards */}
+          <div className="flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 scrollbar-none">
             {featuredCards.map((item) => (
-              <div key={item.id} className="flex flex-col items-center gap-1.5 group">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (item.model) setInspectingModel(item.model)
-                  }}
-                  style={{ height: `${item.heightPx}px` }}
-                  className="w-full rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 active:scale-[0.98] transition-all flex flex-col items-center justify-center relative overflow-hidden shadow-xs cursor-pointer group"
-                  title={item.name}
-                >
-                  {item.model && (
-                    <BrandLogo
-                      brand={item.model.provider || item.model.name}
-                      size={26}
-                      className="group-hover:scale-110 transition-transform"
-                    />
-                  )}
-                </button>
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (item.model) setInspectingModel(item.model)
+                }}
+                className="group flex-shrink-0 w-[140px] sm:w-[150px] p-3 rounded-[18px] bg-[#171717] hover:bg-[#1D1D1D] border border-[#292929] hover:border-[#383838] transition-all active:scale-[0.97] flex flex-col items-start gap-2.5 text-left cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-[#383838]"
+              >
+                <div className="flex size-9 items-center justify-center rounded-[12px] bg-[#1D1D1D] border border-[#222222] group-hover:border-[#292929] transition-colors">
+                  <ModelIcon
+                    provider={item.model?.provider}
+                    modelName={item.name}
+                    size={20}
+                  />
+                </div>
 
-                <span className="text-[11px] font-medium text-zinc-400 truncate max-w-full text-center group-hover:text-zinc-200 transition-colors">
-                  {item.name}
-                </span>
-              </div>
+                <div className="w-full min-w-0 space-y-0.5">
+                  <div className="text-xs font-medium text-[#F5F5F5] truncate group-hover:text-white transition-colors">
+                    {item.name}
+                  </div>
+                  <div className="text-[11px] text-[#737373] truncate">
+                    {item.model?.providerDisplay || item.model?.provider || "AI Model"}
+                  </div>
+                </div>
+
+                {item.model?.swe_score ? (
+                  <div className="w-full pt-1 border-t border-[#222222] flex items-center justify-between text-[10.5px]">
+                    <span className="text-[#737373]">SWE-bench</span>
+                    <span className="font-mono font-medium text-[#A3A3A3]">{item.model.swe_score}%</span>
+                  </div>
+                ) : null}
+              </button>
             ))}
           </div>
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="space-y-3 pt-2">
+        <div className="space-y-3">
           <div className="flex items-center gap-2.5">
             {/* Search Input Container */}
-            <div className="relative flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 focus-within:border-zinc-700 transition-colors">
-              <Search className="w-4 h-4 text-zinc-400 shrink-0 mr-2.5" />
+            <div className="relative flex-1 flex items-center min-h-[44px] bg-[#171717] border border-[#292929] focus-within:border-[#383838] rounded-[18px] px-3.5 transition-colors">
+              <Search className="size-4 text-[#737373] shrink-0 mr-2.5" strokeWidth={1.75} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search models by name, provider, or ID..."
-                className="w-full bg-transparent text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
+                className="w-full bg-transparent text-xs sm:text-sm text-[#F5F5F5] placeholder:text-[#737373] outline-none"
               />
-              <span className="text-xs text-zinc-400 font-normal shrink-0 ml-2">
+              <span className="text-xs text-[#737373] font-normal shrink-0 ml-2">
                 {filteredModels.length} models
               </span>
             </div>
@@ -533,9 +575,9 @@ export function ModelBrowserView({
             <button
               type="button"
               aria-label="Filter"
-              className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shrink-0"
+              className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
             >
-              <SlidersHorizontal className="w-4 h-4" />
+              <SlidersHorizontal className="size-4" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -548,13 +590,17 @@ export function ModelBrowserView({
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 flex items-center gap-1.5 ${
+                  className={`min-h-[44px] px-4 rounded-[18px] text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 active:scale-[0.97] ${
                     isSelected
-                      ? "bg-white text-black font-semibold shadow-xs"
-                      : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
+                      ? "bg-[#F5F5F5] text-[#131313] font-semibold"
+                      : "bg-[#171717] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-[#292929]"
                   }`}
                 >
-                  {tab === "Starred" && <Star className={`w-3.5 h-3.5 ${isSelected ? "fill-black" : "fill-amber-400 text-amber-400"}`} />}
+                  {tab === "Starred" && (
+                    <Star
+                      className={`size-3.5 ${isSelected ? "fill-[#131313] text-[#131313]" : "fill-[#A3A3A3] text-[#A3A3A3]"}`}
+                    />
+                  )}
                   <span>{tab}</span>
                 </button>
               )
@@ -562,21 +608,21 @@ export function ModelBrowserView({
           </div>
         </div>
 
-        {/* Model Cards List (Star Action replace toggle switch) */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between px-0.5">
-            <span className="text-xs font-semibold text-zinc-300">Available AI Models</span>
-            <span className="text-[11px] text-zinc-500">Click card for OpenRouter specifications</span>
+        {/* Model Cards List */}
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between px-0.5">
+            <span className="text-xs font-medium text-[#F5F5F5]">Available AI Models</span>
+            <span className="text-[11px] text-[#737373]">Click card for OpenRouter specifications</span>
           </div>
 
           {loading && models.length === 0 ? (
             <div className="space-y-2.5 animate-pulse">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 rounded-xl bg-zinc-900 border border-zinc-800/60" />
+                <div key={i} className="h-16 rounded-[20px] bg-[#171717] border border-[#222222]" />
               ))}
             </div>
           ) : filteredModels.length === 0 ? (
-            <div className="py-12 text-center text-xs text-zinc-500">
+            <div className="py-12 text-center text-xs text-[#737373]">
               No models found matching your search query.
             </div>
           ) : (
@@ -590,50 +636,54 @@ export function ModelBrowserView({
                 <div
                   key={model.id}
                   onClick={() => setInspectingModel(model)}
-                  className={`w-full rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all border cursor-pointer group ${
+                  className={`w-full rounded-[20px] p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-4 transition-all border cursor-pointer group active:scale-[0.99] ${
                     isActive
-                      ? "bg-zinc-900/90 border-zinc-700 ring-1 ring-white/10"
-                      : "bg-zinc-900/40 hover:bg-zinc-900/70 border-zinc-800/80"
+                      ? "bg-[#1D1D1D] border-[#383838]"
+                      : "bg-[#171717] hover:bg-[#1D1D1D] border-[#292929] hover:border-[#383838]"
                   }`}
                 >
-                  {/* Left: Direct LobeHub Color Icon + Model Name + Provider Subtitle */}
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="shrink-0 flex items-center justify-center">
-                      <BrandLogo brand={model.provider || model.name} size={28} />
+                  {/* Left: Provider Icon + Model Name + Provider Subtitle */}
+                  <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+                    <div className="size-10 sm:size-11 shrink-0 flex items-center justify-center rounded-[14px] bg-[#1D1D1D] border border-[#222222]">
+                      <ModelIcon provider={model.provider} modelName={model.name} size={22} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white truncate flex items-center gap-2 group-hover:text-amber-300 transition-colors">
-                        <span>{model.name}</span>
+                      <div className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2 group-hover:text-white transition-colors">
+                        <span className="truncate">{model.name}</span>
                         {isActive && (
-                          <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
+                          <span className="text-[9.5px] font-medium text-[#F5F5F5] bg-[#202020] border border-[#383838] px-1.5 py-0.5 rounded-[8px]">
                             Active
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-zinc-400 truncate mt-0.5">
+                      <div className="text-xs text-[#737373] truncate mt-0.5">
                         {subtitle}
                       </div>
                     </div>
                   </div>
 
-                  {/* Middle: Clear Pricing info badge (Input / Output per 1M tokens) */}
-                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-300 font-mono bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl shrink-0">
-                    <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  {/* Middle: Pricing info */}
+                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#A3A3A3] font-mono bg-[#1D1D1D] border border-[#222222] px-3 py-1.5 rounded-[12px] shrink-0">
+                    <Coins className="size-3.5 text-[#737373] shrink-0" strokeWidth={1.75} />
                     <span>{pricing}</span>
                   </div>
 
-                  {/* Right: Star Action Icon (Favorite toggle) */}
+                  {/* Right: Star Action Icon (Favorite toggle with 44px hit target) */}
                   <button
                     type="button"
                     onClick={(e) => toggleStarModel(model.id, e)}
+                    aria-label={isStarred ? "Remove from favorites" : "Add to favorites"}
                     title={isStarred ? "Unstar model" : "Star model as favorite"}
-                    className={`p-2 rounded-xl border transition-all ${
+                    className={`flex size-11 items-center justify-center rounded-[14px] border transition-all active:scale-[0.97] shrink-0 ${
                       isStarred
-                        ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                        : "bg-zinc-900/60 border-zinc-800 text-zinc-500 hover:text-amber-400 hover:border-amber-500/20"
+                        ? "bg-[#202020] border-[#383838] text-[#F5F5F5]"
+                        : "bg-transparent border-transparent text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#292929]"
                     }`}
                   >
-                    <Star className={`w-4 h-4 ${isStarred ? "fill-amber-400" : ""}`} />
+                    <Star
+                      className={`size-4 ${isStarred ? "fill-[#F5F5F5]" : ""}`}
+                      strokeWidth={1.75}
+                    />
                   </button>
                 </div>
               )
@@ -645,42 +695,45 @@ export function ModelBrowserView({
       {/* OPENROUTER-STYLE MODEL DETAILS INSPECTOR MODAL */}
       {inspectingModel && (
         <Dialog open={!!inspectingModel} onOpenChange={() => setInspectingModel(null)}>
-          <DialogContent className="bg-[#151515] border border-zinc-800 text-zinc-100 max-w-lg rounded-2xl p-6 shadow-2xl space-y-5">
+          <DialogContent className="bg-[#171717] border border-[#292929] text-[#F5F5F5] max-w-lg rounded-[26px] p-6 shadow-2xl space-y-5">
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[#292929] pb-4">
               <div className="flex items-center gap-3 min-w-0">
-                <BrandLogo brand={inspectingModel.provider || inspectingModel.name} size={32} />
+                <div className="size-11 shrink-0 flex items-center justify-center rounded-[14px] bg-[#1D1D1D] border border-[#222222]">
+                  <ModelIcon provider={inspectingModel.provider} modelName={inspectingModel.name} size={24} />
+                </div>
                 <div className="min-w-0">
-                  <h3 className="text-base font-bold text-white truncate">{inspectingModel.name}</h3>
-                  <p className="text-xs text-zinc-400 font-mono truncate">{inspectingModel.id}</p>
+                  <h3 className="text-base font-semibold text-[#F5F5F5] truncate">{inspectingModel.name}</h3>
+                  <p className="text-xs text-[#737373] font-mono truncate">{inspectingModel.id}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setInspectingModel(null)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                aria-label="Close"
+                className="flex size-9 items-center justify-center rounded-[10px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020]"
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" strokeWidth={1.75} />
               </button>
             </div>
 
             {/* Description */}
-            <p className="text-xs text-zinc-300 leading-relaxed">
+            <p className="text-xs text-[#A3A3A3] leading-relaxed">
               {inspectingModel.description || `${inspectingModel.name} foundation AI model hosted via Vercel AI Gateway.`}
             </p>
 
             {/* Modalities & Capabilities Badges */}
             <div className="space-y-1.5">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Supported Modalities</span>
+              <span className="text-xs font-medium text-[#737373]">Supported modalities</span>
               <div className="flex flex-wrap items-center gap-2">
                 {getModalities(inspectingModel).map((mod) => {
                   const Icon = mod.icon
                   return (
                     <span
                       key={mod.label}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border ${mod.color}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[10px] text-xs font-medium border border-[#292929] bg-[#1D1D1D] text-[#A3A3A3]"
                     >
-                      <Icon className="w-3.5 h-3.5" />
+                      <Icon className="size-3.5 text-[#737373]" strokeWidth={1.75} />
                       <span>{mod.label}</span>
                     </span>
                   )
@@ -690,30 +743,30 @@ export function ModelBrowserView({
 
             {/* OpenRouter Specifications Grid */}
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
-                <span className="text-[11px] text-zinc-400 font-medium">Provider</span>
-                <p className="text-xs font-semibold text-white truncate">
+              <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
+                <span className="text-[11px] text-[#737373] font-normal">Provider</span>
+                <p className="text-xs font-medium text-[#F5F5F5] truncate">
                   {inspectingModel.providerDisplay || inspectingModel.provider}
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
-                <span className="text-[11px] text-zinc-400 font-medium">Context Window</span>
-                <p className="text-xs font-semibold text-white font-mono">
+              <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
+                <span className="text-[11px] text-[#737373] font-normal">Context window</span>
+                <p className="text-xs font-medium text-[#F5F5F5] font-mono">
                   {inspectingModel.context_window ? `${Math.round(inspectingModel.context_window / 1000)}k tokens` : "128k tokens"}
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
-                <span className="text-[11px] text-zinc-400 font-medium">Input Pricing / 1M</span>
-                <p className="text-xs font-semibold text-emerald-400 font-mono">
+              <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
+                <span className="text-[11px] text-[#737373] font-normal">Input pricing / 1M</span>
+                <p className="text-xs font-medium text-[#F5F5F5] font-mono">
                   ${inspectingModel.input_cost !== undefined ? inspectingModel.input_cost.toFixed(2) : "0.50"}
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800/80 space-y-1">
-                <span className="text-[11px] text-zinc-400 font-medium">Output Pricing / 1M</span>
-                <p className="text-xs font-semibold text-amber-400 font-mono">
+              <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
+                <span className="text-[11px] text-[#737373] font-normal">Output pricing / 1M</span>
+                <p className="text-xs font-medium text-[#F5F5F5] font-mono">
                   ${inspectingModel.output_cost !== undefined ? inspectingModel.output_cost.toFixed(2) : "1.50"}
                 </p>
               </div>
@@ -724,14 +777,14 @@ export function ModelBrowserView({
               <button
                 type="button"
                 onClick={(e) => toggleStarModel(inspectingModel.id, e)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                className={`min-h-[44px] px-3.5 rounded-[16px] text-xs font-medium flex items-center gap-1.5 transition-all border ${
                   starredModelIds.has(inspectingModel.id)
-                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                    ? "bg-[#202020] border-[#383838] text-[#F5F5F5]"
+                    : "bg-[#1D1D1D] border-[#292929] text-[#737373] hover:text-[#F5F5F5]"
                 }`}
               >
-                <Star className={`w-3.5 h-3.5 ${starredModelIds.has(inspectingModel.id) ? "fill-amber-400" : ""}`} />
-                <span>{starredModelIds.has(inspectingModel.id) ? "Starred Favorite" : "Add to Favorites"}</span>
+                <Star className={`size-3.5 ${starredModelIds.has(inspectingModel.id) ? "fill-[#F5F5F5]" : ""}`} strokeWidth={1.75} />
+                <span>{starredModelIds.has(inspectingModel.id) ? "Starred favorite" : "Add to favorites"}</span>
               </button>
 
               <button
@@ -740,9 +793,9 @@ export function ModelBrowserView({
                   handleSelectActiveModel(inspectingModel)
                   setInspectingModel(null)
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-black hover:bg-zinc-200 transition-all shadow-xs"
+                className="min-h-[44px] px-4 rounded-[16px] text-xs font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
               >
-                Set as Active Model
+                Set as active model
               </button>
             </div>
           </DialogContent>
@@ -782,7 +835,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#151515] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#131313] text-[#F5F5F5] shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         <ModelBrowserView

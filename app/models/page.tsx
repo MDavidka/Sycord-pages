@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function ModelsPage() {
   return (
-    <div className="w-full min-h-screen bg-[#0e0e10]">
+    <div className="w-full min-h-screen bg-[#131313]">
       <ModelBrowserView isStandalone={true} />
     </div>
   )
