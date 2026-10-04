@@ -11,14 +11,8 @@ import {
   Settings,
   SlidersHorizontal,
   Cpu,
-  ShieldAlert,
   BarChart3,
-  TrendingUp,
-  FileCode2,
-  Tag,
   Coins,
-  Sparkles,
-  Info,
 } from "lucide-react"
 
 // Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
@@ -147,10 +141,10 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
   return null
 }
 
-// Brand SVG logos strictly using LobeHub icons JSON with SVGL/Lucide fallback
+// Brand SVG logos with full vibrant color and fallback
 export function BrandLogo({
   brand,
-  size = 22,
+  size = 24,
   className = "",
   onClick,
 }: {
@@ -180,7 +174,7 @@ export function BrandLogo({
 
   return (
     <div onClick={onClick} className={`inline-flex items-center justify-center ${onClick ? "cursor-pointer" : ""} ${className}`}>
-      <Cpu className="text-zinc-400 shrink-0" style={{ width: size, height: size }} />
+      <Cpu className="text-emerald-400 shrink-0" style={{ width: size, height: size }} />
     </div>
   )
 }
@@ -205,8 +199,6 @@ export function ModelBrowserView({
   const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
   const [activeTab, setActiveTab] = useState<string>("All")
   const [searchQuery, setSearchQuery] = useState("")
-  const [isModeratorView, setIsModeratorView] = useState(false)
-  const [moderatorJsonTab, setModeratorJsonTab] = useState<1 | 2>(1)
 
   const loadModels = (forceRefresh = false) => {
     setLoading(true)
@@ -232,7 +224,7 @@ export function ModelBrowserView({
     loadModels()
   }, [projectId, selectedModel])
 
-  // Top benchmark models with SWE Bench % for the chart view
+  // Benchmark top models for the bar chart
   const topSweModels = useMemo(() => {
     const defaultScores: Record<string, number> = {
       "claude-3-7-sonnet": 70.3,
@@ -262,22 +254,19 @@ export function ModelBrowserView({
     return processed.sort((a, b) => (b.swe_score || 0) - (a.swe_score || 0)).slice(0, 6)
   }, [models])
 
-  // Highest SWE score for calculating bar chart relative heights/widths
   const maxSweScore = useMemo(() => {
     if (topSweModels.length === 0) return 100
     return Math.max(...topSweModels.map((m) => m.swe_score || 50), 100)
   }, [topSweModels])
 
-  // Featured Cards with heights scaled by real SWE Bench benchmark %
+  // Featured Cards with heights scaled by benchmark %
   const featuredCards = useMemo(() => {
     return topSweModels.map((model) => {
       const swe = model.swe_score || 50
-      // Scale height between 3.8rem (35%) and 9.5rem (100%)
       const heightPx = Math.max(55, Math.round((swe / maxSweScore) * 145))
       return {
         id: model.id,
         name: model.name,
-        swe_score: swe,
         model,
         heightPx,
       }
@@ -353,14 +342,13 @@ export function ModelBrowserView({
     }).catch(() => {})
   }
 
-  // Format pricing string like "$0.50 / $1.50 per 1M tokens"
+  // Format pricing string like "$0.50 in / $1.50 out"
   const formatPricing = (model: OmniModelItem) => {
     const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
     const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
-    return `${inCost} in • ${outCost} out / 1M`
+    return `${inCost} in • ${outCost} out`
   }
 
-  // Subtitle generation for clean presentation
   const getModelSubtitle = (model: OmniModelItem) => {
     if (model.id.toLowerCase().includes("claude")) return "Anthropic • Sonnet 3.7"
     if (model.id.toLowerCase().includes("gpt-4o")) return "OpenAI • Multimodal"
@@ -372,53 +360,8 @@ export function ModelBrowserView({
     return "Foundation Model"
   }
 
-  // Moderator JSON 1: Top Models & Benchmark Performance Data
-  const moderatorJson1 = useMemo(() => {
-    return {
-      title: "Top AI Models SWE-Bench & Benchmark Performance",
-      timestamp: new Date().toISOString(),
-      activeModelId,
-      topModelsCount: topSweModels.length,
-      topModels: topSweModels.map((m) => ({
-        id: m.id,
-        name: m.name,
-        provider: m.provider,
-        swe_bench_score_percent: `${m.swe_score}%`,
-        relative_chart_height_px: `${Math.max(55, Math.round(((m.swe_score || 50) / maxSweScore) * 145))}px`,
-        input_cost_per_1m: m.input_cost ?? 0.5,
-        output_cost_per_1m: m.output_cost ?? 1.5,
-        supports_reasoning: m.supports_reasoning ?? false,
-        supports_vision: m.supports_vision ?? false,
-      })),
-    }
-  }, [topSweModels, maxSweScore, activeModelId])
-
-  // Moderator JSON 2: All Available Models Catalog & Pricing Audit
-  const moderatorJson2 = useMemo(() => {
-    return {
-      title: "Full Sycord Omni Router Available Models & Pricing Catalog",
-      timestamp: new Date().toISOString(),
-      totalModelsCount: models.length,
-      activeTab,
-      filteredCount: filteredModels.length,
-      availableModels: filteredModels.map((m) => ({
-        id: m.id,
-        name: m.name,
-        provider: m.provider,
-        iconKey: getLobeHubIconKey(m.provider || m.name) || "cpu",
-        pricing: {
-          input_cost_per_1m: m.input_cost ?? 0.5,
-          output_cost_per_1m: m.output_cost ?? 1.5,
-          formatted: formatPricing(m),
-        },
-        context_window: m.context_window || 128000,
-        is_active: activeModelId === m.id,
-      })),
-    }
-  }, [models, filteredModels, activeTab, activeModelId])
-
   return (
-    <div className="w-full h-full flex flex-col bg-[#0a0a0c] text-zinc-100 select-none overflow-y-auto">
+    <div className="w-full h-full flex flex-col bg-zinc-950 text-zinc-100 select-none overflow-y-auto">
       {/* Top Navbar */}
       <header className="w-full max-w-4xl mx-auto px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
@@ -433,32 +376,16 @@ export function ModelBrowserView({
           <span className="text-sm font-semibold tracking-tight text-white">Sycord</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Moderator View Toggle Switch */}
+        {onClose && !isStandalone && (
           <button
             type="button"
-            onClick={() => setIsModeratorView(!isModeratorView)}
-            className={`px-3 py-1.2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-              isModeratorView
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs"
-                : "bg-[#18181b] text-zinc-400 border-white/[0.08] hover:text-white hover:bg-white/[0.06]"
-            }`}
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Moderator View</span>
+            <X className="w-4 h-4" />
           </button>
-
-          {onClose && !isStandalone && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        )}
       </header>
 
       {/* Main Content Container */}
@@ -466,13 +393,8 @@ export function ModelBrowserView({
         {/* Page Title & Settings */}
         <div className="flex items-center justify-between pt-1">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Model Browser
-              {isModeratorView && (
-                <span className="text-xs font-normal text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                  Admin Debug Mode
-                </span>
-              )}
             </h1>
             <p className="text-xs text-zinc-400 mt-0.5">
               Explore foundation AI models, pricing specifications, and benchmark metrics.
@@ -481,93 +403,38 @@ export function ModelBrowserView({
           <button
             type="button"
             aria-label="Settings"
-            className="p-2 rounded-xl bg-[#141416] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <Settings className="w-4 h-4" />
           </button>
         </div>
 
-        {/* MODERATOR VIEW JSON INSPECTOR */}
-        {isModeratorView && (
-          <div className="rounded-2xl bg-[#121214] border border-amber-500/30 p-4 space-y-3 shadow-lg">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-                <span>Moderator JSON Telemetry Inspect</span>
-              </div>
-
-              {/* JSON 1 / JSON 2 Tabs */}
-              <div className="flex items-center gap-1 bg-[#18181b] p-1 rounded-lg border border-white/[0.08]">
-                <button
-                  type="button"
-                  onClick={() => setModeratorJsonTab(1)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1 ${
-                    moderatorJsonTab === 1
-                      ? "bg-amber-500 text-black shadow-xs"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <TrendingUp className="w-3 h-3" />
-                  JSON 1: Top SWE Bench
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setModeratorJsonTab(2)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1 ${
-                    moderatorJsonTab === 2
-                      ? "bg-amber-500 text-black shadow-xs"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <FileCode2 className="w-3 h-3" />
-                  JSON 2: Available Models & Pricing
-                </button>
-              </div>
-            </div>
-
-            {/* JSON Content Pre Block */}
-            <div className="bg-[#0a0a0c] rounded-xl p-3.5 border border-white/[0.06] font-mono text-[11px] text-emerald-400 overflow-x-auto max-h-64 scrollbar-thin">
-              <pre className="whitespace-pre-wrap leading-relaxed">
-                {JSON.stringify(moderatorJsonTab === 1 ? moderatorJson1 : moderatorJson2, null, 2)}
-              </pre>
-            </div>
-          </div>
-        )}
-
-        {/* Top Models SWE-Bench Relative Lint Bar Chart (Normal Dark Background) */}
+        {/* Top Models SWE-Bench Relative Bar Chart (No % markers on top) */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
               <BarChart3 className="w-3.5 h-3.5 text-zinc-400" />
-              Top Models & SWE Bench Benchmark Scores
+              Top Models Benchmark Capabilities
             </span>
-            <span className="text-[11px] text-zinc-500 font-mono">Chart scaled by SWE %</span>
           </div>
 
           <div className="grid grid-cols-6 gap-2.5 sm:gap-3.5 items-end pt-2">
             {featuredCards.map((item) => (
               <div key={item.id} className="flex flex-col items-center gap-1.5 group">
-                {/* SWE Bench Percentage Pill */}
-                <span className="text-[10px] font-bold font-mono text-zinc-300 group-hover:text-white transition-colors">
-                  {item.swe_score}%
-                </span>
-
-                {/* Normal dark background bar container */}
                 <button
                   type="button"
                   onClick={() => {
                     if (item.model) handleToggleModel(item.model)
                   }}
                   style={{ height: `${item.heightPx}px` }}
-                  className="w-full rounded-2xl bg-[#141416] hover:bg-[#1a1a1d] border border-white/[0.08] hover:border-white/20 active:scale-[0.98] transition-all flex flex-col items-center justify-center relative overflow-hidden shadow-xs cursor-pointer group"
-                  title={`${item.name} (${item.swe_score}% SWE Bench)`}
+                  className="w-full rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800/80 hover:border-zinc-700 active:scale-[0.98] transition-all flex flex-col items-center justify-center relative overflow-hidden shadow-xs cursor-pointer group"
+                  title={item.name}
                 >
                   {item.model && (
                     <BrandLogo
                       brand={item.model.provider || item.model.name}
-                      size={22}
-                      className="opacity-90 group-hover:scale-110 transition-transform"
+                      size={26}
+                      className="group-hover:scale-110 transition-transform"
                     />
                   )}
                 </button>
@@ -584,7 +451,7 @@ export function ModelBrowserView({
         <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2.5">
             {/* Search Input Container */}
-            <div className="relative flex-1 flex items-center bg-[#141416] border border-white/[0.08] rounded-xl px-3.5 py-2.5 focus-within:border-white/20 transition-colors">
+            <div className="relative flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 focus-within:border-zinc-700 transition-colors">
               <Search className="w-4 h-4 text-zinc-400 shrink-0 mr-2.5" />
               <input
                 type="text"
@@ -602,7 +469,7 @@ export function ModelBrowserView({
             <button
               type="button"
               aria-label="Filter"
-              className="p-2.5 rounded-xl bg-[#141416] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0"
+              className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors shrink-0"
             >
               <SlidersHorizontal className="w-4 h-4" />
             </button>
@@ -620,7 +487,7 @@ export function ModelBrowserView({
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 ${
                     isSelected
                       ? "bg-white text-black font-semibold shadow-xs"
-                      : "bg-[#141416] text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06]"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
                   }`}
                 >
                   {tab}
@@ -630,7 +497,7 @@ export function ModelBrowserView({
           </div>
         </div>
 
-        {/* Model Cards List with Icon, Enhanced Look & Explicit Pricing */}
+        {/* Model Cards List (Removed background box from icons, added full color icons & explicit pricing) */}
         <div className="space-y-2.5">
           <div className="flex items-center justify-between px-0.5">
             <span className="text-xs font-semibold text-zinc-300">Available AI Models</span>
@@ -640,7 +507,7 @@ export function ModelBrowserView({
           {loading && models.length === 0 ? (
             <div className="space-y-2.5 animate-pulse">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 rounded-xl bg-[#141416] border border-white/[0.04]" />
+                <div key={i} className="h-16 rounded-xl bg-zinc-900 border border-zinc-800/60" />
               ))}
             </div>
           ) : filteredModels.length === 0 ? (
@@ -658,14 +525,14 @@ export function ModelBrowserView({
                   key={model.id}
                   className={`w-full rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all border ${
                     isActive
-                      ? "bg-[#161619] border-white/20 ring-1 ring-white/10"
-                      : "bg-[#121214] hover:bg-[#161618] border-white/[0.08]"
+                      ? "bg-zinc-900/90 border-zinc-700 ring-1 ring-white/10"
+                      : "bg-zinc-900/40 hover:bg-zinc-900/70 border-zinc-800/80"
                   }`}
                 >
-                  {/* Left: LobeHub Brand Icon + Model Name + Subtitle */}
+                  {/* Left: Direct LobeHub Color Icon (No background box) + Model Name + Subtitle */}
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-[#1c1c1f] flex items-center justify-center shrink-0 border border-white/[0.06] shadow-xs">
-                      <BrandLogo brand={model.provider || model.name} size={20} />
+                    <div className="shrink-0 flex items-center justify-center">
+                      <BrandLogo brand={model.provider || model.name} size={28} />
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-semibold text-white truncate flex items-center gap-2">
@@ -682,8 +549,8 @@ export function ModelBrowserView({
                     </div>
                   </div>
 
-                  {/* Middle: Pricing Specs badge */}
-                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-300 font-mono bg-[#18181b] border border-white/[0.06] px-3 py-1.5 rounded-xl shrink-0">
+                  {/* Middle: Clear Pricing info badge */}
+                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-300 font-mono bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl shrink-0">
                     <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>{pricing}</span>
                   </div>
@@ -745,7 +612,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#0a0a0c] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-zinc-950 text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         <ModelBrowserView
