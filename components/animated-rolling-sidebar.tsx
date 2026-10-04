@@ -295,7 +295,7 @@ export function AnimatedRollingSidebar({
           transition={{ duration: 0.2 }}
           className="absolute inset-0 flex flex-col"
           style={{
-            backgroundColor: "#181818",
+            backgroundColor: "#131313",
           }}
         >
           {/* Logo */}
@@ -351,7 +351,7 @@ export function AnimatedRollingSidebarDesktop({
       onMouseLeave={() => onExpandChange(false)}
       className="relative flex flex-col h-full overflow-hidden"
       style={{
-        backgroundColor: "#181818",
+        backgroundColor: "#131313",
       }}
     >
       {/* Logo */}
