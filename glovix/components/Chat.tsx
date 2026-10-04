@@ -3489,6 +3489,32 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 ? lastAssistantMsg.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
                 : '';
 
+        let resolvedTursoSessionId = latestTursoSessionIdRef.current || null;
+        let resolvedAgentSession = latestAgentSessionRef.current || null;
+        let resolvedAgentEventId = latestEventIdRef.current || null;
+
+        // If in-memory refs are null (e.g. after refresh), recover from action history
+        if (!resolvedTursoSessionId || !resolvedAgentEventId) {
+            for (let i = allMsgs.length - 1; i >= 0; i--) {
+                const msg = allMsgs[i] as any;
+                if (Array.isArray(msg?.agentActions) && msg.agentActions.length > 0) {
+                    for (let j = msg.agentActions.length - 1; j >= 0; j--) {
+                        const act = msg.agentActions[j];
+                        if (act?.eventId && !resolvedAgentEventId) {
+                            resolvedAgentEventId = act.eventId;
+                        }
+                        if (act?.id && typeof act.id === 'string' && act.id.startsWith('agent_') && !resolvedTursoSessionId) {
+                            const parts = act.id.split('_');
+                            if (parts.length >= 3) {
+                                resolvedTursoSessionId = parts.slice(1, -1).join('_');
+                            }
+                        }
+                    }
+                }
+                if (resolvedTursoSessionId && resolvedAgentEventId) break;
+            }
+        }
+
         const formattedMessages = allMsgs.map((m: any, idx) => {
             const textContent = typeof m.content === 'string'
                 ? m.content
@@ -3508,9 +3534,101 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             };
         });
 
-        const hasError = activityLogRef.current.some(a => a.type === 'model_error' || a.status === 'error');
-        const failedTasks = activityLogRef.current
-            .filter(a => a.status === 'error' || a.type === 'failed_task')
+        // Hydrate activity log from messages if in-memory log is empty
+        let resolvedActivityLog = [...activityLogRef.current];
+        if (resolvedActivityLog.length === 0 && allMsgs.length > 0) {
+            allMsgs.forEach((m: any, idx) => {
+                const textContent = typeof m.content === 'string'
+                    ? m.content
+                    : Array.isArray(m.content)
+                        ? m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                        : '';
+                const msgTime = new Date(m.createdAt || Date.now()).toISOString();
+
+                if (m.role === 'user') {
+                    resolvedActivityLog.push({
+                        id: `act_${m.id || idx}_usr`,
+                        type: 'user_asked',
+                        messageId: m.id || `msg-${idx}`,
+                        prompt: textContent,
+                        timestamp: msgTime,
+                    });
+                } else if (m.role === 'assistant') {
+                    if (Array.isArray(m.agentActions)) {
+                        m.agentActions.forEach((act: any, aIdx: number) => {
+                            const toolName = act.tool || act.title || 'agent_action';
+                            resolvedActivityLog.push({
+                                id: `act_${act.id || `${idx}_${aIdx}`}_used`,
+                                type: 'agent_used',
+                                tool: toolName,
+                                toolCallId: act.toolCallId,
+                                arguments: act.args,
+                                eventId: act.eventId,
+                                timestamp: msgTime,
+                            });
+                            if (act.status === 'done' || act.status === 'error') {
+                                resolvedActivityLog.push({
+                                    id: `act_${act.id || `${idx}_${aIdx}`}_ret`,
+                                    type: 'agent_returned_tool',
+                                    tool: toolName,
+                                    toolCallId: act.toolCallId,
+                                    status: act.status,
+                                    result: act.result,
+                                    eventId: act.eventId,
+                                    timestamp: act.completedAt ? new Date(act.completedAt).toISOString() : msgTime,
+                                });
+                            }
+                        });
+                    }
+
+                    const isGatewayError = textContent.includes('VERCEL_AI_GATEWAY Error') || textContent.includes('HTTP 403');
+                    const isGenericError = textContent.startsWith('Error:') || m.status === 'error';
+
+                    if (isGatewayError || isGenericError) {
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_err`,
+                            type: 'model_error',
+                            error: textContent,
+                            code: isGatewayError ? 'GATEWAY_FORBIDDEN' : 'MODEL_ERROR',
+                            timestamp: msgTime,
+                        });
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_fail`,
+                            type: 'failed_task',
+                            error: textContent,
+                            timestamp: msgTime,
+                        });
+                    } else if (textContent) {
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_resp`,
+                            type: 'vm_responded',
+                            statusCode: 200,
+                            timestamp: msgTime,
+                        });
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_disp`,
+                            type: 'backend_displayed',
+                            exactResponseDisplayed: textContent,
+                            timestamp: msgTime,
+                        });
+                    }
+                }
+            });
+        }
+
+        const hasGatewayError = allMsgs.some((m: any) => {
+            const txt = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+            return txt.includes('VERCEL_AI_GATEWAY Error') || txt.includes('Free tier users do not have access');
+        });
+        const hasRateLimit = resolvedActivityLog.some(a => a.type === 'rate_limit') ||
+            allMsgs.some((m: any) => {
+                const txt = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+                return txt.includes('429') || txt.includes('rate limit') || txt.includes('RESOURCE_EXHAUSTED');
+            });
+
+        const hasError = hasGatewayError || resolvedActivityLog.some(a => a.type === 'model_error' || a.status === 'error');
+        const failedTasks = resolvedActivityLog
+            .filter(a => a.status === 'error' || a.type === 'failed_task' || a.type === 'model_error')
             .map(a => ({
                 name: a.tool || a.type,
                 reason: a.error || String(a.result || 'Failed task'),
@@ -3535,9 +3653,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     apiUrl: vmDebug?.syte?.apiUrl || vmDebug?.dokploy?.apiUrl || vmDebug?.coolify?.apiUrl || '/api/projects/[id]/agent',
                     platform: vmDebug?.platform || 'syte',
                     latencyMs: vmDebug?.syte?.latencyMs ?? vmDebug?.dokploy?.latencyMs ?? vmDebug?.coolify?.latencyMs ?? null,
-                    tursoSessionId: latestTursoSessionIdRef.current || null,
-                    agentSession: latestAgentSessionRef.current || null,
-                    agentEventId: latestEventIdRef.current || null,
+                    tursoSessionId: resolvedTursoSessionId,
+                    agentSession: resolvedAgentSession,
+                    agentEventId: resolvedAgentEventId,
                     connectionsConnected: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 1 : 0,
                     connectionsFailed: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 0 : 1,
                     error: vmDebug?.error || vmDebug?.syte?.error || vmDebug?.dokploy?.error || null,
@@ -3560,16 +3678,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 },
             },
             secondLevel: {
-                activityLog: [...activityLogRef.current],
+                activityLog: resolvedActivityLog,
                 rateLimit: {
-                    encountered: activityLogRef.current.some(a => a.type === 'rate_limit'),
+                    encountered: hasRateLimit,
                     retryAfter: null,
-                    details: null,
+                    details: hasRateLimit ? 'Rate limit or resource exhausted encountered during session' : null,
                 },
                 modelError: {
                     encountered: hasError,
-                    error: failedTasks[0]?.reason || null,
-                    code: hasError ? 'MODEL_ERROR' : null,
+                    error: failedTasks[0]?.reason || (hasGatewayError ? 'VERCEL_AI_GATEWAY Error (HTTP 403): Free tier model access limitation' : null),
+                    code: hasGatewayError ? 'GATEWAY_FORBIDDEN' : hasError ? 'MODEL_ERROR' : null,
                 },
                 failedTask: {
                     failed: failedTasks.length > 0,
