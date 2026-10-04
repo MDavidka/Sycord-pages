@@ -122,6 +122,8 @@ export async function POST(req: Request) {
     tools: body?.tools,
     temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
     max_tokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+    thinking_level: typeof body?.thinking_level === "string" ? body.thinking_level : undefined,
+    reasoning_effort: typeof body?.reasoning_effort === "string" ? body.reasoning_effort : undefined,
     model: gatewayModel,
     signal: req.signal,
   })

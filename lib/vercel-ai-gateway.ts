@@ -196,6 +196,8 @@ export interface StreamVercelAiOptions {
   max_tokens?: number
   tools?: any[]
   signal?: AbortSignal
+  thinking_level?: string
+  reasoning_effort?: string
 }
 
 /**
@@ -206,7 +208,7 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
   const model = options.model || "anthropic/claude-3.5-sonnet"
   const encoder = new TextEncoder()
 
-  const requestBody = {
+  const requestBody: Record<string, any> = {
     model,
     messages: options.messages,
     temperature: options.temperature ?? 0.7,
@@ -215,6 +217,13 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
     ...(options.tools && Array.isArray(options.tools) && options.tools.length > 0
       ? { tools: options.tools, tool_choice: "auto" }
       : {}),
+  }
+
+  if (options.thinking_level) {
+    requestBody.thinking_level = options.thinking_level
+  }
+  if (options.reasoning_effort) {
+    requestBody.reasoning_effort = options.reasoning_effort
   }
 
   const stream = new ReadableStream<Uint8Array>({
