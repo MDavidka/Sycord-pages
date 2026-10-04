@@ -77,11 +77,11 @@ function ResponseAction({
       title={label}
       aria-pressed={label === "Helpful" || label === "Not helpful" ? active : undefined}
       onClick={onClick}
-      whileTap={reduce ? undefined : { scale: 0.9 }}
+      whileTap={reduce ? undefined : { scale: 0.97 }}
       transition={SPRING_PRESS}
       className={cn(
-        "grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-        active && "bg-muted text-foreground",
+        "grid size-8 place-items-center rounded-[10px] text-[#737373] outline-none transition-colors hover:bg-[#202020] hover:text-[#F5F5F5] focus-visible:ring-1 focus-visible:ring-[#383838]",
+        active && "bg-[#202020] text-[#F5F5F5]",
       )}
     >
       {children}
@@ -191,15 +191,15 @@ export function StreamingResponse({
                   onClick={handleCopy}
                 >
                   {copied ? (
-                    <Check className="size-3.5 text-emerald-500" />
+                    <Check className="size-[18px] text-emerald-400" />
                   ) : (
-                    <Copy className="size-3.5" />
+                    <Copy className="size-[18px]" strokeWidth={1.75} />
                   )}
                 </ResponseAction>
               ) : null}
               {onRetry ? (
                 <ResponseAction label="Retry response" onClick={onRetry}>
-                  <RotateCcw className="size-3.5" />
+                  <RotateCcw className="size-[18px]" strokeWidth={1.75} />
                 </ResponseAction>
               ) : null}
               {complete ? (
@@ -209,14 +209,14 @@ export function StreamingResponse({
                     active={currentFeedback === "up"}
                     onClick={() => setFeedback("up")}
                   >
-                    <ThumbsUp className="size-3.5" />
+                    <ThumbsUp className="size-[18px]" strokeWidth={1.75} />
                   </ResponseAction>
                   <ResponseAction
                     label="Not helpful"
                     active={currentFeedback === "down"}
                     onClick={() => setFeedback("down")}
                   >
-                    <ThumbsDown className="size-3.5" />
+                    <ThumbsDown className="size-[18px]" strokeWidth={1.75} />
                   </ResponseAction>
                 </>
               ) : null}

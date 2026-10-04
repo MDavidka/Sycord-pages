@@ -3800,7 +3800,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#151515] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.08),rgba(255,255,255,0))]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#131313]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3898,7 +3898,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
                         />
                         <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#181818] via-[#181818]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#131313] via-[#131313]/85 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
                         />
                     </div>
 
@@ -3911,12 +3911,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 type="button"
                                 onClick={handleBack}
                                 aria-label="Toggle Sidebar or Go Back"
-                                className={`relative z-10 flex size-9 items-center justify-center rounded-xl transition-all active:scale-95 ${isDark ? 'text-white/80 hover:bg-white/10 hover:text-white backdrop-blur-sm' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900 backdrop-blur-sm'}`}
+                                className={`relative z-10 flex size-11 items-center justify-center rounded-[14px] transition-all active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900'}`}
                             >
-                                <PanelLeft className="size-5" strokeWidth={1.8} />
+                                <PanelLeft className="size-5" strokeWidth={1.75} />
                             </button>
 
-                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-[#F5F5F5]' : 'text-gray-900'}`}>
                                 {hostProjectName || 'Test project'}
                             </span>
                             {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
@@ -3929,16 +3929,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     onClick={onOpenPreview}
                                     aria-label="Open preview"
                                     title="Open preview"
-                                    className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                    className={`flex size-11 items-center justify-center rounded-[14px] transition-colors active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                                 >
-                                    <Eye className="size-[18px]" strokeWidth={1.8} />
+                                    <Eye className="size-[18px]" strokeWidth={1.75} />
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={() => setShowDeepMemory(true)}
                                 aria-label="Profile"
-                                className={`flex size-9 sm:size-10 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-[#523d35] text-white/90 shadow-sm' : 'border border-gray-300 bg-black/[0.05] text-gray-900'}`}
+                                className={`flex size-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-[0.97] border ${isDark ? 'bg-[#1D1D1D] text-[#F5F5F5] border-[#292929]' : 'border-gray-300 bg-black/[0.05] text-gray-900'}`}
                             >
                                 {profileImage && !profileImgError ? (
                                     <img
@@ -4022,15 +4022,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <div className="flex justify-end">
                                             <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
                                                 <div
-                                                    className={`text-[15px] leading-relaxed break-words ${
+                                                    className={`text-[15px] leading-[1.5] break-words ${
                                                         isDark
-                                                            ? 'bg-[#181818] text-zinc-100 rounded-[20px] px-4 py-3 border border-white/[0.08] shadow-sm'
-                                                            : 'bg-zinc-100 text-zinc-900 rounded-[20px] px-4 py-3 border border-zinc-200/80 shadow-sm'
+                                                            ? 'bg-[#1D1D1D] text-[#F5F5F5] rounded-[24px] px-4.5 py-3 border border-[#292929]'
+                                                            : 'bg-zinc-100 text-zinc-900 rounded-[24px] px-4.5 py-3 border border-zinc-200/80'
                                                     }`}
                                                 >
                                                     {/* Picked element indicator */}
                                                     {(group as any).pickedElement && (
-                                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/80' : 'text-blue-500/80'}`}>
                                                             <MousePointer2 className="w-3 h-3 flex-shrink-0" />
                                                             <span className="font-medium">
                                                                 {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
@@ -4045,12 +4045,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                         </div>
                                                     )}
                                                     {group.content && (
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-[1.5] ${isDark ? 'prose-invert prose-pre:bg-[#131313] prose-pre:border prose-pre:border-[#292929] prose-pre:rounded-xl prose-code:text-[#F5F5F5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             {Array.isArray(group.content) ? (
                                                                 <div className="space-y-2">
                                                                     {group.content.map((part, i) => {
                                                                         if (part.type === 'image_url') {
-                                                                            return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                                            return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-xl max-h-[250px] object-contain border border-[#292929]" />;
                                                                         }
                                                                         return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
                                                                     })}
@@ -4062,7 +4062,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     )}
                                                 </div>
                                                 {group.createdAt && (
-                                                    <span className="text-[11px] text-zinc-500 mt-1 px-1 tracking-tight font-mono">
+                                                    <span className="text-[11px] text-[#737373] mt-1 px-1 tracking-tight font-mono">
                                                         {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                                                     </span>
                                                 )}
@@ -4133,14 +4133,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     showActions={!isLiveTurn}
                                                     className="w-full"
                                                 >
-                                                    <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                                                    <div className={`text-[15px] sm:text-[15.5px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-[#F5F5F5]' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(assistantText)}
                                                     </div>
                                                 </StreamingResponse>
                                             ) : isLiveTurn && (!actions.length || actions.length === 0) && (!currentThinking || isSystemProcessingText(currentThinking)) ? (
-                                                <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                                <div className="flex items-center gap-2 text-[13.5px] text-[#737373] select-none py-0.5">
                                                     <Marker role="status" className="px-0">
-                                                        <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                                        <MarkerContent className="shimmer text-[#737373]">Thinking...</MarkerContent>
                                                     </Marker>
                                                 </div>
                                             ) : null}
@@ -4283,9 +4283,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         )}
 
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[24px] border px-3 transition-all ${
-                            pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#181818] border-white/[0.08] focus-within:border-white/[0.18] shadow-lg shadow-black/25' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
+                        <div className={`rounded-[28px] border px-3 transition-all ${
+                            pendingQuestion ? 'py-1.5' : 'pt-2 pb-2.5'
+                        } ${isDark ? 'bg-[#171717] border-[#292929] focus-within:border-[#383838]' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4308,11 +4308,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             ? "AI is working on your task..."
                                             : "Help you write code, debug and ship production-ready work. Type / for skills & integrations."
                                     }
-                                    className={`w-full bg-transparent text-[15.5px] sm:text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${
+                                    className={`w-full bg-transparent text-[15px] sm:text-[15.5px] leading-[1.5] px-3 pt-2 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${
                                         isRunning
-                                            ? 'cursor-not-allowed text-zinc-400 placeholder:text-zinc-500'
+                                            ? 'cursor-not-allowed text-[#737373] placeholder:text-[#737373]'
                                             : isDark
-                                            ? 'text-zinc-100 placeholder:text-zinc-500'
+                                            ? 'text-[#F5F5F5] placeholder:text-[#737373]'
                                             : 'text-gray-900 placeholder:text-gray-400'
                                     }`}
                                     style={{ height: 'auto', minHeight: isRunning ? '44px' : '76px' }}
@@ -4344,7 +4344,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] bg-[#181818] text-zinc-400 hover:text-white hover:bg-white/[0.06]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-[12px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#292929] bg-[#1D1D1D] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -4352,12 +4352,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(88vw,16.5rem)] p-2.5 rounded-2xl ${isDark ? "border-white/[0.08] bg-[#181818] text-zinc-200 shadow-2xl shadow-black/80" : "bg-zinc-100 border-zinc-200/80 text-zinc-800 shadow-xl"}`}
+                                        className={`w-[min(88vw,16.5rem)] p-2.5 rounded-[18px] ${isDark ? "border-[#292929] bg-[#171717] text-[#F5F5F5] shadow-2xl shadow-black/80" : "bg-zinc-100 border-zinc-200/80 text-zinc-800 shadow-xl"}`}
                                     >
                                         {/* Credit Segment */}
                                         <div
                                             className={`p-2.5 rounded-xl cursor-pointer transition-colors ${
-                                                isDark ? "bg-white/[0.04] hover:bg-white/[0.07]" : "bg-zinc-200/60 hover:bg-zinc-200"
+                                                isDark ? "bg-[#202020] hover:bg-[#262626]" : "bg-zinc-200/60 hover:bg-zinc-200"
                                             }`}
                                             onClick={() => {
                                                 setShowSlashMenu(false);
@@ -4365,7 +4365,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             }}
                                         >
                                             <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[12px] font-bold tracking-tight text-white">
+                                                <span className="text-[12px] font-bold tracking-tight text-[#F5F5F5]">
                                                     {userCredits ? `${userCredits.credits} credit left` : "5 credit left"}
                                                 </span>
 
@@ -4517,9 +4517,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         aria-label="Voice input"
                                         aria-pressed={isListening}
                                         onClick={handleVoiceInput}
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-zinc-400 hover:text-white hover:bg-white/5' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
+                                        className={`flex size-10 items-center justify-center rounded-[12px] transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
                                     >
-                                        <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
+                                        <Mic className={`size-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
 
                                     {isRunning ? (
@@ -4527,22 +4527,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-zinc-950 transition-all active:scale-95 hover:bg-zinc-200 shadow-sm"
+                                            className="flex size-10 flex-shrink-0 items-center justify-center rounded-full bg-[#F5F5F5] text-[#131313] transition-all active:scale-[0.97] hover:bg-white"
                                         >
-                                            <div className="h-3 w-3 rounded-sm bg-zinc-950" />
+                                            <div className="size-3 rounded-sm bg-[#131313]" />
                                         </button>
                                     ) : (
                                         <button
                                             type="submit"
                                             disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
                                             aria-label="Send"
-                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
+                                            className={`flex size-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-[0.97] disabled:cursor-not-allowed ${
                                                 !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm'
-                                                    : isDark ? 'bg-white/10 text-white/30 border border-white/[0.05]' : 'bg-zinc-200 text-zinc-400'
+                                                    ? 'bg-[#F5F5F5] text-[#131313] hover:bg-white'
+                                                    : isDark ? 'bg-[#202020] text-[#737373] border border-[#292929]' : 'bg-zinc-200 text-zinc-400'
                                             }`}
                                         >
-                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+                                            <ArrowUp className="size-5" strokeWidth={2.25} />
                                         </button>
                                     )}
                                 </div>
