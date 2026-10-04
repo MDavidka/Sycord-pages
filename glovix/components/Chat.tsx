@@ -38,7 +38,7 @@ import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
-import { DebugInfoModal, type DebugReportData } from './DebugInfoModal';
+import { DebugInfoModal, ShareDebugWarningModal, type DebugReportData } from './DebugInfoModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
 import {
     DropdownMenu,
@@ -3241,6 +3241,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             return;
         }
 
+        // Handle /support command
+        if (input.trim().startsWith("/support") || input.trim().startsWith("/share")) {
+            setInput("");
+            setShowSlashMenu(false);
+            setShowStandaloneShareWarning(true);
+            return;
+        }
+
         // Slash commands — attach / libraries / connections / help / credits
         const slashCmd = input.trim().toLowerCase();
         if (
@@ -3400,6 +3408,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
     const [showDebugModal, setShowDebugModal] = useState(false);
+    const [showStandaloneShareWarning, setShowStandaloneShareWarning] = useState(false);
     const [debugModalLoading, setDebugModalLoading] = useState(false);
     const [debugReportData, setDebugReportData] = useState<DebugReportData | null>(null);
     const [userCredits, setUserCredits] = useState<{
@@ -4343,102 +4352,81 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,18.5rem)] p-2 rounded-2xl ${isDark ? 'border-white/[0.08] bg-[#18181b] text-zinc-200 shadow-2xl shadow-black/60' : 'bg-white border-zinc-200 text-zinc-800 shadow-xl'}`}
+                                        className={`w-[min(92vw,20rem)] p-3.5 rounded-3xl ${isDark ? "border-white/[0.1] bg-[#18181b] text-zinc-200 shadow-2xl shadow-black/80" : "bg-white border-zinc-200 text-zinc-800 shadow-xl"}`}
                                     >
-                                        {/* Top Credit Card with Blue Status Bar and Reset Time */}
+                                        {/* Credit Segment */}
                                         <div
-                                            className={`p-3 rounded-xl mb-1 cursor-pointer transition-colors ${
-                                                isDark ? 'bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06]' : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/80'
+                                            className={`p-3 rounded-2xl cursor-pointer transition-colors ${
+                                                isDark ? "bg-white/[0.03] hover:bg-white/[0.06]" : "bg-zinc-50 hover:bg-zinc-100"
                                             }`}
                                             onClick={() => {
                                                 setShowSlashMenu(false);
-                                                setLibraryView('credits');
+                                                setLibraryView("credits");
                                             }}
                                         >
-                                            <div className="flex items-center justify-between mb-1">
-                                                <div className="flex items-center gap-1.5">
-                                                    <CreditCard className="w-3.5 h-3.5 text-blue-400" />
-                                                    <span className="text-xs font-semibold tracking-tight text-white">
-                                                        {userCredits ? `${userCredits.credits}/${userCredits.maxCredits} credit` : '5/10 credit'}
-                                                    </span>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <span className="text-[13px] font-bold tracking-tight text-white">
+                                                    {userCredits ? `${userCredits.credits} credit left` : "5 credit left"}
+                                                </span>
+
+                                                {/* Blue Pill Progress Bar */}
+                                                <div className="w-28 bg-zinc-700/60 rounded-full h-2 overflow-hidden flex items-center p-0.5">
+                                                    <div
+                                                        className="bg-[#00a3ff] h-full rounded-full transition-all duration-300"
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                Math.max(
+                                                                    0,
+                                                                    ((userCredits?.credits ?? 5) / (userCredits?.maxCredits ?? 10)) * 100
+                                                                )
+                                                            )}%`,
+                                                        }}
+                                                    />
                                                 </div>
-                                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                                    {userCredits?.isPremium ? 'PRO' : 'FREE'}
-                                                </span>
                                             </div>
 
-                                            {/* Blue status bar of remaining credit */}
-                                            <div className="w-full bg-blue-500/20 rounded-full h-1.5 overflow-hidden my-1.5">
-                                                <div
-                                                    className="bg-blue-500 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
-                                                    style={{
-                                                        width: `${Math.min(
-                                                            100,
-                                                            Math.max(
-                                                                0,
-                                                                ((userCredits?.credits ?? 5) / (userCredits?.maxCredits ?? 10)) * 100
-                                                            )
-                                                        )}%`,
-                                                    }}
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                                                <span>Remaining balance</span>
-                                                <span className="flex items-center gap-1">
-                                                    <Clock className="w-3 h-3 text-zinc-500" />
-                                                    Resets daily at 00:00 UTC
-                                                </span>
+                                            <div className="flex items-center justify-between text-[11px] text-zinc-400 font-normal">
+                                                <span>Remaining balance.</span>
+                                                <span>{userCredits?.resetTime || "Resets daily at 00:00 UTC"}</span>
                                             </div>
                                         </div>
 
-                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
+                                        <div className={`my-2 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200"}`} />
 
-                                        {/* Action 1: Upload file */}
+                                        {/* Segment 1: Upload file */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
+                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 documentInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
                                             }}
                                         >
                                             <FileUp className="h-4 w-4 text-zinc-400" />
                                             Upload file
-                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
+                                            <span className="ml-auto text-xs font-mono text-zinc-500">/file</span>
                                         </DropdownMenuItem>
 
+                                        {/* Segment 2: Upload image */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
+                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 fileInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
                                             }}
                                         >
                                             <ImageIcon className="h-4 w-4 text-zinc-400" />
                                             Upload image
-                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/image</span>
+                                            <span className="ml-auto text-xs font-mono text-zinc-500">/image</span>
                                         </DropdownMenuItem>
 
-                                        {/* Action 2: Connections */}
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
-                                            onSelect={() => {
-                                                setLibraryView('mcp');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <Puzzle className="h-4 w-4 text-purple-400" />
-                                            Connections
-                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/connections</span>
-                                        </DropdownMenuItem>
+                                        <div className={`my-2 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200"}`} />
 
-                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
-
-                                        {/* Action 3: Debug Information */}
+                                        {/* Segment 3: Debug Information */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg text-blue-400 hover:text-blue-300 font-medium"
+                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={async () => {
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
                                                 setShowDebugModal(true);
                                                 setDebugModalLoading(true);
                                                 try {
@@ -4449,35 +4437,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 }
                                             }}
                                         >
-                                            <Bug className="h-4 w-4 text-blue-400" />
-                                            Debug Information
-                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-blue-400/80' : 'text-blue-600'}`}>/debug</span>
+                                            <Bug className="h-4 w-4 text-zinc-400" />
+                                            Debug information
+                                            <span className="ml-auto text-xs font-mono text-zinc-500">/debug</span>
                                         </DropdownMenuItem>
 
-                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
-
-                                        {/* Secondary actions: Skills & Help */}
+                                        {/* Segment 4: Support */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
+                                            className="gap-3 text-[13px] py-2.5 px-3 cursor-pointer rounded-xl text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
-                                                setLibraryView('skills');
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
+                                                setShowStandaloneShareWarning(true);
                                             }}
                                         >
-                                            <Sparkles className="h-4 w-4 text-amber-400" />
-                                            Skills
-                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/skills</span>
-                                        </DropdownMenuItem>
-
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
-                                            onSelect={() => {
-                                                setLibraryView('help');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <HelpCircle className="h-4 w-4 opacity-70" />
-                                            Help and support
+                                            <HelpCircle className="h-4 w-4 text-zinc-400" />
+                                            Support
+                                            <span className="ml-auto text-xs font-mono text-zinc-500">/support</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -4593,6 +4568,38 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         setDebugModalLoading(false);
                     }
                 }}
+                isDark={isDark}
+            />
+
+            {/* Standalone Debug Share Warning Modal (Triggered by /support) */}
+            <ShareDebugWarningModal
+                isOpen={showStandaloneShareWarning}
+                onClose={() => setShowStandaloneShareWarning(false)}
+                onConfirmDownload={async () => {
+                    try {
+                        let report = debugReportData;
+                        if (!report) {
+                            report = await buildDebugReportData();
+                            setDebugReportData(report);
+                        }
+                        const jsonString = JSON.stringify(report, null, 2);
+                        const blob = new Blob([jsonString], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        a.download = `sycord-debug-report-${report.topLevel.projectContext.projectId || 'global'}-${ts}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (e) {
+                        console.error('[Support] Share download error:', e);
+                    }
+                }}
+                debugId={debugReportData?.topLevel.projectContext.chatId
+                    ? `${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) % 9000) + 1000}-${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) * 31 % 900000) + 100000}-${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) * 17 % 900000) + 100000}`
+                    : '5836-384638-736439'}
                 isDark={isDark}
             />
         </div>

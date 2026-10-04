@@ -141,13 +141,98 @@ export interface DebugReportData {
   }
 }
 
-interface DebugInfoModalProps {
+export interface DebugInfoModalProps {
   isOpen: boolean
   onClose: () => void
   data: DebugReportData | null
   loading?: boolean
   onRefresh?: () => void
   isDark?: boolean
+}
+
+export interface ShareDebugWarningModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirmDownload: () => void
+  debugId?: string
+  isDark?: boolean
+}
+
+export function ShareDebugWarningModal({
+  isOpen,
+  onClose,
+  onConfirmDownload,
+  debugId = '5836-384638-736439',
+  isDark = true,
+}: ShareDebugWarningModalProps) {
+  const [accepted, setAccepted] = useState(false)
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className={cn(
+          'sm:max-w-md p-6 overflow-hidden border shadow-2xl rounded-3xl text-center flex flex-col items-center gap-4',
+          isDark
+            ? 'bg-[#18181b] border-white/[0.1] text-zinc-100'
+            : 'bg-white border-zinc-200 text-zinc-900',
+        )}
+      >
+        <DialogHeader className="p-0 border-none flex flex-col items-center space-y-0">
+          <DialogTitle className="text-xl font-bold tracking-tight text-center leading-snug flex items-center justify-center gap-2">
+            Your are about to share <span className="text-xl">📂</span>
+            <br />
+            your debug with sycord
+          </DialogTitle>
+          <p className={cn('text-xs mt-2 max-w-xs text-center leading-relaxed', isDark ? 'text-zinc-400' : 'text-zinc-500')}>
+            Support memeber will have acces your chat history , models , spending, connection details.
+          </p>
+        </DialogHeader>
+
+        {/* Debug ID Input Box */}
+        <div
+          className={cn(
+            'w-full py-3 px-4 rounded-2xl font-mono text-center text-sm font-semibold tracking-widest border',
+            isDark ? 'bg-white/[0.04] border-white/[0.1] text-zinc-200' : 'bg-zinc-100 border-zinc-200 text-zinc-700',
+          )}
+        >
+          {debugId}
+        </div>
+
+        {/* Accept Privacy Checkbox */}
+        <label className="flex items-center justify-center gap-2.5 cursor-pointer text-xs select-none mt-1">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            className="size-4 rounded border-zinc-700 bg-zinc-800 text-blue-500 focus:ring-0 cursor-pointer"
+          />
+          <span className={isDark ? 'text-zinc-300' : 'text-zinc-700'}>
+            accept privacy and policy
+          </span>
+        </label>
+
+        {/* Download Zip / JSON Button */}
+        <Button
+          type="button"
+          disabled={!accepted}
+          onClick={() => {
+            if (accepted) {
+              onConfirmDownload()
+              onClose()
+            }
+          }}
+          className={cn(
+            'w-full py-3 h-11 rounded-2xl text-sm font-semibold transition-all duration-200 mt-2',
+            accepted
+              ? 'bg-zinc-200 hover:bg-white text-zinc-900 shadow-lg cursor-pointer'
+              : 'bg-zinc-800/80 text-zinc-500 cursor-not-allowed border border-white/[0.05]',
+          )}
+        >
+          dowland zip
+        </Button>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 export function DebugInfoModal({
@@ -160,6 +245,7 @@ export function DebugInfoModal({
 }: DebugInfoModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'json'>('overview')
   const [copied, setCopied] = useState(false)
+  const [showShareWarning, setShowShareWarning] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
 
   const toggleExpand = (id: string) => {
@@ -197,65 +283,93 @@ export function DebugInfoModal({
     }
   }
 
+  const debugCode = data?.topLevel.projectContext.chatId
+    ? `${Math.abs(data.topLevel.projectContext.chatId.split('').reduce((acc: number, c: string) => (acc << 5) - acc + c.charCodeAt(0), 0) % 9000) + 1000}-${Math.abs(data.topLevel.projectContext.chatId.split('').reduce((acc: number, c: string) => (acc << 5) - acc + c.charCodeAt(0), 0) * 31 % 900000) + 100000}-${Math.abs(data.topLevel.projectContext.chatId.split('').reduce((acc: number, c: string) => (acc << 5) - acc + c.charCodeAt(0), 0) * 17 % 900000) + 100000}`
+    : '5836-384638-736439'
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className={cn(
-          'sm:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden border shadow-2xl rounded-2xl',
-          isDark
-            ? 'bg-[#141416] border-white/[0.08] text-zinc-100'
-            : 'bg-white border-zinc-200 text-zinc-900',
-        )}
-      >
-        {/* Header */}
-        <DialogHeader
+    <>
+      <ShareDebugWarningModal
+        isOpen={showShareWarning}
+        onClose={() => setShowShareWarning(false)}
+        onConfirmDownload={handleDownload}
+        debugId={debugCode}
+        isDark={isDark}
+      />
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent
           className={cn(
-            'px-6 py-4 border-b flex flex-row items-center justify-between space-y-0 shrink-0',
-            isDark ? 'border-white/[0.08] bg-[#18181b]' : 'border-zinc-200 bg-zinc-50/80',
+            'sm:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden border shadow-2xl rounded-2xl',
+            isDark
+              ? 'bg-[#141416] border-white/[0.08] text-zinc-100'
+              : 'bg-white border-zinc-200 text-zinc-900',
           )}
         >
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                'size-9 rounded-xl flex items-center justify-center border shadow-inner',
-                isDark
-                  ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                  : 'bg-blue-50 border-blue-200 text-blue-600',
-              )}
-            >
-              <Bug className="size-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-base font-semibold tracking-tight flex items-center gap-2">
-                Debug Information
-                {data?.topLevel.vmConnectionDetails.status === 'connected' ? (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                    Live
-                  </span>
-                ) : data?.secondLevel.modelError.encountered ? (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/20">
-                    Error
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                    Ready
-                  </span>
+          {/* Header */}
+          <DialogHeader
+            className={cn(
+              'px-6 py-4 border-b flex flex-row items-center justify-between space-y-0 shrink-0',
+              isDark ? 'border-white/[0.08] bg-[#18181b]' : 'border-zinc-200 bg-zinc-50/80',
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  'size-9 rounded-xl flex items-center justify-center border shadow-inner',
+                  isDark
+                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                    : 'bg-blue-50 border-blue-200 text-blue-600',
                 )}
-              </DialogTitle>
-              <p className={cn('text-xs', isDark ? 'text-zinc-400' : 'text-zinc-500')}>
-                VM connection metrics, agent activity log, model diagnostics & exact responses
-              </p>
+              >
+                <Bug className="size-4" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-semibold tracking-tight flex items-center gap-2">
+                  Debug Information
+                  {data?.topLevel.vmConnectionDetails.status === 'connected' ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                      Live
+                    </span>
+                  ) : data?.secondLevel.modelError.encountered ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/20">
+                      Error
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                      Ready
+                    </span>
+                  )}
+                </DialogTitle>
+                <p className={cn('text-xs', isDark ? 'text-zinc-400' : 'text-zinc-500')}>
+                  VM connection metrics, agent activity log, model diagnostics & exact responses
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 mr-6">
-            {onRefresh && (
+            <div className="flex items-center gap-2 mr-6">
+              {onRefresh && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRefresh}
+                  disabled={loading}
+                  className={cn(
+                    'h-8 px-2.5 rounded-lg text-xs gap-1.5 border',
+                    isDark
+                      ? 'border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
+                  )}
+                >
+                  <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
+                  Refresh
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={onRefresh}
-                disabled={loading}
+                onClick={handleCopy}
                 className={cn(
                   'h-8 px-2.5 rounded-lg text-xs gap-1.5 border',
                   isDark
@@ -263,46 +377,30 @@ export function DebugInfoModal({
                     : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
                 )}
               >
-                <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
-                Refresh
+                {copied ? (
+                  <>
+                    <Check className="size-3.5 text-emerald-400" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-3.5" />
+                    Copy JSON
+                  </>
+                )}
               </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
-              className={cn(
-                'h-8 px-2.5 rounded-lg text-xs gap-1.5 border',
-                isDark
-                  ? 'border-white/[0.08] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]'
-                  : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
-              )}
-            >
-              {copied ? (
-                <>
-                  <Check className="size-3.5 text-emerald-400" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="size-3.5" />
-                  Copy JSON
-                </>
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleDownload}
-              className="h-8 px-2.5 rounded-lg text-xs gap-1.5 bg-blue-600 hover:bg-blue-500 text-white"
-            >
-              <Download className="size-3.5" />
-              Download (.json)
-            </Button>
-          </div>
-        </DialogHeader>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={() => setShowShareWarning(true)}
+                className="h-8 px-2.5 rounded-lg text-xs gap-1.5 bg-blue-600 hover:bg-blue-500 text-white"
+              >
+                <Download className="size-3.5" />
+                Download (.json)
+              </Button>
+            </div>
+          </DialogHeader>
 
         {/* Tab Navigation */}
         <div
@@ -590,7 +688,7 @@ export function DebugInfoModal({
                 </div>
               ) : (
                 <div className="relative pl-6 space-y-3 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[1px] before:bg-white/[0.08]">
-                  {data.secondLevel.activityLog.map((act, idx) => {
+                  {data.secondLevel.activityLog.map((act: any, idx: number) => {
                     const id = act.id || `act-${idx}`
                     const isExpanded = expandedItems[id]
 
@@ -761,5 +859,6 @@ export function DebugInfoModal({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   )
 }
