@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, extractTextToolCalls, stripToolCallMarkup, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -38,6 +38,7 @@ import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
+import { DebugInfoModal, type DebugReportData } from './DebugInfoModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
 import {
     DropdownMenu,
@@ -1872,13 +1873,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         const applyEvent = (event: ProjectAgentEvent) => {
             if (controller.signal.aborted) return;
-            if (event.tursoSessionId) tursoSessionId = event.tursoSessionId;
+            if (event.tursoSessionId) {
+                tursoSessionId = event.tursoSessionId;
+                latestTursoSessionIdRef.current = event.tursoSessionId;
+            }
             if (event.session) {
                 activeSession = event.sessionAuthoritative
                     ? event.session
                     : Math.max(activeSession, event.session);
+                latestAgentSessionRef.current = activeSession;
             }
-            if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
+            if (event.eventId) {
+                highestEventId = Math.max(highestEventId, event.eventId);
+                latestEventIdRef.current = highestEventId;
+            }
 
             switch (event.type) {
                 case 'processing':
@@ -2083,6 +2091,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!pendingActions.includes(actionId)) pendingActions.push(actionId);
                     actionByCall.set(key, pendingActions);
                     updateAction(actionId, { status: 'running', args });
+                    logActivity({
+                        type: 'agent_used',
+                        tool: tool,
+                        toolCallId: event.toolCallId,
+                        arguments: event.arguments ?? args,
+                        eventId: event.eventId,
+                    });
                     break;
                 }
                 case 'tool_finished': {
@@ -2112,6 +2127,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         args: args === '{}' ? actionsRef.current.find(action => action.id === actionId)?.args : args,
                         eventId: event.eventId,
                         completedAt: Date.now(),
+                    });
+                    logActivity({
+                        type: 'agent_returned_tool',
+                        tool: tool,
+                        toolCallId: event.toolCallId,
+                        status: event.ok === false ? 'error' : 'done',
+                        result: event.text,
+                        eventId: event.eventId,
                     });
                     break;
                 }
@@ -2223,6 +2246,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     completed = true;
                     clearPendingQuestion();
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'vm_responded',
+                        statusCode: 200,
+                    });
+                    logActivity({
+                        type: 'backend_displayed',
+                        exactResponseDisplayed: assistantContent,
+                    });
                     break;
                 }
                 case 'stopped':
@@ -2235,6 +2266,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             : action
                     ));
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'vm_responded',
+                        statusCode: 200,
+                        status: 'stopped',
+                    });
+                    logActivity({
+                        type: 'backend_displayed',
+                        exactResponseDisplayed: assistantContent || 'Stopped.',
+                    });
                     break;
                 case 'error':
                     errorText = (typeof event.text === 'string' && event.text.trim()) ||
@@ -2247,6 +2287,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             : action
                     ));
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'model_error',
+                        error: errorText,
+                        code: 'STREAM_ERROR',
+                        eventId: event.eventId,
+                    });
+                    logActivity({
+                        type: 'failed_task',
+                        error: errorText,
+                        eventId: event.eventId,
+                    });
                     break;
             }
 
@@ -2270,6 +2321,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 || availableModelChoices?.find(choice => choice.modelType === selectedModel)?.label
                 || selectedModel
                 || 'syra-base';
+
+            logActivity({
+                type: 'vm_accepted_request',
+                vmApiUsed: `/api/projects/${encodeURIComponent(projectId)}/agent`,
+                session: afterSession,
+                tursoSessionId,
+            });
 
             const result = await streamProjectAgent({
                 projectId,
@@ -3166,29 +3224,39 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         e.preventDefault();
         if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
 
-        // Handle /debug command - fetch VM connection debug info
+        // Handle /debug command - open rich debug modal & collect telemetry JSON
         if (input.trim().startsWith("/debug")) {
-            setDebugLoading(true);
-            setDebugInfo(null);
             setInput("");
+            setShowSlashMenu(false);
+            setShowDebugModal(true);
+            setDebugModalLoading(true);
             try {
-                const res = await fetch("/api/debug", { headers: { Accept: "application/json" } });
-                const data = await res.json();
-                setDebugInfo(data);
+                const report = await buildDebugReportData();
+                setDebugReportData(report);
             } catch (err: any) {
-                setDebugInfo({ error: err?.message || "Debug request failed" });
+                console.error("Debug report failed:", err);
             } finally {
-                setDebugLoading(false);
+                setDebugModalLoading(false);
             }
             return;
         }
 
-        // Slash commands — attach / libraries / help (do not send as chat)
+        // Slash commands — attach / libraries / connections / help / credits
         const slashCmd = input.trim().toLowerCase();
-        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
+        if (
+            slashCmd === '/' ||
+            slashCmd === '/skills' ||
+            slashCmd === '/mcp' ||
+            slashCmd === '/integrations' ||
+            slashCmd === '/connections' ||
+            slashCmd === '/connection' ||
+            slashCmd === '/help' ||
+            slashCmd === '/credit' ||
+            slashCmd === '/credits'
+        ) {
             setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
-            else if (slashCmd === '/mcp' || slashCmd === '/integrations') setLibraryView('mcp');
+            else if (slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/connections' || slashCmd === '/connection') setLibraryView('mcp');
             else if (slashCmd === '/help') setLibraryView('help');
             else if (slashCmd === '/credit' || slashCmd === '/credits') setLibraryView('credits');
             setInput('');
@@ -3200,7 +3268,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             fileInputRef.current?.click();
             return;
         }
-        if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file') {
+        if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file' || slashCmd === '/upload') {
             setInput('');
             setShowSlashMenu(false);
             documentInputRef.current?.click();
@@ -3301,6 +3369,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
 
         addMessage(displayMessage);
+        logActivity({
+            type: 'user_asked',
+            messageId: (displayMessage as any).id || `usr_${Date.now()}`,
+            prompt: aiText,
+            attachments: [...selectedImages, ...selectedDocuments.map(d => ({ name: d.name, size: d.content.length }))],
+            pickedElement: pickedElementForSend,
+        });
         setInput('');
         setSelectedImages([]);
         setSelectedDocuments([]);
@@ -3324,8 +3399,192 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showOmniModal, setShowOmniModal] = useState(false);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
-    const [debugInfo, setDebugInfo] = useState<any>(null);
-    const [debugLoading, setDebugLoading] = useState(false);
+    const [showDebugModal, setShowDebugModal] = useState(false);
+    const [debugModalLoading, setDebugModalLoading] = useState(false);
+    const [debugReportData, setDebugReportData] = useState<DebugReportData | null>(null);
+    const [userCredits, setUserCredits] = useState<{
+        credits: number;
+        maxCredits: number;
+        isPremium: boolean;
+        resetTime: string;
+    } | null>(null);
+
+    const activityLogRef = useRef<any[]>([]);
+    const latestTursoSessionIdRef = useRef<string | null>(null);
+    const latestAgentSessionRef = useRef<number | null>(null);
+    const latestEventIdRef = useRef<number | null>(null);
+
+    const logActivity = useCallback((entry: any) => {
+        const act = {
+            id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            ...entry,
+        };
+        activityLogRef.current = [...activityLogRef.current.slice(-150), act];
+    }, []);
+
+    const loadUserCredits = useCallback(async () => {
+        try {
+            const res = await fetch('/api/user/credits', { headers: { Accept: 'application/json' } });
+            if (res.ok) {
+                const data = await res.json();
+                const cr = typeof data?.credits === 'number' ? data.credits : 5;
+                const maxCr = data?.isPremium ? 200 : 10;
+                setUserCredits({
+                    credits: cr,
+                    maxCredits: maxCr,
+                    isPremium: Boolean(data?.isPremium),
+                    resetTime: 'Resets daily at 00:00 UTC',
+                });
+            }
+        } catch {
+            // keep existing
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadUserCredits();
+    }, [loadUserCredits]);
+
+    const buildDebugReportData = useCallback(async (): Promise<DebugReportData> => {
+        const projectId = getHostProjectId() || 'global';
+        const chatId = currentChatId || getEmbeddedChatId() || 'global';
+
+        let vmDebug: any = null;
+        try {
+            const res = await fetch('/api/debug', { headers: { Accept: 'application/json' } });
+            vmDebug = await res.json();
+        } catch (e: any) {
+            vmDebug = { error: e?.message || 'Failed to fetch debug endpoint' };
+        }
+
+        let creditsData = userCredits;
+        if (!creditsData) {
+            try {
+                const cres = await fetch('/api/user/credits', { headers: { Accept: 'application/json' } });
+                const cjson = await cres.json();
+                creditsData = {
+                    credits: typeof cjson?.credits === 'number' ? cjson.credits : 5,
+                    maxCredits: cjson?.isPremium ? 200 : 10,
+                    isPremium: !!cjson?.isPremium,
+                    resetTime: 'Resets daily at 00:00 UTC',
+                };
+                setUserCredits(creditsData);
+            } catch {
+                creditsData = {
+                    credits: 5,
+                    maxCredits: 10,
+                    isPremium: false,
+                    resetTime: 'Resets daily at 00:00 UTC',
+                };
+            }
+        }
+
+        const state = useStore.getState();
+        const allMsgs = state.messages || [];
+        const lastAssistantMsg = [...allMsgs].reverse().find(m => m.role === 'assistant');
+        const exactDisplayed = typeof lastAssistantMsg?.content === 'string'
+            ? lastAssistantMsg.content
+            : Array.isArray(lastAssistantMsg?.content)
+                ? lastAssistantMsg.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                : '';
+
+        const formattedMessages = allMsgs.map((m: any, idx) => {
+            const textContent = typeof m.content === 'string'
+                ? m.content
+                : Array.isArray(m.content)
+                    ? m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                    : '';
+            return {
+                messageId: m.id || `msg-${idx}`,
+                role: m.role,
+                timestamp: m.createdAt || Date.now(),
+                whatBackendDisplayed: textContent,
+                exactResponseDisplayed: m.role === 'assistant' ? textContent : undefined,
+                thinking: m.thinking,
+                actionsCount: Array.isArray(m.agentActions) ? m.agentActions.length : undefined,
+                actions: m.agentActions,
+                segments: m.segments,
+            };
+        });
+
+        const hasError = activityLogRef.current.some(a => a.type === 'model_error' || a.status === 'error');
+        const failedTasks = activityLogRef.current
+            .filter(a => a.status === 'error' || a.type === 'failed_task')
+            .map(a => ({
+                name: a.tool || a.type,
+                reason: a.error || String(a.result || 'Failed task'),
+                timestamp: a.timestamp,
+            }));
+
+        const activeChoice = availableModelChoices?.find(c => c.modelType === selectedModel || c.apiModel === selectedModel);
+
+        return {
+            topLevel: {
+                timestamp: new Date().toISOString(),
+                localTime: new Date().toLocaleTimeString(),
+                chosenModel: {
+                    modelType: selectedModel,
+                    apiModel: activeChoice?.apiModel || selectedModel,
+                    label: activeChoice?.label || selectedModel,
+                    thinkingLevel: effortLevel,
+                },
+                vmConnectionDetails: {
+                    status: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable || vmDebug?.coolify?.reachable) ? 'connected' : vmDebug?.error ? 'error' : 'connecting',
+                    reachable: Boolean(vmDebug?.syte?.reachable ?? vmDebug?.dokploy?.reachable ?? vmDebug?.coolify?.reachable),
+                    apiUrl: vmDebug?.syte?.apiUrl || vmDebug?.dokploy?.apiUrl || vmDebug?.coolify?.apiUrl || '/api/projects/[id]/agent',
+                    platform: vmDebug?.platform || 'syte',
+                    latencyMs: vmDebug?.syte?.latencyMs ?? vmDebug?.dokploy?.latencyMs ?? vmDebug?.coolify?.latencyMs ?? null,
+                    tursoSessionId: latestTursoSessionIdRef.current || null,
+                    agentSession: latestAgentSessionRef.current || null,
+                    agentEventId: latestEventIdRef.current || null,
+                    connectionsConnected: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 1 : 0,
+                    connectionsFailed: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 0 : 1,
+                    error: vmDebug?.error || vmDebug?.syte?.error || vmDebug?.dokploy?.error || null,
+                    syte: vmDebug?.syte,
+                    dokploy: vmDebug?.dokploy,
+                    coolify: vmDebug?.coolify,
+                },
+                creditInfo: {
+                    remainingCredits: creditsData?.credits ?? 5,
+                    maxCredits: creditsData?.maxCredits ?? 10,
+                    formatted: `${creditsData?.credits ?? 5}/${creditsData?.maxCredits ?? 10} credit`,
+                    isPremium: Boolean(creditsData?.isPremium),
+                    resetTime: creditsData?.resetTime || 'Resets daily at 00:00 UTC',
+                },
+                projectContext: {
+                    projectId: projectId,
+                    chatId: chatId,
+                    clientUrl: typeof window !== 'undefined' ? window.location.href : '',
+                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                },
+            },
+            secondLevel: {
+                activityLog: [...activityLogRef.current],
+                rateLimit: {
+                    encountered: activityLogRef.current.some(a => a.type === 'rate_limit'),
+                    retryAfter: null,
+                    details: null,
+                },
+                modelError: {
+                    encountered: hasError,
+                    error: failedTasks[0]?.reason || null,
+                    code: hasError ? 'MODEL_ERROR' : null,
+                },
+                failedTask: {
+                    failed: failedTasks.length > 0,
+                    failedTasks: failedTasks,
+                },
+                connectionsSummary: {
+                    connected: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? ['syte_workspace_vm', 'agent_stream_api'] : ['local_client'],
+                    failed: vmDebug?.error ? [String(vmDebug.error)] : [],
+                },
+                allMessages: formattedMessages,
+                exactResponseDisplayed: exactDisplayed,
+            },
+        };
+    }, [availableModelChoices, currentChatId, effortLevel, selectedModel, userCredits]);
+
     const slashLoadedForRef = useRef<string | null>(null);
 
     const loadSlashExtras = async (projectId: string, force = false) => {
@@ -3810,48 +4069,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 </div>
             </div>
 
-            {/* Debug Panel */}
-            {debugLoading && (
-                <div className={`px-4 pb-2 ${isDark ? 'text-[#888]' : 'text-gray-500'} text-xs flex items-center gap-2`}>
-                    <span className="animate-spin">⟳</span>
-                    Checking Dokploy API...
-                </div>
-            )}
-            {debugInfo && !debugLoading && (
-                <div className="px-4 pb-3">
-                    <div className={`max-w-[720px] mx-auto rounded-xl overflow-hidden ${isDark ? 'bg-[#1c1c1c] border border-[#2a2a2a]' : 'bg-gray-50 border border-gray-200'}`}>
-                        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${isDark ? 'border-[#2a2a2a]' : 'border-gray-200'}`}>
-                            <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${debugInfo.dokploy?.reachable ? 'bg-green-500' : 'bg-red-500'}`} />
-                                <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API Status</span>
-                            </div>
-                            <button type="button" onClick={() => setDebugInfo(null)}
-                                className={`p-1 rounded ${isDark ? 'hover:bg-[#2a2a2a] text-[#666]' : 'hover:bg-gray-200 text-gray-400'}`}>
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <div className="p-4 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto">
-                            {debugInfo.error ? (
-                                <div className="text-red-400">{debugInfo.error}</div>
-                            ) : (
-                                <div className="space-y-2">
-                                    <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                        <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API</div>
-                                        <div>Configured: <span className={debugInfo.dokploy?.configured ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.configured ? 'Yes' : 'No'}</span></div>
-                                        <div>Reachable: <span className={debugInfo.dokploy?.reachable ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.reachable ? 'Yes' : 'No'}</span></div>
-                                        <div>API URL: <span className={isDark ? 'text-[#7c3aed]' : 'text-purple-700'}>{debugInfo.dokploy?.apiUrl || 'N/A'}</span></div>
-                                        {debugInfo.dokploy?.projectsCount !== undefined && <div>Projects: {debugInfo.dokploy.projectsCount}</div>}
-                                        {debugInfo.dokploy?.latencyMs && <div>Latency: {debugInfo.dokploy.latencyMs}ms</div>}
-                                        {debugInfo.dokploy?.error && <div className="text-red-400">Error: {debugInfo.dokploy.error}</div>}
-                                    </div>
-                                    <div className={`text-xs ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>Timestamp: {debugInfo.timestamp}</div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Input Area - centered with margins */}
             <div className="px-4 pb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
                 <div className="max-w-[720px] mx-auto">
@@ -4008,56 +4225,134 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-white/[0.08] bg-[#181818] text-zinc-200' : ''}`}
+                                        className={`w-[min(92vw,18.5rem)] p-2 rounded-2xl ${isDark ? 'border-white/[0.08] bg-[#18181b] text-zinc-200 shadow-2xl shadow-black/60' : 'bg-white border-zinc-200 text-zinc-800 shadow-xl'}`}
                                     >
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                fileInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
+                                        {/* Top Credit Card with Blue Status Bar and Reset Time */}
+                                        <div
+                                            className={`p-3 rounded-xl mb-1 cursor-pointer transition-colors ${
+                                                isDark ? 'bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.06]' : 'bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/80'
+                                            }`}
+                                            onClick={() => {
+                                                setShowSlashMenu(false);
+                                                setLibraryView('credits');
                                             }}
                                         >
-                                            <ImageIcon className="h-4 w-4 opacity-70" />
-                                            Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/image</span>
-                                        </DropdownMenuItem>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <div className="flex items-center gap-1.5">
+                                                    <CreditCard className="w-3.5 h-3.5 text-blue-400" />
+                                                    <span className="text-xs font-semibold tracking-tight text-white">
+                                                        {userCredits ? `${userCredits.credits}/${userCredits.maxCredits} credit` : '5/10 credit'}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                                    {userCredits?.isPremium ? 'PRO' : 'FREE'}
+                                                </span>
+                                            </div>
+
+                                            {/* Blue status bar of remaining credit */}
+                                            <div className="w-full bg-blue-500/20 rounded-full h-1.5 overflow-hidden my-1.5">
+                                                <div
+                                                    className="bg-blue-500 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                                    style={{
+                                                        width: `${Math.min(
+                                                            100,
+                                                            Math.max(
+                                                                0,
+                                                                ((userCredits?.credits ?? 5) / (userCredits?.maxCredits ?? 10)) * 100
+                                                            )
+                                                        )}%`,
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                                                <span>Remaining balance</span>
+                                                <span className="flex items-center gap-1">
+                                                    <Clock className="w-3 h-3 text-zinc-500" />
+                                                    Resets daily at 00:00 UTC
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
+
+                                        {/* Action 1: Upload file */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
                                             onSelect={() => {
                                                 documentInputRef.current?.click();
                                                 if (input.startsWith('/')) setInput('');
                                             }}
                                         >
-                                            <FileUp className="h-4 w-4 opacity-70" />
-                                            File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
+                                            <FileUp className="h-4 w-4 text-zinc-400" />
+                                            Upload file
+                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
+
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
                                             onSelect={() => {
-                                                setLibraryView('skills');
+                                                fileInputRef.current?.click();
                                                 if (input.startsWith('/')) setInput('');
                                             }}
                                         >
-                                            <Sparkles className="h-4 w-4 opacity-70" />
-                                            Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/skills</span>
+                                            <ImageIcon className="h-4 w-4 text-zinc-400" />
+                                            Upload image
+                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/image</span>
                                         </DropdownMenuItem>
+
+                                        {/* Action 2: Connections */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
                                             onSelect={() => {
                                                 setLibraryView('mcp');
                                                 if (input.startsWith('/')) setInput('');
                                             }}
                                         >
-                                            <Puzzle className="h-4 w-4 opacity-70" />
-                                            Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/integrations</span>
+                                            <Puzzle className="h-4 w-4 text-purple-400" />
+                                            Connections
+                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/connections</span>
                                         </DropdownMenuItem>
+
                                         <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
+
+                                        {/* Action 3: Debug Information */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg text-blue-400 hover:text-blue-300 font-medium"
+                                            onSelect={async () => {
+                                                if (input.startsWith('/')) setInput('');
+                                                setShowDebugModal(true);
+                                                setDebugModalLoading(true);
+                                                try {
+                                                    const report = await buildDebugReportData();
+                                                    setDebugReportData(report);
+                                                } finally {
+                                                    setDebugModalLoading(false);
+                                                }
+                                            }}
+                                        >
+                                            <Bug className="h-4 w-4 text-blue-400" />
+                                            Debug Information
+                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-blue-400/80' : 'text-blue-600'}`}>/debug</span>
+                                        </DropdownMenuItem>
+
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
+
+                                        {/* Secondary actions: Skills & Help */}
+                                        <DropdownMenuItem
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
+                                            onSelect={() => {
+                                                setLibraryView('skills');
+                                                if (input.startsWith('/')) setInput('');
+                                            }}
+                                        >
+                                            <Sparkles className="h-4 w-4 text-amber-400" />
+                                            Skills
+                                            <span className={`ml-auto text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/skills</span>
+                                        </DropdownMenuItem>
+
+                                        <DropdownMenuItem
+                                            className="gap-2.5 text-[13px] py-2 cursor-pointer rounded-lg"
                                             onSelect={() => {
                                                 setLibraryView('help');
                                                 if (input.startsWith('/')) setInput('');
@@ -4065,16 +4360,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <HelpCircle className="h-4 w-4 opacity-70" />
                                             Help and support
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('credits');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <CreditCard className="h-4 w-4 opacity-70" />
-                                            Credit
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -4174,6 +4459,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </form>
                 </div>
             </div>
+
+            {/* Telemetry & Debug Information Modal */}
+            <DebugInfoModal
+                isOpen={showDebugModal}
+                onClose={() => setShowDebugModal(false)}
+                data={debugReportData}
+                loading={debugModalLoading}
+                onRefresh={async () => {
+                    setDebugModalLoading(true);
+                    try {
+                        const report = await buildDebugReportData();
+                        setDebugReportData(report);
+                    } finally {
+                        setDebugModalLoading(false);
+                    }
+                }}
+                isDark={isDark}
+            />
         </div>
     );
 }
