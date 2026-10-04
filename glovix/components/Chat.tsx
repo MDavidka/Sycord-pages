@@ -3378,38 +3378,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
 
         const pcl = parsePlanFromConnectionStream(content);
-        if (pcl.hasPlanBlock && pcl.plan && pcl.plan.steps.length > 0) {
-            return (
-                <div className="space-y-3 w-full">
-                    <LivePlanCard
-                        plan={pcl.plan}
-                        isDark={isDark}
-                    />
-                    {pcl.cleanText ? (
-                        /```mermaid/.test(pcl.cleanText) ? (
-                            <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                    {pcl.cleanText}
-                                </ReactMarkdown>
-                            </div>
-                        ) : (
-                            <Markdown content={pcl.cleanText} className="an-markdown w-full max-w-none" />
-                        )
-                    ) : null}
-                </div>
-            );
-        }
+        const textToRender = (pcl.hasPlanBlock && pcl.cleanText) ? pcl.cleanText : content;
 
-        if (/```mermaid/.test(content)) {
+        if (/```mermaid/.test(textToRender)) {
             return (
                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {content}
+                        {textToRender}
                     </ReactMarkdown>
                 </div>
             );
         }
-        return <Markdown content={content} className="an-markdown w-full max-w-none" />;
+
+        return <Markdown content={textToRender} className="an-markdown w-full max-w-none" />;
     };
 
     // Embedded inside a Sycord project → show the mobile chrome (back button,
@@ -3631,7 +3612,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         }
 
                         const questionSegments = group.role === 'assistant' && Array.isArray(group.segments)
-                            ? group.segments.filter(s => s.type === 'question' && s.question)
+                            ? group.segments.filter(s => {
+                                if (s.type !== 'question' || !s.question) return false;
+                                const q = s.question;
+                                const isAnswered = q.status === 'answered' || s.answered || (q.answer !== undefined && q.answer !== null);
+                                return !isAnswered;
+                            })
                             : [];
 
                         return (
@@ -3952,34 +3938,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Live Plan Card pinned ABOVE input card (matching Image 1 target design) */}
-                        {isRunning && generationPlan && generationPlan.steps && generationPlan.steps.length > 0 && (
-                            <LivePlanCard
-                                title={generationPlan.title || 'plan'}
-                                steps={generationPlan.steps.map((s) => ({
-                                    id: s.id,
-                                    title: s.title,
-                                    description: s.description,
-                                    status: s.status,
-                                    notes: (s as any).notes,
-                                }))}
-                                status={
-                                    generationPlan.steps.some((s) => s.status === 'failed')
-                                        ? 'failed'
-                                        : generationPlan.steps.every((s) => s.status === 'completed' || s.status === 'skipped')
-                                        ? 'completed'
-                                        : 'active'
-                                }
-                                isDark={isDark}
-                                startTime={generationPlan.createdAt}
-                                className="mb-2"
-                            />
-                        )}
-
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-3 transition-all ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1b1c1e] border-[#2a2c30] focus-within:border-[#3a3c42] shadow-md shadow-black/20' : 'bg-white border-zinc-200 focus-within:border-zinc-300 shadow-sm'}`}>
+                        } ${isDark ? 'bg-[#1e1e20] border-white/[0.08] focus-within:border-white/[0.18] shadow-lg shadow-black/25' : 'bg-white border-zinc-200 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}

@@ -175,14 +175,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ...explicitCreds,
   }
 
-  // Check project fields for GitHub tokens
+  // Check user document and project fields for GitHub tokens
   if (!resolvedCredentials.github_token && !resolvedCredentials.GITHUB_TOKEN) {
     if (typeof (project as any).githubToken === "string" && (project as any).githubToken) {
       resolvedCredentials.github_token = (project as any).githubToken
       resolvedCredentials.GITHUB_TOKEN = (project as any).githubToken
+      resolvedCredentials.GH_TOKEN = (project as any).githubToken
     } else if (typeof (project as any).githubAccessToken === "string" && (project as any).githubAccessToken) {
       resolvedCredentials.github_token = (project as any).githubAccessToken
       resolvedCredentials.GITHUB_TOKEN = (project as any).githubAccessToken
+      resolvedCredentials.GH_TOKEN = (project as any).githubAccessToken
+    } else {
+      try {
+        const userDoc = await db.collection("users").findOne<any>({
+          $or: [{ id: session.user.id }, { email: session.user.email }],
+        })
+        const userGhToken =
+          userDoc?.github_tokens?.[projectId]?.token ||
+          userDoc?.github_tokens?.[projectId] ||
+          userDoc?.github_token ||
+          userDoc?.githubAccessToken ||
+          userDoc?.githubToken
+        if (typeof userGhToken === "string" && userGhToken.trim()) {
+          resolvedCredentials.github_token = userGhToken.trim()
+          resolvedCredentials.GITHUB_TOKEN = userGhToken.trim()
+          resolvedCredentials.GH_TOKEN = userGhToken.trim()
+        }
+      } catch (err) {
+        console.warn("[Agent] Failed to read user github_tokens:", err)
+      }
     }
   }
 
