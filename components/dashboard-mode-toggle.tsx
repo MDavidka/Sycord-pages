@@ -2,7 +2,7 @@
 
 import React from "react"
 import { Folder } from "lucide-react"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
 export type DashboardMode = "projects" | "astro"
@@ -18,39 +18,77 @@ export function DashboardModeToggle({
   onChange,
   className,
 }: DashboardModeToggleProps) {
-  return (
-    <Tabs
-      value={activeMode}
-      onValueChange={(v) => onChange(v as DashboardMode)}
-      className={cn("w-auto", className)}
-    >
-      <TabsList className="h-9 items-center justify-center rounded-lg bg-zinc-900/60 p-1 border border-zinc-800/80 text-muted-foreground shadow-xs">
-        {/* Projects tab with icon */}
-        <TabsTrigger
-          value="projects"
-          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-all select-none text-zinc-400 hover:text-zinc-200 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 data-[state=active]:shadow-xs [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
-        >
-          <Folder className="h-3.5 w-3.5 shrink-0" />
-          <span>Projects</span>
-        </TabsTrigger>
+  const shouldReduceMotion = useReducedMotion()
 
-        {/* Astro tab with icon */}
-        <TabsTrigger
-          value="astro"
-          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-all select-none text-zinc-400 hover:text-zinc-200 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 data-[state=active]:shadow-xs [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0"
-        >
-          <img
-            src="/astro-icon.png"
-            alt=""
-            aria-hidden
-            className={cn(
-              "h-3.5 w-3.5 rounded-full object-contain shrink-0 transition-opacity",
-              activeMode === "astro" ? "opacity-100" : "opacity-60"
-            )}
+  return (
+    <div
+      role="tablist"
+      aria-label="Dashboard mode selection"
+      className={cn(
+        "relative inline-flex items-center rounded-[18px] bg-[#171717] p-1 border border-[#292929] select-none",
+        className
+      )}
+    >
+      {/* Projects Segment */}
+      <button
+        type="button"
+        role="tab"
+        id="dashboard-tab-projects"
+        aria-selected={activeMode === "projects"}
+        aria-controls="dashboard-panel-projects"
+        onClick={() => onChange("projects")}
+        className={cn(
+          "relative z-10 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-[14px] text-xs font-medium transition-colors outline-none cursor-pointer",
+          activeMode === "projects"
+            ? "text-[#F5F5F5]"
+            : "text-[#737373] hover:text-[#A3A3A3]"
+        )}
+      >
+        {activeMode === "projects" && (
+          <motion.div
+            layoutId={shouldReduceMotion ? undefined : "active-segmented-pill"}
+            transition={{ type: "spring", stiffness: 450, damping: 35 }}
+            className="absolute inset-0 rounded-[14px] bg-[#1D1D1D] border border-[#383838] shadow-xs -z-10"
           />
-          <span>Astro</span>
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+        )}
+        <Folder className="size-4 shrink-0" strokeWidth={1.75} />
+        <span>Projects</span>
+      </button>
+
+      {/* Astro Segment */}
+      <button
+        type="button"
+        role="tab"
+        id="dashboard-tab-astro"
+        aria-selected={activeMode === "astro"}
+        aria-controls="dashboard-panel-astro"
+        onClick={() => onChange("astro")}
+        className={cn(
+          "relative z-10 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-[14px] text-xs font-medium transition-colors outline-none cursor-pointer",
+          activeMode === "astro"
+            ? "text-[#F5F5F5]"
+            : "text-[#737373] hover:text-[#A3A3A3]"
+        )}
+      >
+        {activeMode === "astro" && (
+          <motion.div
+            layoutId={shouldReduceMotion ? undefined : "active-segmented-pill"}
+            transition={{ type: "spring", stiffness: 450, damping: 35 }}
+            className="absolute inset-0 rounded-[14px] bg-[#1D1D1D] border border-[#383838] shadow-xs -z-10"
+          />
+        )}
+        <img
+          src="/astro-icon.png"
+          alt=""
+          aria-hidden="true"
+          className={cn(
+            "size-4 rounded-full object-contain shrink-0 transition-opacity",
+            activeMode === "astro" ? "opacity-100" : "opacity-50"
+          )}
+        />
+        <span>Astro</span>
+      </button>
+    </div>
   )
 }
+

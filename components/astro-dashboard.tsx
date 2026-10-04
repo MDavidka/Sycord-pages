@@ -216,48 +216,48 @@ export function AstroDashboard() {
       )}
 
       {/* Main Composer Box */}
-      <div className="w-full bg-[#1c1d21] border border-[#2c2d33] hover:border-[#3a3b43] transition-colors rounded-[22px] p-3 sm:p-4 shadow-xl shadow-black/40 flex flex-col gap-3">
+      <div className="w-full bg-[#171717] border border-[#292929] hover:border-[#383838] transition-colors rounded-[26px] p-4 sm:p-5 flex flex-col gap-3">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="What can Astro help with today?"
           rows={3}
-          className="w-full bg-transparent border-0 resize-none text-[15px] placeholder:text-zinc-500 text-zinc-100 focus:outline-none focus:ring-0 leading-relaxed"
+          className="w-full bg-transparent border-0 resize-none text-[15px] placeholder:text-[#737373] text-[#F5F5F5] focus:outline-none focus:ring-0 leading-relaxed"
         />
 
         {/* Action toolbar */}
-        <div className="flex items-center justify-between pt-2 border-t border-[#26272e]">
-          <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center justify-between pt-3 border-t border-[#222222]">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 px-2.5 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] text-xs font-normal gap-1.5"
+              className="h-9 px-3 rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] text-xs font-normal gap-1.5"
               title="Add attachment"
             >
-              <Paperclip className="h-3.5 w-3.5" />
+              <Paperclip className="size-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">Attach</span>
             </Button>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 px-2.5 rounded-xl text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04] text-xs font-normal gap-1.5"
+              className="h-9 px-3 rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] text-xs font-normal gap-1.5"
               title="Configure tools"
             >
-              <Wrench className="h-3.5 w-3.5" />
+              <Wrench className="size-3.5" strokeWidth={1.75} />
               <span className="hidden sm:inline">Tools</span>
             </Button>
-            <div className="h-3.5 w-[1px] bg-zinc-800 hidden sm:block mx-0.5" />
+            <div className="h-4 w-[1px] bg-[#292929] hidden sm:block mx-1" />
             <button
               type="button"
               onClick={() => setIsOmniModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 text-xs font-medium text-zinc-200 transition-colors"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[14px] bg-[#1D1D1D] hover:bg-[#202020] border border-[#292929] text-xs font-medium text-[#A3A3A3] hover:text-[#F5F5F5] transition-colors"
             >
               <BrandLogo brand={selectedModel.split("/")[0] || "anthropic"} size={14} />
               <span className="truncate max-w-[130px]">{selectedModelName}</span>
-              <ChevronDown className="w-3 h-3 text-zinc-400" />
+              <ChevronDown className="size-3 text-[#737373]" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -266,10 +266,10 @@ export function AstroDashboard() {
             onClick={() => handleSend()}
             disabled={!prompt.trim() || isSending}
             size="sm"
-            className="h-8 px-3 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-xs gap-1.5 transition-transform active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+            className="h-9 px-4 rounded-[14px] bg-[#F5F5F5] hover:bg-white text-[#131313] font-medium text-xs gap-1.5 transition-all active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
           >
             <span>Send</span>
-            <ArrowUp className="h-3.5 w-3.5" />
+            <ArrowUp className="size-3.5" strokeWidth={2} />
           </Button>
         </div>
       </div>
@@ -285,15 +285,15 @@ export function AstroDashboard() {
               onClick={() => {
                 setPrompt(action.prompt)
               }}
-              className="group flex flex-col items-start text-left p-3 rounded-xl bg-[#16171a]/70 hover:bg-[#1f2025] border border-[#25262c] hover:border-[#383942] transition-all duration-150"
+              className="group flex flex-col items-start text-left p-3.5 rounded-[18px] bg-[#171717] hover:bg-[#1D1D1D] border border-[#292929] hover:border-[#383838] transition-all active:scale-[0.98]"
             >
-              <div className="h-7 w-7 rounded-lg bg-[#22232a] group-hover:bg-primary/10 border border-[#2e2f38] flex items-center justify-center mb-2 transition-colors">
-                <Icon className="h-3.5 w-3.5 text-zinc-400 group-hover:text-primary transition-colors" />
+              <div className="size-8 rounded-[12px] bg-[#1D1D1D] group-hover:bg-[#202020] border border-[#222222] group-hover:border-[#292929] flex items-center justify-center mb-2.5 transition-colors">
+                <Icon className="size-4 text-[#737373] group-hover:text-[#F5F5F5] transition-colors" />
               </div>
-              <span className="text-xs font-semibold text-zinc-200 group-hover:text-white transition-colors">
+              <span className="text-xs font-medium text-[#F5F5F5] group-hover:text-white transition-colors">
                 {action.label}
               </span>
-              <span className="text-[11px] text-zinc-500 line-clamp-1 mt-0.5">
+              <span className="text-[11px] text-[#737373] line-clamp-1 mt-0.5">
                 {action.description}
               </span>
             </button>

@@ -34,15 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-xl p-4 sm:p-4.5 flex items-center justify-between bg-zinc-900/40 border border-zinc-800/80 shadow-xs">
-      <div className="flex items-center gap-3.5 flex-1 min-w-0">
-        <Skeleton className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg shrink-0 bg-zinc-800/80" />
-        <div className="space-y-1.5 flex-1 min-w-0">
-          <Skeleton className="h-4 w-28 bg-zinc-800/80" />
-          <Skeleton className="h-3 w-36 bg-zinc-800/60" />
+    <div className="rounded-[26px] p-5 sm:p-6 flex items-center justify-between bg-[#171717] border border-[#292929]">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <Skeleton className="size-14 rounded-[16px] shrink-0 bg-[#1D1D1D]" />
+        <div className="space-y-2 flex-1 min-w-0">
+          <Skeleton className="h-5 w-32 bg-[#1D1D1D] rounded-[8px]" />
+          <Skeleton className="h-3.5 w-44 bg-[#202020] rounded-[6px]" />
         </div>
       </div>
-      <Skeleton className="h-8 w-8 rounded-md shrink-0 bg-zinc-800/60 ml-2" />
+      <Skeleton className="size-9 rounded-[12px] shrink-0 bg-[#1D1D1D] ml-2" />
     </div>
   )
 }
@@ -177,93 +177,95 @@ function DashboardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background md:ml-16">
-        <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
-          <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <Image src="/logo.png" alt="Logo" width={28} height={28} priority />
-              <span className="text-base font-semibold text-foreground">
+      <div className="min-h-screen bg-[#131313] md:ml-16 text-[#F5F5F5]">
+        <header className="border-b border-[#292929] sticky top-0 bg-[#131313]/90 backdrop-blur-md z-50">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2.5">
+              <Image src="/logo.png" alt="Logo" width={28} height={28} priority className="rounded-[6px] object-contain shrink-0" />
+              <span className="text-base font-medium tracking-tight text-[#F5F5F5]">
                 {userStatus.isPremium ? (userStatus.subscription === "Sycord Enterprise" ? "Sycord Enterprise" : "Sycord+") : "Sycord"}
               </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                  <Avatar className="h-9 w-9">
+                <Button variant="ghost" aria-label="User account menu" className="relative size-11 rounded-full p-0 transition-transform active:scale-[0.97]">
+                  <Avatar className="size-10">
                     <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">{userInitials}</AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">{userInitials}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
+              <DropdownMenuContent className="w-56 bg-[#171717] border border-[#292929] text-[#F5F5F5] rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal px-2.5 py-2">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session?.user?.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{session?.user?.email}</p>
+                    <p className="text-sm font-medium leading-none text-[#F5F5F5]">{session?.user?.name}</p>
+                    <p className="text-xs leading-none text-[#737373]">{session?.user?.email}</p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")}><CreditCard className="mr-2 h-4 w-4" /><span>Plans</span></DropdownMenuItem>
-                <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-[#292929]" />
+                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
                 {session?.user?.email === "dmarton336@gmail.com" && (
                   <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => router.push("/admin")}>
-                      <Shield className="mr-2 h-4 w-4 text-emerald-400" />
-                      <span className="text-emerald-400 font-semibold">Moderator View</span>
+                    <DropdownMenuSeparator className="bg-[#292929]" />
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="rounded-[10px] text-xs">
+                      <Shield className="mr-2 size-4 text-emerald-400" strokeWidth={1.75} />
+                      <span className="text-emerald-400 font-medium">Moderator View</span>
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" /><span>Sign out</span>
+                <DropdownMenuSeparator className="bg-[#292929]" />
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30">
+                  <LogOut className="mr-2 size-4" strokeWidth={1.75} /><span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6 space-y-5">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-8 space-y-6">
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (
                 <div
                   key={ann.id || ann._id}
                   className={cn(
-                    "flex items-start gap-3 p-3.5 rounded-xl border text-sm",
+                    "flex items-start gap-3 p-4 rounded-[18px] border text-xs leading-relaxed",
                     ann.type === "warning" || ann.type === "maintenance"
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
                       : ann.type === "important"
-                      ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                      : "bg-blue-500/10 border-blue-500/30 text-blue-200"
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
+                      : "bg-[#171717] border-[#292929] text-[#A3A3A3]"
                   )}
                 >
-                  <Megaphone className="h-4 w-4 shrink-0 mt-0.5" />
+                  <Megaphone className="size-4 shrink-0 mt-0.5 text-[#A3A3A3]" strokeWidth={1.75} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-xs tracking-wide uppercase opacity-80">{ann.title}</p>
-                    <p className="text-xs text-foreground/90 mt-0.5">{ann.message}</p>
+                    <p className="font-medium text-xs text-[#F5F5F5]">{ann.title}</p>
+                    <p className="text-xs text-[#737373] mt-0.5">{ann.message}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold text-foreground">Projects</h1>
-            <Button
+          {/* Page Title Area & New Project Button */}
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">Projects</h1>
+            <button
+              type="button"
               onClick={() => router.push("/dashboard/create")}
-              size="sm"
-              className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
+              aria-label="Create new project"
+              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-4" strokeWidth={2} />
               <span>New Project</span>
-            </Button>
+            </button>
           </div>
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <div className="space-y-5 animate-in fade-in duration-200">
+            <div className="space-y-6 animate-in fade-in duration-200">
               <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
@@ -283,20 +285,20 @@ function DashboardContent() {
             </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-5 animate-in fade-in duration-200">
+            <div className="space-y-6 animate-in fade-in duration-200">
               {/* Search Bar & Counter */}
               <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                <div className="relative flex-1 flex items-center min-h-[44px] bg-[#171717] border border-[#292929] focus-within:border-[#383838] rounded-[18px] px-3.5 transition-colors">
+                  <Search className="size-4 text-[#737373] shrink-0 mr-2.5" strokeWidth={1.75} />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search projects..."
-                    className="h-10 w-full pl-9 pr-4 rounded-lg bg-zinc-900/50 border border-zinc-800/80 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600/30 transition-all shadow-xs"
+                    className="w-full bg-transparent text-xs sm:text-sm text-[#F5F5F5] placeholder:text-[#737373] outline-none"
                   />
                 </div>
-                <div className="h-10 px-3.5 border border-zinc-800/80 rounded-lg bg-zinc-900/50 text-xs font-mono font-medium text-zinc-400 flex items-center justify-center shrink-0 tabular-nums shadow-xs">
+                <div className="min-h-[44px] px-4 border border-[#292929] rounded-[18px] bg-[#171717] text-xs font-mono font-medium text-[#A3A3A3] flex items-center justify-center shrink-0 tabular-nums">
                   {ownedCount}/{MAX_FREE_PROJECTS}
                 </div>
               </div>
@@ -325,51 +327,55 @@ function DashboardContent() {
                   ))}
                 </div>
               ) : projects.length === 0 ? (
-                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
-                  <div className="max-w-sm mx-auto">
-                    <h3 className="text-sm font-semibold mb-1.5 text-zinc-200">No projects yet</h3>
-                    <p className="text-xs text-zinc-500 mb-4">
-                      Create your first project and get your site live in minutes.
-                    </p>
-                    <Button
+                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                  <div className="max-w-sm mx-auto space-y-4">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-medium text-[#F5F5F5]">No projects yet</h3>
+                      <p className="text-xs sm:text-sm text-[#737373]">
+                        Create your first project to get started.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
                       onClick={() => router.push("/dashboard/create")}
-                      size="sm"
-                      className="rounded-lg gap-1.5 text-xs"
+                      aria-label="Create new project"
+                      className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      Create First Project
-                    </Button>
+                      <Plus className="size-4" strokeWidth={2} />
+                      <span>New Project</span>
+                    </button>
                   </div>
                 </div>
               ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
-                  <div className="max-w-sm mx-auto">
-                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-2.5 opacity-60" />
-                    <h3 className="text-sm font-semibold mb-1 text-zinc-200">No results</h3>
-                    <p className="text-xs text-zinc-500">
+                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                  <div className="max-w-sm mx-auto space-y-2">
+                    <Search className="size-5 text-[#737373] mx-auto opacity-60" strokeWidth={1.75} />
+                    <h3 className="text-sm font-medium text-[#F5F5F5]">No results</h3>
+                    <p className="text-xs text-[#737373]">
                       No project matches &quot;{searchQuery}&quot;.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {/* Modern New Project Card */}
+                  {/* Arc-style New Project Card */}
                   {canCreateMore && !q && (
                     <button
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
-                      className="group relative flex flex-col items-center justify-center min-h-[108px] sm:min-h-[116px] p-4 sm:p-5 rounded-xl border border-dashed border-zinc-800/90 hover:border-zinc-600 bg-zinc-900/20 hover:bg-zinc-900/50 transition-all duration-200 text-center cursor-pointer select-none"
+                      aria-label="Create new project"
+                      className="group relative flex flex-col items-center justify-center min-h-[116px] p-5 rounded-[26px] border border-dashed border-[#292929] hover:border-[#383838] bg-[#171717]/40 hover:bg-[#171717] transition-all duration-200 text-center cursor-pointer select-none active:scale-[0.99]"
                     >
-                      <div className="h-9 w-9 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-center mb-1.5 group-hover:border-zinc-600 group-hover:scale-105 transition-all shadow-xs">
-                        <Plus className="h-4 w-4 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
+                      <div className="size-10 rounded-[14px] bg-[#1D1D1D] border border-[#222222] flex items-center justify-center mb-2 group-hover:border-[#292929] transition-all">
+                        <Plus className="size-4 text-[#737373] group-hover:text-[#F5F5F5] transition-colors" strokeWidth={2} />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
+                      <h3 className="text-xs sm:text-sm font-medium text-[#F5F5F5] transition-colors">
                         New Project
                       </h3>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                      <p className="text-[11px] text-[#737373] mt-0.5">
                         Create a new site in a few clicks
                       </p>
-                      <span className="mt-1.5 text-[10px] text-zinc-500/80 font-mono">
+                      <span className="mt-1.5 text-[10.5px] text-[#737373] font-mono">
                         {ownedCount}/{MAX_FREE_PROJECTS} used
                       </span>
                     </button>
