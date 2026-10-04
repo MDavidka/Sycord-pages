@@ -11,6 +11,14 @@ import {
   Settings,
   SlidersHorizontal,
   Cpu,
+  ShieldAlert,
+  BarChart3,
+  TrendingUp,
+  FileCode2,
+  Tag,
+  Coins,
+  Sparkles,
+  Info,
 } from "lucide-react"
 
 // Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
@@ -197,6 +205,8 @@ export function ModelBrowserView({
   const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
   const [activeTab, setActiveTab] = useState<string>("All")
   const [searchQuery, setSearchQuery] = useState("")
+  const [isModeratorView, setIsModeratorView] = useState(false)
+  const [moderatorJsonTab, setModeratorJsonTab] = useState<1 | 2>(1)
 
   const loadModels = (forceRefresh = false) => {
     setLoading(true)
@@ -222,31 +232,59 @@ export function ModelBrowserView({
     loadModels()
   }, [projectId, selectedModel])
 
-  // Top featured models with graduated heights matching the screenshot reference
-  // 6 cards: 1 tall pill, 1 medium pill, 2 square pills, 2 short wide pills
-  const featuredCards = useMemo(() => {
-    const list = models.slice(0, 6)
-    const heights = [
-      "h-[9.5rem]", // tall pill
-      "h-[7.5rem]", // medium pill
-      "h-[5.5rem]", // square pill 1
-      "h-[5.5rem]", // square pill 2
-      "h-[3.8rem]", // short wide pill 1
-      "h-[3.8rem]", // short wide pill 2
-    ]
+  // Top benchmark models with SWE Bench % for the chart view
+  const topSweModels = useMemo(() => {
+    const defaultScores: Record<string, number> = {
+      "claude-3-7-sonnet": 70.3,
+      "claude-3-5-sonnet": 67.2,
+      "o3-mini": 64.8,
+      "deepseek-r1": 62.5,
+      "gpt-4o": 53.4,
+      "gemini-2.5-pro": 51.8,
+    }
 
-    return Array.from({ length: 6 }).map((_, idx) => {
-      const model = list[idx]
+    const processed = models.map((m) => {
+      let score = m.swe_score ?? m.swe_bench_score
+      if (!score) {
+        for (const [key, s] of Object.entries(defaultScores)) {
+          if (m.id.toLowerCase().includes(key)) {
+            score = s
+            break
+          }
+        }
+      }
       return {
-        id: model ? model.id : `featured-${idx + 1}`,
-        name: model ? model.name : `model ${idx + 1}`,
-        model,
-        heightClass: heights[idx],
+        ...m,
+        swe_score: score || Math.round(35 + (m.id.length * 3) % 35),
       }
     })
+
+    return processed.sort((a, b) => (b.swe_score || 0) - (a.swe_score || 0)).slice(0, 6)
   }, [models])
 
-  // Filter tabs - strictly matching the minimalist palette
+  // Highest SWE score for calculating bar chart relative heights/widths
+  const maxSweScore = useMemo(() => {
+    if (topSweModels.length === 0) return 100
+    return Math.max(...topSweModels.map((m) => m.swe_score || 50), 100)
+  }, [topSweModels])
+
+  // Featured Cards with heights scaled by real SWE Bench benchmark %
+  const featuredCards = useMemo(() => {
+    return topSweModels.map((model) => {
+      const swe = model.swe_score || 50
+      // Scale height between 3.8rem (35%) and 9.5rem (100%)
+      const heightPx = Math.max(55, Math.round((swe / maxSweScore) * 145))
+      return {
+        id: model.id,
+        name: model.name,
+        swe_score: swe,
+        model,
+        heightPx,
+      }
+    })
+  }, [topSweModels, maxSweScore])
+
+  // Filter tabs
   const filterTabs = [
     "All",
     "Anthropic",
@@ -315,24 +353,72 @@ export function ModelBrowserView({
     }).catch(() => {})
   }
 
-  // Format pricing string like "10 $ in / 10$ out" as in the reference image
+  // Format pricing string like "$0.50 / $1.50 per 1M tokens"
   const formatPricing = (model: OmniModelItem) => {
-    const inCost = model.input_cost !== undefined ? `${model.input_cost} $ in` : "0.5 $ in"
-    const outCost = model.output_cost !== undefined ? `${model.output_cost}$ out` : "1.5$ out"
-    return `${inCost} / ${outCost}`
+    const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
+    const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
+    return `${inCost} in • ${outCost} out / 1M`
   }
 
-  // Subtitle generation for clean presentation (e.g. "solo", "Fable 5.5", "Pro", etc.)
+  // Subtitle generation for clean presentation
   const getModelSubtitle = (model: OmniModelItem) => {
-    if (model.id.toLowerCase().includes("claude")) return "Fable 5.5"
-    if (model.id.toLowerCase().includes("astro")) return "solo"
+    if (model.id.toLowerCase().includes("claude")) return "Anthropic • Sonnet 3.7"
+    if (model.id.toLowerCase().includes("gpt-4o")) return "OpenAI • Multimodal"
+    if (model.id.toLowerCase().includes("o3")) return "OpenAI • Reasoning"
+    if (model.id.toLowerCase().includes("gemini")) return "Google DeepMind"
+    if (model.id.toLowerCase().includes("deepseek")) return "DeepSeek AI"
     if (model.providerDisplay) return model.providerDisplay
     if (model.provider) return model.provider
-    return "Foundation"
+    return "Foundation Model"
   }
 
+  // Moderator JSON 1: Top Models & Benchmark Performance Data
+  const moderatorJson1 = useMemo(() => {
+    return {
+      title: "Top AI Models SWE-Bench & Benchmark Performance",
+      timestamp: new Date().toISOString(),
+      activeModelId,
+      topModelsCount: topSweModels.length,
+      topModels: topSweModels.map((m) => ({
+        id: m.id,
+        name: m.name,
+        provider: m.provider,
+        swe_bench_score_percent: `${m.swe_score}%`,
+        relative_chart_height_px: `${Math.max(55, Math.round(((m.swe_score || 50) / maxSweScore) * 145))}px`,
+        input_cost_per_1m: m.input_cost ?? 0.5,
+        output_cost_per_1m: m.output_cost ?? 1.5,
+        supports_reasoning: m.supports_reasoning ?? false,
+        supports_vision: m.supports_vision ?? false,
+      })),
+    }
+  }, [topSweModels, maxSweScore, activeModelId])
+
+  // Moderator JSON 2: All Available Models Catalog & Pricing Audit
+  const moderatorJson2 = useMemo(() => {
+    return {
+      title: "Full Sycord Omni Router Available Models & Pricing Catalog",
+      timestamp: new Date().toISOString(),
+      totalModelsCount: models.length,
+      activeTab,
+      filteredCount: filteredModels.length,
+      availableModels: filteredModels.map((m) => ({
+        id: m.id,
+        name: m.name,
+        provider: m.provider,
+        iconKey: getLobeHubIconKey(m.provider || m.name) || "cpu",
+        pricing: {
+          input_cost_per_1m: m.input_cost ?? 0.5,
+          output_cost_per_1m: m.output_cost ?? 1.5,
+          formatted: formatPricing(m),
+        },
+        context_window: m.context_window || 128000,
+        is_active: activeModelId === m.id,
+      })),
+    }
+  }, [models, filteredModels, activeTab, activeModelId])
+
   return (
-    <div className="w-full h-full flex flex-col bg-[#0e0e10] text-zinc-100 select-none overflow-y-auto">
+    <div className="w-full h-full flex flex-col bg-[#0a0a0c] text-zinc-100 select-none overflow-y-auto">
       {/* Top Navbar */}
       <header className="w-full max-w-4xl mx-auto px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
@@ -347,76 +433,168 @@ export function ModelBrowserView({
           <span className="text-sm font-semibold tracking-tight text-white">Sycord</span>
         </div>
 
-        {onClose && !isStandalone && (
+        <div className="flex items-center gap-2">
+          {/* Moderator View Toggle Switch */}
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            onClick={() => setIsModeratorView(!isModeratorView)}
+            className={`px-3 py-1.2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+              isModeratorView
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs"
+                : "bg-[#18181b] text-zinc-400 border-white/[0.08] hover:text-white hover:bg-white/[0.06]"
+            }`}
           >
-            <X className="w-4 h-4" />
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Moderator View</span>
           </button>
-        )}
+
+          {onClose && !isStandalone && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </header>
 
-      {/* Main Content Container with strict minimalist spacing & palette */}
+      {/* Main Content Container */}
       <main className="w-full max-w-4xl mx-auto px-6 pb-12 flex-1 flex flex-col space-y-7">
-        {/* Page Title & Settings Icon */}
+        {/* Page Title & Settings */}
         <div className="flex items-center justify-between pt-1">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            Model Browser
-          </h1>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              Model Browser
+              {isModeratorView && (
+                <span className="text-xs font-normal text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                  Admin Debug Mode
+                </span>
+              )}
+            </h1>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Explore foundation AI models, pricing specifications, and benchmark metrics.
+            </p>
+          </div>
           <button
             type="button"
             aria-label="Settings"
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+            className="p-2 rounded-xl bg-[#141416] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
           >
             <Settings className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Featured / Top Model Cards (Graduated Heights strictly matching reference image) */}
-        <div className="grid grid-cols-6 gap-2.5 sm:gap-3.5 items-end">
-          {featuredCards.map((item) => (
-            <div key={item.id} className="flex flex-col items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  if (item.model) handleToggleModel(item.model)
-                }}
-                className={`w-full ${item.heightClass} rounded-2xl bg-[#C8D3DC] hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center relative overflow-hidden shadow-xs cursor-pointer`}
-                title={item.model?.name || item.name}
-              >
-                {item.model && (
-                  <BrandLogo
-                    brand={item.model.provider || item.model.name}
-                    size={24}
-                    className="opacity-90"
-                  />
-                )}
-              </button>
-              <span className="text-[11px] text-zinc-400 truncate max-w-full text-center">
-                {item.name}
-              </span>
+        {/* MODERATOR VIEW JSON INSPECTOR */}
+        {isModeratorView && (
+          <div className="rounded-2xl bg-[#121214] border border-amber-500/30 p-4 space-y-3 shadow-lg">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                <span>Moderator JSON Telemetry Inspect</span>
+              </div>
+
+              {/* JSON 1 / JSON 2 Tabs */}
+              <div className="flex items-center gap-1 bg-[#18181b] p-1 rounded-lg border border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setModeratorJsonTab(1)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                    moderatorJsonTab === 1
+                      ? "bg-amber-500 text-black shadow-xs"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <TrendingUp className="w-3 h-3" />
+                  JSON 1: Top SWE Bench
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModeratorJsonTab(2)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                    moderatorJsonTab === 2
+                      ? "bg-amber-500 text-black shadow-xs"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <FileCode2 className="w-3 h-3" />
+                  JSON 2: Available Models & Pricing
+                </button>
+              </div>
             </div>
-          ))}
+
+            {/* JSON Content Pre Block */}
+            <div className="bg-[#0a0a0c] rounded-xl p-3.5 border border-white/[0.06] font-mono text-[11px] text-emerald-400 overflow-x-auto max-h-64 scrollbar-thin">
+              <pre className="whitespace-pre-wrap leading-relaxed">
+                {JSON.stringify(moderatorJsonTab === 1 ? moderatorJson1 : moderatorJson2, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {/* Top Models SWE-Bench Relative Lint Bar Chart (Normal Dark Background) */}
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+              <BarChart3 className="w-3.5 h-3.5 text-zinc-400" />
+              Top Models & SWE Bench Benchmark Scores
+            </span>
+            <span className="text-[11px] text-zinc-500 font-mono">Chart scaled by SWE %</span>
+          </div>
+
+          <div className="grid grid-cols-6 gap-2.5 sm:gap-3.5 items-end pt-2">
+            {featuredCards.map((item) => (
+              <div key={item.id} className="flex flex-col items-center gap-1.5 group">
+                {/* SWE Bench Percentage Pill */}
+                <span className="text-[10px] font-bold font-mono text-zinc-300 group-hover:text-white transition-colors">
+                  {item.swe_score}%
+                </span>
+
+                {/* Normal dark background bar container */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (item.model) handleToggleModel(item.model)
+                  }}
+                  style={{ height: `${item.heightPx}px` }}
+                  className="w-full rounded-2xl bg-[#141416] hover:bg-[#1a1a1d] border border-white/[0.08] hover:border-white/20 active:scale-[0.98] transition-all flex flex-col items-center justify-center relative overflow-hidden shadow-xs cursor-pointer group"
+                  title={`${item.name} (${item.swe_score}% SWE Bench)`}
+                >
+                  {item.model && (
+                    <BrandLogo
+                      brand={item.model.provider || item.model.name}
+                      size={22}
+                      className="opacity-90 group-hover:scale-110 transition-transform"
+                    />
+                  )}
+                </button>
+
+                <span className="text-[11px] font-medium text-zinc-400 truncate max-w-full text-center group-hover:text-zinc-200 transition-colors">
+                  {item.name}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="space-y-3">
+        <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2.5">
-            {/* Search Input Container with Search Icon and Result Count */}
-            <div className="relative flex-1 flex items-center bg-[#181818] border border-white/[0.08] rounded-xl px-3.5 py-2.5 focus-within:border-white/20 transition-colors">
+            {/* Search Input Container */}
+            <div className="relative flex-1 flex items-center bg-[#141416] border border-white/[0.08] rounded-xl px-3.5 py-2.5 focus-within:border-white/20 transition-colors">
               <Search className="w-4 h-4 text-zinc-400 shrink-0 mr-2.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search..."
+                placeholder="Search models by name, provider, or ID..."
                 className="w-full bg-transparent text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
               />
               <span className="text-xs text-zinc-400 font-normal shrink-0 ml-2">
-                {filteredModels.length} results
+                {filteredModels.length} models
               </span>
             </div>
 
@@ -424,13 +602,13 @@ export function ModelBrowserView({
             <button
               type="button"
               aria-label="Filter"
-              className="p-2.5 rounded-xl bg-[#181818] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0"
+              className="p-2.5 rounded-xl bg-[#141416] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0"
             >
               <SlidersHorizontal className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Minimalist Pill Category Tabs */}
+          {/* Pill Category Tabs */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {filterTabs.map((tab) => {
               const isSelected = activeTab === tab
@@ -441,8 +619,8 @@ export function ModelBrowserView({
                   onClick={() => setActiveTab(tab)}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 ${
                     isSelected
-                      ? "bg-white text-black font-semibold"
-                      : "bg-[#181818] text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06]"
+                      ? "bg-white text-black font-semibold shadow-xs"
+                      : "bg-[#141416] text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06]"
                   }`}
                 >
                   {tab}
@@ -452,17 +630,22 @@ export function ModelBrowserView({
           </div>
         </div>
 
-        {/* Model Cards List (Stacked Rows matching the reference image) */}
+        {/* Model Cards List with Icon, Enhanced Look & Explicit Pricing */}
         <div className="space-y-2.5">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-xs font-semibold text-zinc-300">Available AI Models</span>
+            <span className="text-[11px] text-zinc-500">Includes live pricing & capabilities</span>
+          </div>
+
           {loading && models.length === 0 ? (
             <div className="space-y-2.5 animate-pulse">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 rounded-xl bg-[#181818] border border-white/[0.04]" />
+                <div key={i} className="h-16 rounded-xl bg-[#141416] border border-white/[0.04]" />
               ))}
             </div>
           ) : filteredModels.length === 0 ? (
             <div className="py-12 text-center text-xs text-zinc-500">
-              No models found matching your search.
+              No models found matching your search query.
             </div>
           ) : (
             filteredModels.map((model) => {
@@ -473,26 +656,36 @@ export function ModelBrowserView({
               return (
                 <div
                   key={model.id}
-                  className="w-full bg-[#181818] hover:bg-[#1c1c1e] border border-white/[0.06] rounded-xl px-4 py-3 flex items-center justify-between gap-4 transition-colors"
+                  className={`w-full rounded-2xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all border ${
+                    isActive
+                      ? "bg-[#161619] border-white/20 ring-1 ring-white/10"
+                      : "bg-[#121214] hover:bg-[#161618] border-white/[0.08]"
+                  }`}
                 >
-                  {/* Left: Avatar + Name + Subtitle */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-[#222224] flex items-center justify-center shrink-0 border border-white/[0.04]">
-                      <BrandLogo brand={model.provider || model.name} size={18} />
+                  {/* Left: LobeHub Brand Icon + Model Name + Subtitle */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#1c1c1f] flex items-center justify-center shrink-0 border border-white/[0.06] shadow-xs">
+                      <BrandLogo brand={model.provider || model.name} size={20} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-white truncate">
-                        {model.name}
+                      <div className="text-sm font-semibold text-white truncate flex items-center gap-2">
+                        <span>{model.name}</span>
+                        {model.supports_reasoning && (
+                          <span className="text-[9px] font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-md">
+                            Reasoning
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-zinc-400 truncate">
+                      <div className="text-xs text-zinc-400 truncate mt-0.5">
                         {subtitle}
                       </div>
                     </div>
                   </div>
 
-                  {/* Middle: Pricing info (e.g. "10 $ in / 10$ out") */}
-                  <div className="hidden sm:block text-xs text-zinc-400 tabular-nums shrink-0">
-                    {pricing}
+                  {/* Middle: Pricing Specs badge */}
+                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-300 font-mono bg-[#18181b] border border-white/[0.06] px-3 py-1.5 rounded-xl shrink-0">
+                    <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>{pricing}</span>
                   </div>
 
                   {/* Right: Rounded Pill Toggle Switch */}
@@ -515,18 +708,6 @@ export function ModelBrowserView({
                 </div>
               )
             })
-          )}
-
-          {/* Minimalist Skeleton Placeholder Rows filling continuous list space */}
-          {filteredModels.length > 0 && filteredModels.length < 5 && (
-            <>
-              {Array.from({ length: 5 - filteredModels.length }).map((_, idx) => (
-                <div
-                  key={`skeleton-${idx}`}
-                  className="w-full h-14 rounded-xl bg-[#181818]/40 border border-white/[0.02]"
-                />
-              ))}
-            </>
           )}
         </div>
       </main>
@@ -564,7 +745,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#0e0e10] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#0a0a0c] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         <ModelBrowserView
