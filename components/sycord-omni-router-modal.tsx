@@ -3,23 +3,13 @@
 import React, { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import {
   Search,
   Check,
-  Sparkles,
   X,
-  RefreshCw,
-  Coins,
+  Settings,
   SlidersHorizontal,
-  Image as ImageIcon,
-  Video,
-  BrainCircuit,
-  CheckSquare,
-  Square,
-  Plus,
-  Layers,
   Cpu,
 } from "lucide-react"
 
@@ -117,7 +107,7 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
   if (LOBEHUB_MAP[k]) return LOBEHUB_MAP[k]
 
   if (k.includes("claude") || k.includes("anthropic") || k.includes("sonnet") || k.includes("haiku") || k.includes("opus")) return "claude"
-  if (k.includes("openai") || k.includes("gpt") || k.includes("chatgpt") || k.includes("o1") || k.includes("o3")) return "openai"
+  if (k.includes("openai") || k.includes("gpt") || k.includes("chatgpt") || k.includes("o1") || k.includes("o3") || k.includes("o4")) return "openai"
   if (k.includes("gemini") || k.includes("google") || k.includes("vertex")) return "gemini"
   if (k.includes("gemma")) return "gemma"
   if (k.includes("deepseek")) return "deepseek"
@@ -152,7 +142,7 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
 // Brand SVG logos strictly using LobeHub icons JSON with SVGL/Lucide fallback
 export function BrandLogo({
   brand,
-  size = 20,
+  size = 22,
   className = "",
   onClick,
 }: {
@@ -182,14 +172,369 @@ export function BrandLogo({
 
   return (
     <div onClick={onClick} className={`inline-flex items-center justify-center ${onClick ? "cursor-pointer" : ""} ${className}`}>
-      <Cpu className="text-muted-foreground shrink-0" style={{ width: size, height: size }} />
+      <Cpu className="text-zinc-400 shrink-0" style={{ width: size, height: size }} />
     </div>
   )
 }
 
-export type PriceFilter = "all" | "free" | "low" | "medium" | "high"
-export type CategoryFilter = "all" | "image" | "video" | "reasoning"
+export interface ModelBrowserViewProps {
+  onClose?: () => void
+  selectedModel?: string
+  onSelectModel?: (modelId: string, modelObj?: OmniModelItem) => void
+  projectId?: string
+  isStandalone?: boolean
+}
 
+export function ModelBrowserView({
+  onClose,
+  selectedModel,
+  onSelectModel,
+  projectId = "global",
+  isStandalone = false,
+}: ModelBrowserViewProps) {
+  const [models, setModels] = useState<OmniModelItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
+  const [activeTab, setActiveTab] = useState<string>("All")
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const loadModels = (forceRefresh = false) => {
+    setLoading(true)
+    fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}${forceRefresh ? "&refresh=true" : ""}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.models && Array.isArray(data.models)) {
+          setModels(data.models)
+        }
+        if (data?.active_model && !selectedModel) {
+          setActiveModelId(data.active_model)
+        }
+      })
+      .catch(() => {
+        toast.error("Failed to load models")
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }
+
+  useEffect(() => {
+    loadModels()
+  }, [projectId, selectedModel])
+
+  // Top featured models with graduated heights matching the screenshot reference
+  // 6 cards: 1 tall pill, 1 medium pill, 2 square pills, 2 short wide pills
+  const featuredCards = useMemo(() => {
+    const list = models.slice(0, 6)
+    const heights = [
+      "h-[9.5rem]", // tall pill
+      "h-[7.5rem]", // medium pill
+      "h-[5.5rem]", // square pill 1
+      "h-[5.5rem]", // square pill 2
+      "h-[3.8rem]", // short wide pill 1
+      "h-[3.8rem]", // short wide pill 2
+    ]
+
+    return Array.from({ length: 6 }).map((_, idx) => {
+      const model = list[idx]
+      return {
+        id: model ? model.id : `featured-${idx + 1}`,
+        name: model ? model.name : `model ${idx + 1}`,
+        model,
+        heightClass: heights[idx],
+      }
+    })
+  }, [models])
+
+  // Filter tabs - strictly matching the minimalist palette
+  const filterTabs = [
+    "All",
+    "Anthropic",
+    "OpenAI",
+    "Google",
+    "Open Source",
+    "Reasoning",
+    "Vision",
+  ]
+
+  const filteredModels = useMemo(() => {
+    let list = models
+
+    if (activeTab === "Anthropic") {
+      list = list.filter((m) => (m.provider || "").toLowerCase().includes("anthropic") || m.id.toLowerCase().includes("claude"))
+    } else if (activeTab === "OpenAI") {
+      list = list.filter((m) => (m.provider || "").toLowerCase().includes("openai") || m.id.toLowerCase().includes("gpt") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3"))
+    } else if (activeTab === "Google") {
+      list = list.filter((m) => (m.provider || "").toLowerCase().includes("google") || m.id.toLowerCase().includes("gemini"))
+    } else if (activeTab === "Open Source") {
+      list = list.filter((m) => {
+        const p = (m.provider || "").toLowerCase()
+        const id = m.id.toLowerCase()
+        return p.includes("meta") || p.includes("mistral") || p.includes("deepseek") || p.includes("qwen") || id.includes("llama") || id.includes("qwen") || id.includes("deepseek")
+      })
+    } else if (activeTab === "Reasoning") {
+      list = list.filter((m) => m.supports_reasoning || m.id.toLowerCase().includes("r1") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3") || (m.swe_score ?? 0) > 40)
+    } else if (activeTab === "Vision") {
+      list = list.filter((m) => m.supports_vision || m.supports_image || m.id.toLowerCase().includes("vision") || m.id.toLowerCase().includes("flux"))
+    }
+
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return list
+
+    return list.filter((m) => {
+      return (
+        m.name.toLowerCase().includes(q) ||
+        m.id.toLowerCase().includes(q) ||
+        (m.provider && m.provider.toLowerCase().includes(q)) ||
+        (m.description && m.description.toLowerCase().includes(q))
+      )
+    })
+  }, [models, activeTab, searchQuery])
+
+  const handleToggleModel = (model: OmniModelItem) => {
+    const isCurrentlyActive = activeModelId === model.id
+    const newId = isCurrentlyActive ? "" : model.id
+    setActiveModelId(newId)
+
+    if (!isCurrentlyActive) {
+      toast.success(`${model.name || model.id} activated`)
+      onSelectModel?.(model.id, model)
+    } else {
+      toast.info(`${model.name || model.id} deactivated`)
+    }
+
+    void fetch("/api/ai/omni", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model_id: model.id,
+        project_id: projectId,
+        provider: model.provider,
+        action: isCurrentlyActive ? "deactivate" : "activate",
+      }),
+    }).catch(() => {})
+  }
+
+  // Format pricing string like "10 $ in / 10$ out" as in the reference image
+  const formatPricing = (model: OmniModelItem) => {
+    const inCost = model.input_cost !== undefined ? `${model.input_cost} $ in` : "0.5 $ in"
+    const outCost = model.output_cost !== undefined ? `${model.output_cost}$ out` : "1.5$ out"
+    return `${inCost} / ${outCost}`
+  }
+
+  // Subtitle generation for clean presentation (e.g. "solo", "Fable 5.5", "Pro", etc.)
+  const getModelSubtitle = (model: OmniModelItem) => {
+    if (model.id.toLowerCase().includes("claude")) return "Fable 5.5"
+    if (model.id.toLowerCase().includes("astro")) return "solo"
+    if (model.providerDisplay) return model.providerDisplay
+    if (model.provider) return model.provider
+    return "Foundation"
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col bg-[#0e0e10] text-zinc-100 select-none overflow-y-auto">
+      {/* Top Navbar */}
+      <header className="w-full max-w-4xl mx-auto px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/logo.png"
+            alt="Sycord"
+            width={24}
+            height={24}
+            className="rounded object-contain shrink-0"
+            priority
+          />
+          <span className="text-sm font-semibold tracking-tight text-white">Sycord</span>
+        </div>
+
+        {onClose && !isStandalone && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </header>
+
+      {/* Main Content Container with strict minimalist spacing & palette */}
+      <main className="w-full max-w-4xl mx-auto px-6 pb-12 flex-1 flex flex-col space-y-7">
+        {/* Page Title & Settings Icon */}
+        <div className="flex items-center justify-between pt-1">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            Model Browser
+          </h1>
+          <button
+            type="button"
+            aria-label="Settings"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Featured / Top Model Cards (Graduated Heights strictly matching reference image) */}
+        <div className="grid grid-cols-6 gap-2.5 sm:gap-3.5 items-end">
+          {featuredCards.map((item) => (
+            <div key={item.id} className="flex flex-col items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (item.model) handleToggleModel(item.model)
+                }}
+                className={`w-full ${item.heightClass} rounded-2xl bg-[#C8D3DC] hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center relative overflow-hidden shadow-xs cursor-pointer`}
+                title={item.model?.name || item.name}
+              >
+                {item.model && (
+                  <BrandLogo
+                    brand={item.model.provider || item.model.name}
+                    size={24}
+                    className="opacity-90"
+                  />
+                )}
+              </button>
+              <span className="text-[11px] text-zinc-400 truncate max-w-full text-center">
+                {item.name}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2.5">
+            {/* Search Input Container with Search Icon and Result Count */}
+            <div className="relative flex-1 flex items-center bg-[#181818] border border-white/[0.08] rounded-xl px-3.5 py-2.5 focus-within:border-white/20 transition-colors">
+              <Search className="w-4 h-4 text-zinc-400 shrink-0 mr-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="w-full bg-transparent text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
+              />
+              <span className="text-xs text-zinc-400 font-normal shrink-0 ml-2">
+                {filteredModels.length} results
+              </span>
+            </div>
+
+            {/* Filter Button */}
+            <button
+              type="button"
+              aria-label="Filter"
+              className="p-2.5 rounded-xl bg-[#181818] border border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-colors shrink-0"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Minimalist Pill Category Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {filterTabs.map((tab) => {
+              const isSelected = activeTab === tab
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors shrink-0 ${
+                    isSelected
+                      ? "bg-white text-black font-semibold"
+                      : "bg-[#181818] text-zinc-400 hover:text-white hover:bg-white/[0.06] border border-white/[0.06]"
+                  }`}
+                >
+                  {tab}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Model Cards List (Stacked Rows matching the reference image) */}
+        <div className="space-y-2.5">
+          {loading && models.length === 0 ? (
+            <div className="space-y-2.5 animate-pulse">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-16 rounded-xl bg-[#181818] border border-white/[0.04]" />
+              ))}
+            </div>
+          ) : filteredModels.length === 0 ? (
+            <div className="py-12 text-center text-xs text-zinc-500">
+              No models found matching your search.
+            </div>
+          ) : (
+            filteredModels.map((model) => {
+              const isActive = activeModelId === model.id
+              const subtitle = getModelSubtitle(model)
+              const pricing = formatPricing(model)
+
+              return (
+                <div
+                  key={model.id}
+                  className="w-full bg-[#181818] hover:bg-[#1c1c1e] border border-white/[0.06] rounded-xl px-4 py-3 flex items-center justify-between gap-4 transition-colors"
+                >
+                  {/* Left: Avatar + Name + Subtitle */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#222224] flex items-center justify-center shrink-0 border border-white/[0.04]">
+                      <BrandLogo brand={model.provider || model.name} size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-white truncate">
+                        {model.name}
+                      </div>
+                      <div className="text-xs text-zinc-400 truncate">
+                        {subtitle}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Middle: Pricing info (e.g. "10 $ in / 10$ out") */}
+                  <div className="hidden sm:block text-xs text-zinc-400 tabular-nums shrink-0">
+                    {pricing}
+                  </div>
+
+                  {/* Right: Rounded Pill Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleModel(model)}
+                    role="switch"
+                    aria-checked={isActive}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      isActive ? "bg-white" : "bg-[#28282b]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-black shadow-md ring-0 transition duration-200 ease-in-out ${
+                        isActive ? "translate-x-5 !bg-black" : "translate-x-0 !bg-zinc-400"
+                      }`}
+                    />
+                  </button>
+                </div>
+              )
+            })
+          )}
+
+          {/* Minimalist Skeleton Placeholder Rows filling continuous list space */}
+          {filteredModels.length > 0 && filteredModels.length < 5 && (
+            <>
+              {Array.from({ length: 5 - filteredModels.length }).map((_, idx) => (
+                <div
+                  key={`skeleton-${idx}`}
+                  className="w-full h-14 rounded-xl bg-[#181818]/40 border border-white/[0.02]"
+                />
+              ))}
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// Dialog Modal wrapper for opening inside Chat or Dashboard
 export interface SycordOmniRouterModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -215,635 +560,19 @@ export function SycordOmniRouterModal({
   onSelectModel,
   projectId = "global",
 }: SycordOmniRouterModalProps) {
-  const [models, setModels] = useState<OmniModelItem[]>([])
-  const [providers, setProviders] = useState<Array<{ id: string; name: string; count: number }>>([])
-  const [selectedProvider, setSelectedProvider] = useState<string>("all")
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all")
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all")
-  const [loading, setLoading] = useState(false)
-  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-flash")
-  const [userCredits, setUserCredits] = useState<number>(200)
-  const [searchQuery, setSearchQuery] = useState("")
-
-  // Multi-select state for adding multiple models at once
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false)
-  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set())
-
-  const loadModels = (forceRefresh = false) => {
-    setLoading(true)
-    fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}${forceRefresh ? "&refresh=true" : ""}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.models && Array.isArray(data.models)) {
-          setModels(data.models)
-          if (data?.providers && Array.isArray(data.providers)) {
-            setProviders(data.providers)
-          }
-        }
-        if (data?.active_model && !selectedModel) {
-          setActiveModelId(data.active_model)
-        }
-      })
-      .catch(() => {
-        toast.error("Failed to load models")
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-  }
-
-  useEffect(() => {
-    if (!open) return
-    loadModels()
-
-    fetch(`/api/user/credits`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (typeof data?.credits === "number") setUserCredits(data.credits)
-        else if (typeof data?.balance === "number") setUserCredits(Math.round(data.balance * 40))
-      })
-      .catch(() => {})
-  }, [open, projectId, selectedModel])
-
-  const handleSelectModel = (model: OmniModelItem) => {
-    setActiveModelId(model.id)
-    // 1-click instantaneous response: immediately update parent & close modal
-    toast.success(`Model ${model.name || model.id} added & set as active!`)
-    onSelectModel?.(model.id, model)
-    onOpenChange(false)
-
-    // Fire API sync in the background without blocking the UI
-    void fetch("/api/ai/omni", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model_id: model.id,
-        project_id: projectId,
-        provider: model.provider,
-      }),
-    }).catch(() => {})
-  }
-
-  // Toggle selection of a model in multi-select mode
-  const toggleModelSelection = (modelId: string) => {
-    setSelectedModelIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(modelId)) {
-        next.delete(modelId)
-      } else {
-        next.add(modelId)
-      }
-      return next
-    })
-  }
-
-  // Batch add multiple selected models to model library
-  const handleBatchAddSelectedModels = async () => {
-    if (selectedModelIds.size === 0) {
-      toast.error("Please select at least one model to add")
-      return
-    }
-
-    const selectedList = models.filter((m) => selectedModelIds.has(m.id))
-    let count = 0
-
-    for (const model of selectedList) {
-      try {
-        await fetch("/api/ai/omni", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model_id: model.id,
-            project_id: projectId,
-            provider: model.provider,
-          }),
-        }).catch(() => {})
-        onSelectModel?.(model.id, model)
-        count++
-      } catch {}
-    }
-
-    toast.success(`Successfully added ${count} models to model library!`)
-    setSelectedModelIds(new Set())
-    setIsMultiSelectMode(false)
-    onOpenChange(false)
-  }
-
-  // Helper checks for video / image models
-  const isVideoModel = (m: OmniModelItem) => {
-    const id = m.id.toLowerCase()
-    const name = m.name.toLowerCase()
-    return (
-      m.supports_video ||
-      id.includes("video") ||
-      name.includes("video") ||
-      id.includes("sora") ||
-      id.includes("cogvideo") ||
-      id.includes("runway") ||
-      id.includes("kling") ||
-      id.includes("hailuo") ||
-      id.includes("luma")
-    )
-  }
-
-  const isImageModel = (m: OmniModelItem) => {
-    const id = m.id.toLowerCase()
-    const name = m.name.toLowerCase()
-    return (
-      m.supports_image ||
-      id.includes("flux") ||
-      id.includes("dall-e") ||
-      id.includes("dalle") ||
-      id.includes("image") ||
-      name.includes("image") ||
-      id.includes("cogview") ||
-      id.includes("kolors") ||
-      id.includes("recraft") ||
-      id.includes("sdxl") ||
-      id.includes("stable-diffusion")
-    )
-  }
-
-  const isReasoningModel = (m: OmniModelItem) => {
-    const id = m.id.toLowerCase()
-    return (
-      m.supports_reasoning ||
-      (m.swe_score ?? 0) > 40 ||
-      id.includes("o1") ||
-      id.includes("o3") ||
-      id.includes("r1") ||
-      id.includes("reasoning") ||
-      id.includes("coder")
-    )
-  }
-
-  // Filter models by category, provider, price, search query
-  const filteredModels = useMemo(() => {
-    let list = models
-
-    // Category filter
-    if (categoryFilter === "image") {
-      list = list.filter(isImageModel)
-    } else if (categoryFilter === "video") {
-      list = list.filter(isVideoModel)
-    } else if (categoryFilter === "reasoning") {
-      list = list.filter(isReasoningModel)
-    }
-
-    // Provider filter
-    if (selectedProvider !== "all") {
-      list = list.filter((m) => (m.provider || "").toLowerCase() === selectedProvider.toLowerCase())
-    }
-
-    // Price tier filter
-    if (priceFilter === "free") {
-      list = list.filter((m) => (m.input_cost ?? 0) === 0 && (m.output_cost ?? 0) === 0)
-    } else if (priceFilter === "low") {
-      list = list.filter((m) => (m.input_cost ?? 0) > 0 && (m.input_cost ?? 0) <= 0.5)
-    } else if (priceFilter === "medium") {
-      list = list.filter((m) => (m.input_cost ?? 0) > 0.5 && (m.input_cost ?? 0) <= 2.5)
-    } else if (priceFilter === "high") {
-      list = list.filter((m) => (m.input_cost ?? 0) > 2.5)
-    }
-
-    // Search query
-    const q = searchQuery.toLowerCase().trim()
-    if (!q) return list
-    return list.filter((m) => {
-      return (
-        m.name.toLowerCase().includes(q) ||
-        m.id.toLowerCase().includes(q) ||
-        (m.provider && m.provider.toLowerCase().includes(q)) ||
-        (m.description && m.description.toLowerCase().includes(q))
-      )
-    })
-  }, [models, categoryFilter, selectedProvider, priceFilter, searchQuery])
-
-  // Group filtered models by provider or media type for categorized rendering
-  const categorizedModels = useMemo(() => {
-    const groups = new Map<string, OmniModelItem[]>()
-    for (const model of filteredModels) {
-      let groupKey = model.provider || "other"
-      if (isVideoModel(model)) groupKey = "video_media"
-      else if (isImageModel(model)) groupKey = "image_media"
-
-      if (!groups.has(groupKey)) groups.set(groupKey, [])
-      groups.get(groupKey)!.push(model)
-    }
-
-    return Array.from(groups.entries()).map(([key, items]) => {
-      let isVideo = key === "video_media"
-      let isImage = key === "image_media"
-      let providerDisplay = items[0]?.provider_display || items[0]?.providerDisplay || key.toUpperCase()
-
-      if (isVideo) providerDisplay = "Video Generation Models"
-      if (isImage) providerDisplay = "Image Generation & Vision Models"
-
-      return {
-        key,
-        provider: items[0]?.provider || key,
-        providerDisplay,
-        isVideo,
-        isImage,
-        items,
-      }
-    })
-  }, [filteredModels])
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        overlayClassName="!bg-black/60 data-[state=open]:!bg-black/60 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-background text-foreground shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#0e0e10] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
-        {/* Modern Dashboard Header without "AI Models" badge */}
-        <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 shrink-0">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-            {/* Left: Sycord Brand & Logo (NO AI Models badge next to icon) */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2.5">
-                <Image
-                  src="/logo.png"
-                  alt="Sycord"
-                  width={26}
-                  height={26}
-                  className="rounded object-contain shrink-0"
-                  priority
-                />
-                <span className="text-base font-semibold text-foreground tracking-tight">Sycord</span>
-              </div>
-            </div>
-
-            {/* Right: Credits, Batch Add Multi-Select Toggle, Sync & Close */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* Multi-Select Toggle Button */}
-              <Button
-                variant={isMultiSelectMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setIsMultiSelectMode(!isMultiSelectMode)
-                  if (isMultiSelectMode) setSelectedModelIds(new Set())
-                }}
-                className={`h-8 px-2.5 text-xs rounded-lg gap-1.5 ${
-                  isMultiSelectMode
-                    ? "bg-primary text-primary-foreground font-semibold"
-                    : "border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <CheckSquare className="w-3.5 h-3.5" />
-                <span>{isMultiSelectMode ? "Cancel Multi-Select" : "Add Multiple Models"}</span>
-              </Button>
-
-              <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-card text-muted-foreground text-xs font-medium">
-                <Coins className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-foreground font-semibold tabular-nums">{userCredits}</span>
-                <span className="text-[11px] text-muted-foreground">credits</span>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadModels(true)}
-                title="Refresh models"
-                className="h-8 px-2.5 text-xs border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground gap-1.5 rounded-lg"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Sync</span>
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onOpenChange(false)}
-                className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </header>
-
-        {/* Filter Controls Bar (Search, Media Category Tabs with Lucide Icons, Price & Providers) */}
-        <div className="border-b border-border bg-card/50 px-4 sm:px-6 py-3 shrink-0">
-          <div className="max-w-6xl mx-auto space-y-3">
-            {/* Search and Media Category Filter Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              {/* Search Bar */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search models by name, capabilities, or id..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-8 py-1.5 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground text-xs font-medium outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Category Filter Tabs with Lucide Icons (Image & Video Models displayed in new categories) */}
-              <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-0.5">
-                {(
-                  [
-                    { id: "all", label: "All Models", icon: Sparkles },
-                    { id: "image", label: "Image Models", icon: ImageIcon },
-                    { id: "video", label: "Video Models", icon: Video },
-                    { id: "reasoning", label: "Reasoning & Code", icon: BrainCircuit },
-                  ] as const
-                ).map((cat) => {
-                  const Icon = cat.icon
-                  const isSelected = categoryFilter === cat.id
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setCategoryFilter(cat.id)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
-                          : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5 shrink-0" />
-                      <span>{cat.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Price & Provider Scroll Bar */}
-            <div className="flex items-center justify-between gap-3 pt-0.5 overflow-x-auto custom-scrollbar">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProvider("all")}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 flex items-center gap-1.5 ${
-                    selectedProvider === "all"
-                      ? "bg-accent text-foreground border-border shadow-xs font-semibold"
-                      : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <span>All Providers</span>
-                  <span className="text-[10px] opacity-70">({models.length})</span>
-                </button>
-                {providers.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelectedProvider(p.id)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors shrink-0 flex items-center gap-1.5 ${
-                      selectedProvider === p.id
-                        ? "bg-accent text-foreground border-border shadow-xs font-semibold"
-                        : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <BrandLogo brand={p.id} size={14} />
-                    <span>{p.name}</span>
-                    <span className="text-[10px] opacity-70 font-mono">({p.count})</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Price Filter */}
-              <div className="flex items-center gap-1 shrink-0">
-                <span className="text-[11px] font-medium text-muted-foreground mr-1 hidden sm:inline-flex items-center gap-1">
-                  <SlidersHorizontal className="w-3 h-3" />
-                  <span>Price:</span>
-                </span>
-                {(
-                  [
-                    { id: "all", label: "All" },
-                    { id: "free", label: "Free" },
-                    { id: "low", label: "<$0.5" },
-                    { id: "medium", label: "$0.5-$2.5" },
-                    { id: "high", label: ">$2.5" },
-                  ] as const
-                ).map((tier) => (
-                  <button
-                    key={tier.id}
-                    type="button"
-                    onClick={() => setPriceFilter(tier.id)}
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors ${
-                      priceFilter === tier.id
-                        ? "bg-muted text-foreground border-border font-semibold"
-                        : "bg-background text-muted-foreground border-border hover:bg-muted"
-                    }`}
-                  >
-                    {tier.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Minimalist Models Grid Surface */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 custom-scrollbar bg-background">
-          <div className="max-w-6xl mx-auto space-y-6">
-            {/* Batch Action Banner when Multi-Select Mode is Active */}
-            {isMultiSelectMode && (
-              <div className="p-3 rounded-xl border border-primary/40 bg-primary/10 flex items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                  <CheckSquare className="w-4 h-4 text-primary" />
-                  <span>
-                    Selected <strong className="text-primary">{selectedModelIds.size}</strong> model(s) to add to library
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (selectedModelIds.size === filteredModels.length) {
-                        setSelectedModelIds(new Set())
-                      } else {
-                        setSelectedModelIds(new Set(filteredModels.map((m) => m.id)))
-                      }
-                    }}
-                    className="h-7 text-xs px-2 text-muted-foreground hover:text-foreground"
-                  >
-                    {selectedModelIds.size === filteredModels.length ? "Deselect All" : "Select All Filtered"}
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    onClick={handleBatchAddSelectedModels}
-                    disabled={selectedModelIds.size === 0}
-                    className="h-7 text-xs px-3 bg-primary text-primary-foreground font-semibold rounded-lg gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Selected Models ({selectedModelIds.size})</span>
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {loading && models.length === 0 ? (
-              <div className="py-20 text-center text-xs text-muted-foreground animate-pulse">
-                Fetching models and specifications...
-              </div>
-            ) : categorizedModels.length === 0 ? (
-              <div className="py-20 text-center text-xs text-muted-foreground space-y-2">
-                <p>No models match your current filters.</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setCategoryFilter("all")
-                    setSelectedProvider("all")
-                    setPriceFilter("all")
-                    setSearchQuery("")
-                  }}
-                  className="rounded-lg text-xs border-border"
-                >
-                  Clear all filters
-                </Button>
-              </div>
-            ) : (
-              categorizedModels.map((group) => (
-                <div key={group.key} className="space-y-3">
-                  {/* Category Header with Lucide Icons for Video/Image models */}
-                  <div className="flex items-center gap-2 px-0.5 border-b border-border/60 pb-1.5">
-                    {group.isVideo ? (
-                      <Video className="w-4 h-4 text-purple-400 shrink-0" />
-                    ) : group.isImage ? (
-                      <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />
-                    ) : (
-                      <BrandLogo brand={group.provider} size={16} />
-                    )}
-                    <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                      {group.providerDisplay}
-                    </h2>
-                    <span className="text-[11px] text-muted-foreground font-mono">({group.items.length})</span>
-                  </div>
-
-                  {/* Clean, minimalist cards matching dashboard styling */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {group.items.map((model) => {
-                      const isSelected = model.id === activeModelId
-                      const isCheckedInMulti = selectedModelIds.has(model.id)
-
-                      return (
-                        <div
-                          key={model.id}
-                          onClick={() => {
-                            if (isMultiSelectMode) {
-                              toggleModelSelection(model.id)
-                            } else {
-                              handleSelectModel(model)
-                            }
-                          }}
-                          className={`group relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-xs ${
-                            isCheckedInMulti
-                              ? "bg-primary/10 border-primary ring-1 ring-primary/50"
-                              : isSelected
-                              ? "bg-card border-primary/70 ring-1 ring-primary/40"
-                              : "bg-card border-border hover:border-border/80 hover:bg-card/90"
-                          }`}
-                        >
-                          <div className="space-y-1.5">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                {/* Model Brand Logo using LobeHub icons JSON */}
-                                <div
-                                  className="w-7 h-7 rounded-lg bg-muted/60 border border-border flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:border-primary/50 transition-all pointer-events-none"
-                                  title={model.name}
-                                >
-                                  {isVideoModel(model) ? (
-                                    <Video className="w-4 h-4 text-purple-400" />
-                                  ) : isImageModel(model) ? (
-                                    <ImageIcon className="w-4 h-4 text-emerald-400" />
-                                  ) : (
-                                    <BrandLogo brand={model.provider || model.name} size={16} />
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs sm:text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                                    {model.name}
-                                  </div>
-                                  <p className="text-[10px] font-mono text-muted-foreground truncate">{model.id}</p>
-                                </div>
-                              </div>
-
-                              {/* Selection Indicator / Multi-Select Checkbox */}
-                              {isMultiSelectMode ? (
-                                <div className="shrink-0 text-primary">
-                                  {isCheckedInMulti ? (
-                                    <CheckSquare className="w-4 h-4" />
-                                  ) : (
-                                    <Square className="w-4 h-4 text-muted-foreground" />
-                                  )}
-                                </div>
-                              ) : (
-                                <div
-                                  className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
-                                    isSelected
-                                      ? "border-primary bg-primary text-primary-foreground"
-                                      : "border-border bg-transparent group-hover:border-muted-foreground"
-                                  }`}
-                                >
-                                  {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                </div>
-                              )}
-                            </div>
-
-                            {model.description && (
-                              <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                                {model.description}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Pricing, Media Badges & Context Details */}
-                          <div className="pt-2 border-t border-border/60 flex items-center justify-between text-[10px] text-muted-foreground">
-                            <div className="flex items-center gap-1.5 font-medium">
-                              <span>
-                                In: <strong className="text-foreground">{model.inputCostDisplay || `$${model.input_cost}`}</strong>
-                              </span>
-                              <span>•</span>
-                              <span>
-                                Out: <strong className="text-foreground">{model.outputCostDisplay || `$${model.output_cost}`}</strong>
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {isVideoModel(model) && (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded-md">
-                                  <Video className="w-2.5 h-2.5" />
-                                  Video
-                                </span>
-                              )}
-                              {isImageModel(model) && !isVideoModel(model) && (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md">
-                                  <ImageIcon className="w-2.5 h-2.5" />
-                                  Image
-                                </span>
-                              )}
-                              {model.context_window && (
-                                <div className="font-mono text-muted-foreground text-[10px]">
-                                  {Math.round(model.context_window / 1000)}k ctx
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </main>
+        <ModelBrowserView
+          onClose={() => onOpenChange(false)}
+          selectedModel={selectedModel}
+          onSelectModel={onSelectModel}
+          projectId={projectId}
+        />
       </DialogContent>
     </Dialog>
   )
