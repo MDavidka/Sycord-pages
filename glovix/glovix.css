@@ -1,13 +1,13 @@
 
 :root {
-  --bg-primary: #181818;
-  --bg-secondary: #181818;
-  --bg-tertiary: #181818;
-  --bg-hover: #262626;
-  --border-color: #333;
-  --text-primary: #e5e5e5;
+  --bg-primary: #131313;
+  --bg-secondary: #171717;
+  --bg-tertiary: #1a1a1a;
+  --bg-hover: #222222;
+  --border-color: #292929;
+  --text-primary: #f5f5f5;
   --text-secondary: #a3a3a3;
-  --text-muted: #666;
+  --text-muted: #737373;
 }
 
 :root.light {

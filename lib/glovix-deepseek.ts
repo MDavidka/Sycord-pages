@@ -108,6 +108,14 @@ export function streamDeepSeekCompatible(req: GenerateRequest): Response {
         controller.close()
       }
 
+      // Commit response headers immediately to prevent buffering and timeouts
+      enqueue(encoder.encode(": deepseek-stream-ready\n\n"))
+      const keepaliveTimer = setInterval(() => {
+        if (!closed) {
+          enqueue(encoder.encode(": ping\n\n"))
+        }
+      }, 15000)
+
       try {
         // Build the OpenAI-compatible request body that DeepSeek expects.
         const requestBody = {
@@ -187,6 +195,8 @@ export function streamDeepSeekCompatible(req: GenerateRequest): Response {
           choices: [{ index: 0, delta: { content: `\n\n[AI error] ${message}` }, finish_reason: "stop" }],
         }))
         done()
+      } finally {
+        clearInterval(keepaliveTimer)
       }
     },
   })

@@ -53,6 +53,8 @@ export type ProjectAgentEvent = {
         | 'question'
         | 'question_answered'
         | 'plan'
+        | 'plan_update'
+        | 'plan_step'
         | 'subagent_started'
         | 'subagent_completed'
         | 'subagent_failed'
@@ -258,10 +260,50 @@ function isTransientNetworkError(error: unknown): boolean {
 }
 
 function eventText(event: TursoSessionEvent): string {
-    const payload = event.payload || {};
+    const anyEvt = event as any;
+    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : anyEvt) || {};
+    const extractString = (val: unknown): string | null => {
+        if (typeof val === 'string' && val.trim()) return val;
+        if (val && typeof val === 'object') {
+            const obj = val as Record<string, unknown>;
+            if (typeof obj.output === 'string' && obj.output.trim()) return obj.output;
+            if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
+            if (typeof obj.content === 'string' && obj.content.trim()) return obj.content;
+            if (typeof obj.message === 'string' && obj.message.trim()) return obj.message;
+            if (typeof obj.text === 'string' && obj.text.trim()) return obj.text;
+            if (typeof obj.reply === 'string' && obj.reply.trim()) return obj.reply;
+        }
+        return null;
+    };
+
     const preferred =
-        payload.reply ?? payload.error ?? payload.delta ?? payload.content ?? payload.text ?? payload.message ?? event.detail ?? '';
-    return typeof preferred === 'string' ? preferred : JSON.stringify(preferred);
+        extractString(payload.reply) ??
+        extractString(anyEvt.reply) ??
+        extractString(payload.text) ??
+        extractString(anyEvt.text) ??
+        extractString(payload.content) ??
+        extractString(anyEvt.content) ??
+        extractString(payload.output) ??
+        extractString(payload.result) ??
+        extractString(payload.delta) ??
+        extractString(payload.message) ??
+        extractString(anyEvt.message) ??
+        extractString(payload.error) ??
+        extractString(event.detail) ??
+        extractString(event.title);
+
+    if (preferred !== null) return preferred;
+
+    const raw = payload.reply ?? anyEvt.reply ?? payload.text ?? anyEvt.text ?? payload.content ?? anyEvt.content ?? payload.output ?? payload.result ?? payload.error ?? payload.delta ?? payload.message ?? anyEvt.message ?? event.detail ?? '';
+    if (typeof raw === 'string') return raw;
+    if (raw && typeof raw === 'object') {
+        try {
+            return JSON.stringify(raw);
+        } catch {
+            return '';
+        }
+    }
+    return '';
 }
 
 const QUESTION_TYPES = new Set<AgentQuestionType>([
@@ -448,22 +490,24 @@ function normalizeTursoEvent(
     projectId?: string,
     fromStream = false,
 ): ProjectAgentEvent | null {
-    const payload = event.payload || {};
-    const rawToolCallId = payload.tool_call_id ?? payload.call_id;
+    const anyEvt = event as any;
+    const evType = (event.event_type || anyEvt.event || '').trim();
+    const payload = (event.payload && typeof event.payload === 'object' ? event.payload : anyEvt) || {};
+    const rawToolCallId = payload.tool_call_id ?? payload.call_id ?? anyEvt.tool_call_id;
     const payloadSession =
         typeof payload.session === 'number'
             ? payload.session
             : Number(payload.session) || undefined;
     const payloadTurso =
-        typeof payload.turso_session_id === 'string' ? payload.turso_session_id : undefined;
+        typeof payload.turso_session_id === 'string' ? payload.turso_session_id : anyEvt.turso_session_id;
     const payloadRequestId =
-        typeof payload.request_id === 'string' ? payload.request_id : undefined;
+        typeof payload.request_id === 'string' ? payload.request_id : anyEvt.request_id;
     const rawSubagentId = payload.subagent_task_id ?? payload.task_id;
     const common = {
         session: payloadSession || session,
         eventId: Number(event.id) || undefined,
         text: eventText(event),
-        title: event.title,
+        title: event.title || anyEvt.tool_name,
         toolCallId:
             typeof rawToolCallId === 'string' || typeof rawToolCallId === 'number'
                 ? String(rawToolCallId)
@@ -483,7 +527,7 @@ function normalizeTursoEvent(
                     : undefined,
     };
 
-    switch (event.event_type) {
+    switch (evType) {
         case 'request_started':
         case 'processing':
         case 'status':
@@ -540,9 +584,11 @@ function normalizeTursoEvent(
                 text: typeof payload.thought === 'string' ? payload.thought : event.detail || '',
             };
         case 'plan':
+        case 'plan_update':
+        case 'plan_step':
         case 'plan_approval_required':
             return {
-                type: 'plan',
+                type: (evType === 'plan_update' ? 'plan_update' : evType === 'plan_step' ? 'plan_step' : 'plan') as any,
                 ...common,
                 plan: payload.plan ?? payload,
                 arguments: payload,
@@ -708,9 +754,9 @@ function normalizeTursoEvent(
     }
 }
 
-function isMatchingRequestId(expected?: string, actual?: unknown): boolean {
+function isMatchingRequestId(expected?: string, actual?: unknown, requireExplicitMatch = false): boolean {
     if (!expected) return true;
-    if (!actual || typeof actual !== 'string') return true;
+    if (!actual || typeof actual !== 'string') return !requireExplicitMatch;
     if (actual === expected) return true;
     const cleanActual = actual.replace(/[-_]/g, '').toLowerCase();
     const cleanExpected = expected.replace(/[-_]/g, '').toLowerCase();
@@ -812,12 +858,21 @@ export async function streamAgentActivitySse(options: {
             options.onEventId?.(lastEventId);
         }
 
-        const eventRequestId = raw.payload?.request_id;
+        const eventRequestId = raw.payload?.request_id || (raw as any).request_id;
+        const rawType = (raw.event_type || (raw as any).event || '').trim();
+        const isTerminalType =
+            rawType === 'done' ||
+            rawType === 'request_completed' ||
+            rawType === 'error' ||
+            rawType === 'request_failed' ||
+            rawType === 'stopped' ||
+            rawType === 'session_stopped' ||
+            rawType === 'agent_stopped' ||
+            rawType === 'cancelled';
+
         if (
             options.requestId &&
-            typeof eventRequestId === 'string' &&
-            eventRequestId &&
-            !isMatchingRequestId(options.requestId, eventRequestId)
+            !isMatchingRequestId(options.requestId, eventRequestId, isTerminalType)
         ) {
             return;
         }
@@ -941,6 +996,7 @@ export async function pollTursoAgentSession(options: {
     let transientFailures = 0;
     let idlePolls = 0;
     let pollIntervalMs = POLL_INTERVAL_FAST_MS;
+    let sawEventForCurrentRequest = false;
     const startedAt = Date.now();
     const seenEventIds = new Set<number>();
 
@@ -967,6 +1023,18 @@ export async function pollTursoAgentSession(options: {
                     sessionAuthoritative = true;
                 }
             }
+        }
+        if (
+            options.requestId &&
+            (normalized.type === 'delta' ||
+                normalized.type === 'thinking' ||
+                normalized.type === 'action_mark' ||
+                normalized.type === 'tool_started' ||
+                normalized.type === 'tool_finished' ||
+                normalized.type === 'plan' ||
+                normalized.type === 'message')
+        ) {
+            sawEventForCurrentRequest = true;
         }
         options.onEvent(normalized);
         if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
@@ -998,7 +1066,12 @@ export async function pollTursoAgentSession(options: {
         requestId: options.requestId,
         tursoSessionId: options.tursoSessionId,
         signal: streamAbort.signal,
-        onEvent: emitNormalized,
+        onEvent: (event) => {
+            if (options.requestId && event.type !== 'processing') {
+                sawEventForCurrentRequest = true;
+            }
+            emitNormalized(event);
+        },
         onEventId: (id) => {
             sinceId = Math.max(sinceId, id);
             eventId = Math.max(eventId, id);
@@ -1065,12 +1138,21 @@ export async function pollTursoAgentSession(options: {
                     continue;
                 }
 
-                const eventRequestId = event.payload?.request_id;
+                const eventRequestId = event.payload?.request_id || (event as any).request_id;
+                const rawType = (event.event_type || (event as any).event || '').trim();
+                const isTerminalType =
+                    rawType === 'done' ||
+                    rawType === 'request_completed' ||
+                    rawType === 'error' ||
+                    rawType === 'request_failed' ||
+                    rawType === 'stopped' ||
+                    rawType === 'session_stopped' ||
+                    rawType === 'agent_stopped' ||
+                    rawType === 'cancelled';
+
                 if (
                     options.requestId &&
-                    typeof eventRequestId === 'string' &&
-                    eventRequestId &&
-                    !isMatchingRequestId(options.requestId, eventRequestId)
+                    !isMatchingRequestId(options.requestId, eventRequestId, isTerminalType)
                 ) {
                     if (id) sinceId = Math.max(sinceId, id);
                     continue;
@@ -1099,16 +1181,38 @@ export async function pollTursoAgentSession(options: {
 
             if (terminal) break;
 
-            status = doc.status || status;
-            if (status && status !== 'open') {
+            const docStatus = doc.status || '';
+            const elapsedMs = Date.now() - startedAt;
+            // Only treat doc.status !== 'open' as terminal if:
+            // 1. We saw activity for this request, OR
+            // 2. We have no requestId constraint, OR
+            // 3. We have polled for at least 15 seconds (giving the backend time to start the worker)
+            const isAuthoritativeTerminalStatus =
+                docStatus &&
+                docStatus !== 'open' &&
+                (!options.requestId || sawEventForCurrentRequest || elapsedMs > 15000);
+
+            if (isAuthoritativeTerminalStatus) {
+                status = docStatus;
+                // If the SSE stream is still streaming in-flight token deltas, give it a brief
+                // window to finish before tearing down the reader and declaring terminal state.
+                if (!terminal) {
+                    await Promise.race([
+                        streamPromise,
+                        sleep(1200, options.signal),
+                    ]).catch(() => null);
+                }
+
                 let latestError = '';
                 let latestReply = '';
                 for (const ev of (doc.events || []).slice().reverse()) {
                     const txt = eventText(ev);
-                    if (!latestError && (ev.event_type === 'error' || ev.event_type === 'error_log' || (ev.payload && (ev.payload as any).error))) {
-                        latestError = txt || String((ev.payload as any)?.error || '');
+                    const anyEv = ev as any;
+                    const et = ev.event_type || anyEv.event || '';
+                    if (!latestError && (et === 'error' || et === 'error_log' || (ev.payload && (ev.payload as any).error) || anyEv.error)) {
+                        latestError = txt || String((ev.payload as any)?.error || anyEv.error || '');
                     }
-                    if (!latestReply && (ev.event_type === 'done' || ev.event_type === 'assistant_message')) {
+                    if (!latestReply && (et === 'done' || et === 'assistant_message' || et === 'message_snapshot' || et === 'tool_call_result' || et === 'tool_call_finished' || et === 'token_delta')) {
                         latestReply = txt;
                     }
                 }

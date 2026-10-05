@@ -2,14 +2,13 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
 function loadAdminEmails(): string[] {
-  const fromEnv = (process.env.ADMIN_EMAILS || "")
+  const fromEnv = (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
 
-  // Admin allowlist comes only from ADMIN_EMAILS (comma-separated).
-  // No hardcoded emails — misconfiguration fails closed (no admins).
-  return Array.from(new Set(fromEnv))
+  const defaultAdmins = ["dmarton336@gmail.com"]
+  return Array.from(new Set([...defaultAdmins, ...fromEnv]))
 }
 
 export function isAdminEmail(email: string | null | undefined): boolean {

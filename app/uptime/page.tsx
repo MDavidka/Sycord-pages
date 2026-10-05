@@ -1,9 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
 import { headers } from "next/headers"
-import { Inter } from "next/font/google"
-
-const inter = Inter({ subsets: ["latin"], weight: ['400', '500', '600', '700'] })
 
 const BG = "#181818"
 const BORDER = "#2a2c30"
@@ -54,7 +51,7 @@ export default async function UptimePage() {
   const avgUptime = servers.length > 0 ? Math.round((totalUptime / servers.length) * 100) : 0
 
   return (
-    <div className={`min-h-screen bg-[#1a1a1a] ${inter.className}`}>
+    <div className="min-h-screen bg-[#1a1a1a] font-sans">
       <header className="px-6 py-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">

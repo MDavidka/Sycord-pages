@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SycordOmniRouterModal } from "@/components/sycord-omni-router-modal";
+import { cleanModelDisplayName } from "@/lib/models-config";
 
 export type EffortLevel = "low" | "medium" | "high" | "extra_high" | "max";
 
@@ -63,7 +63,6 @@ export function ModelEffortSelector({
 }: ModelEffortSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<SubView>("none");
-  const [showOmniModal, setShowOmniModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Default models if choices are empty
@@ -76,23 +75,23 @@ export function ModelEffortSelector({
     []
   );
 
-  // Only show models that are turned on at model selector at Syra
+  // Models available in the selector
   const effectiveModels = useMemo(() => {
     if (!modelChoices || modelChoices.length === 0) return defaultModels;
-    const activeOnly = modelChoices.filter((m: any) => m.active !== false && m.enabled !== false);
-    return activeOnly.length > 0 ? activeOnly : modelChoices;
+    return modelChoices;
   }, [modelChoices, defaultModels]);
 
-  // Find active model and effort objects - prefer selectedModel, then isAiTabActive model, then first
+  // Find active model and effort objects - prioritize selectedModel, then active/AI-tab flag, then fallback
   const activeModelObj =
     effectiveModels.find(
       (m) =>
         m.id === selectedModel ||
-        m.label === selectedModel ||
-        m.apiModel === selectedModel
+        m.apiModel === selectedModel ||
+        m.label === selectedModel
     ) ||
     effectiveModels.find((m) => m.isAiTabActive || m.active) ||
-    effectiveModels[0];
+    effectiveModels[0] ||
+    defaultModels[0];
 
   const currentEffortObj =
     EFFORT_LIST.find((e) => e.id === effort) || EFFORT_LIST[3];
@@ -141,7 +140,8 @@ export function ModelEffortSelector({
   }, [isOpen]);
 
   // Model family display name
-  const modelFamilyName = activeModelObj.label.split(" ")[0] || "Ara";
+  const modelFamilyName =
+    cleanModelDisplayName(activeModelObj.label || activeModelObj.apiModel || "Ara").split(" ")[0] || "Ara";
 
   return (
     <div ref={containerRef} className={cn("relative inline-block", className)}>
@@ -202,35 +202,23 @@ export function ModelEffortSelector({
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         className={cn(
-          "flex items-center gap-1.5 h-8 px-2 rounded-lg text-xs font-medium transition-colors select-none outline-none cursor-pointer",
-          "focus-visible:ring-1 focus-visible:ring-zinc-400",
+          "flex items-center gap-1.5 h-8 px-2.5 rounded-[14px] text-xs font-medium transition-colors select-none outline-none cursor-pointer",
+          "focus-visible:ring-1 focus-visible:ring-[#383838]",
           isOpen
             ? isDark
-              ? "bg-white/10 text-white"
+              ? "bg-[#1D1D1D] text-[#F5F5F5] border border-[#292929]"
               : "bg-black/10 text-zinc-950"
             : isDark
-            ? "bg-transparent text-zinc-300 hover:text-white hover:bg-white/5"
+            ? "bg-transparent text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
             : "bg-transparent text-zinc-700 hover:text-zinc-950 hover:bg-black/5"
         )}
       >
-        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-          {modelFamilyName}
-        </span>
-        <span
-          className={cn(
-            "font-normal transition-all",
-            effort === "extra_high"
-              ? "shimmer-xhigh font-medium"
-              : effort === "max"
-              ? "shimmer-max font-semibold"
-              : "text-zinc-500 dark:text-zinc-400"
-          )}
-        >
-          {currentEffortObj.label}
+        <span className="font-medium text-zinc-900 dark:text-[#F5F5F5] truncate max-w-[120px] sm:max-w-[160px] md:max-w-[200px] whitespace-nowrap inline-block text-left">
+          {cleanModelDisplayName(activeModelObj.label || activeModelObj.apiModel || "Ara")}
         </span>
         <ChevronDown
           className={cn(
-            "size-3.5 text-zinc-400 transition-transform duration-150",
+            "size-3.5 text-[#737373] shrink-0 transition-transform duration-150",
             isOpen && "rotate-180"
           )}
         />
@@ -241,15 +229,15 @@ export function ModelEffortSelector({
         <div
           role="dialog"
           aria-label="Model and Effort configuration"
-          className="absolute bottom-full mb-2 left-0 z-50 flex flex-col sm:flex-row items-start gap-1.5 animate-in fade-in-0 zoom-in-95 duration-150"
+          className="absolute bottom-full mb-2 left-0 z-[100] flex flex-col sm:flex-row items-start gap-1.5 animate-in fade-in-0 zoom-in-95 duration-150 drop-shadow-2xl"
         >
           {/* Primary Popover Card (Fast [toggle], Effort [Extra High >], Model [Ara >]) */}
           <div
             className={cn(
-              "w-[210px] sm:w-[220px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border",
+              "w-[210px] sm:w-[220px] rounded-[18px] p-1.5 shadow-xl backdrop-blur-xl border",
               isDark
-                ? "bg-[#1c1d1f] border-[#2a2b2e] text-[#e5e5e5]"
-                : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
+                ? "bg-[#171717] border-[#292929] text-[#F5F5F5]"
+                : "bg-zinc-100 border-zinc-200/80 text-zinc-900 shadow-zinc-200/50"
             )}
           >
             {/* Row 1: Fast + Switch Toggle */}
@@ -293,15 +281,15 @@ export function ModelEffortSelector({
                 "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer",
                 activeSubView === "effort"
                   ? isDark
-                    ? "bg-white/10 text-white"
+                    ? "bg-[#202020] text-[#F5F5F5]"
                     : "bg-zinc-100 text-zinc-950"
                   : isDark
-                  ? "text-zinc-200 hover:bg-white/5"
+                  ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                   : "text-zinc-800 hover:bg-zinc-100"
               )}
             >
               <span>Effort</span>
-              <div className="flex items-center gap-1 text-zinc-400 text-sm font-normal">
+              <div className="flex items-center gap-1 text-[#737373] text-sm font-normal">
                 <span
                   className={cn(
                     effort === "extra_high"
@@ -313,7 +301,7 @@ export function ModelEffortSelector({
                 >
                   {currentEffortObj.label}
                 </span>
-                <ChevronRight className="size-3.5 text-zinc-400" />
+                <ChevronRight className="size-3.5 text-[#737373]" />
               </div>
             </button>
 
@@ -332,19 +320,19 @@ export function ModelEffortSelector({
                 "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer",
                 activeSubView === "models"
                   ? isDark
-                    ? "bg-white/10 text-white"
+                    ? "bg-[#202020] text-[#F5F5F5]"
                     : "bg-zinc-100 text-zinc-950"
                   : isDark
-                  ? "text-zinc-200 hover:bg-white/5"
+                  ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                   : "text-zinc-800 hover:bg-zinc-100"
               )}
             >
               <span>Model</span>
-              <div className="flex items-center gap-1 text-zinc-400 text-sm font-normal">
+              <div className="flex items-center gap-1 text-[#737373] text-sm font-normal">
                 <span className="truncate max-w-[80px]">
                   {modelFamilyName}
                 </span>
-                <ChevronRight className="size-3.5 text-zinc-400" />
+                <ChevronRight className="size-3.5 text-[#737373]" />
               </div>
             </button>
           </div>
@@ -353,16 +341,16 @@ export function ModelEffortSelector({
           {activeSubView !== "none" && (
             <div
               className={cn(
-                "w-[230px] sm:w-[240px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border transition-all animate-in fade-in-0 slide-in-from-left-2 duration-150",
+                "w-[230px] sm:w-[240px] rounded-[18px] p-1.5 shadow-xl backdrop-blur-xl border transition-all animate-in fade-in-0 slide-in-from-left-2 duration-150",
                 isDark
-                  ? "bg-[#1c1d1f] border-[#2a2b2e] text-[#e5e5e5]"
-                  : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
+                  ? "bg-[#171717] border-[#292929] text-[#F5F5F5]"
+                  : "bg-zinc-100 border-zinc-200/80 text-zinc-900 shadow-zinc-200/50"
               )}
             >
               {/* Models Submenu View */}
               {activeSubView === "models" && (
                 <div className="space-y-1">
-                  <div className="px-2.5 py-1 text-[11px] font-medium text-zinc-400">
+                  <div className="px-2.5 py-1 text-[11px] font-medium text-[#737373]">
                     {modelFamilyName} Models
                   </div>
 
@@ -386,15 +374,15 @@ export function ModelEffortSelector({
                             "w-full text-left flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
                             isSelected
                               ? isDark
-                                ? "bg-white/10 text-white font-semibold"
+                                ? "bg-[#202020] text-[#F5F5F5] font-semibold"
                                 : "bg-zinc-100 text-zinc-950 font-semibold"
                               : isDark
-                              ? "text-zinc-300 hover:bg-white/5"
+                              ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                               : "text-zinc-700 hover:bg-zinc-100"
                           )}
                         >
                           <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                            <span className="truncate">{model.label}</span>
+                            <span className="truncate">{cleanModelDisplayName(model.label || model.apiModel)}</span>
                             {(model.isAiTabActive || model.active) && (
                               <span className="shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                 AI Tab
@@ -402,7 +390,7 @@ export function ModelEffortSelector({
                             )}
                           </div>
                           {isSelected && (
-                            <Check className="size-3.5 text-blue-500 shrink-0 ml-1" />
+                            <Check className="size-3.5 text-blue-400 shrink-0 ml-1" />
                           )}
                         </button>
                       );
@@ -410,11 +398,10 @@ export function ModelEffortSelector({
                   </div>
 
                   {/* Fresh space at bottom for + Add Models (Sycord Omni Route) */}
-                  <div className="pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-800">
+                  <div className="pt-1 mt-1 border-t border-[#222222]">
                     <button
                       type="button"
                       onClick={() => {
-                        setShowOmniModal(true);
                         onAddModelsClick?.();
                         setActiveSubView("none");
                         setIsOpen(false);
@@ -422,15 +409,15 @@ export function ModelEffortSelector({
                       className={cn(
                         "w-full text-left flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
                         isDark
-                          ? "text-zinc-300 hover:bg-white/5"
+                          ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                           : "text-zinc-700 hover:bg-zinc-100"
                       )}
                     >
                       <div className="flex items-center gap-1.5">
-                        <Plus className="size-3.5 text-zinc-400" />
+                        <Plus className="size-3.5 text-[#737373]" />
                         <span>Add Models</span>
                       </div>
-                      <span className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 px-1 py-0.2 rounded border border-indigo-500/20">Omni</span>
+                      <span className="text-[9px] font-mono text-zinc-400 bg-[#202020] px-1 py-0.2 rounded border border-[#292929]">Omni</span>
                     </button>
                   </div>
                 </div>
@@ -439,7 +426,7 @@ export function ModelEffortSelector({
               {/* Effort Submenu View */}
               {activeSubView === "effort" && (
                 <div className="space-y-1">
-                  <div className="px-2.5 py-1 text-[11px] font-medium text-zinc-400">
+                  <div className="px-2.5 py-1 text-[11px] font-medium text-[#737373]">
                     Effort Level
                   </div>
 
@@ -458,10 +445,10 @@ export function ModelEffortSelector({
                             "w-full text-left flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
                             isSelected
                               ? isDark
-                                ? "bg-white/10 text-white font-semibold"
+                                ? "bg-[#202020] text-[#F5F5F5] font-semibold"
                                 : "bg-zinc-100 text-zinc-950 font-semibold"
                               : isDark
-                              ? "text-zinc-300 hover:bg-white/5"
+                              ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                               : "text-zinc-700 hover:bg-zinc-100"
                           )}
                         >
@@ -478,13 +465,13 @@ export function ModelEffortSelector({
                               {item.label}
                             </span>
                             {item.description && (
-                              <span className="text-[10px] text-zinc-400 font-normal">
+                              <span className="text-[10px] text-[#737373] font-normal">
                                 {item.description}
                               </span>
                             )}
                           </div>
                           {isSelected && (
-                            <Check className="size-3.5 text-blue-500 shrink-0" />
+                            <Check className="size-3.5 text-blue-400 shrink-0" />
                           )}
                         </button>
                       );
@@ -496,17 +483,6 @@ export function ModelEffortSelector({
           )}
         </div>
       )}
-      {/* Sycord Omni Route / Models Library Modal */}
-      <SycordOmniRouterModal
-        open={showOmniModal}
-        onOpenChange={setShowOmniModal}
-        selectedModel={selectedModel || activeModelObj.id || activeModelObj.apiModel}
-        onSelectModel={(modelId) => {
-          onModelSelect?.(modelId);
-        }}
-        modelChoices={modelChoices}
-        isDark={isDark}
-      />
     </div>
   );
 }

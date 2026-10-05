@@ -82,11 +82,11 @@ export function AgentQuestionCard({
   }, [question.id, question.defaultValue, min, max, question])
 
   const cardClass = isDark
-    ? 'bg-[#1c1d1f] border-[#2a2b2e] text-white'
+    ? 'bg-[#1e1f22] border-[#2b2d31] text-white'
     : 'bg-white border-gray-200 text-gray-900 shadow-sm'
   const muted = isDark ? 'text-[#9a9b9e]' : 'text-gray-500'
   const optionIdle = isDark
-    ? 'bg-[#2a2b2e]/70 text-[#e5e5e5] hover:bg-[#343538]'
+    ? 'bg-[#2b2d31]/80 text-[#e5e5e5] hover:bg-[#35373c]'
     : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
   const optionActive = isDark
     ? 'bg-[#4A90E2] text-white'

@@ -234,10 +234,10 @@ export const useStore = create<AppState>((set) => ({
     terminalOutput: [],
     previewUrl: null,
     parsedErrors: [],
-    selectedModel: 'deepseek-v4-flash',
+    selectedModel: (typeof window !== 'undefined' ? (localStorage.getItem('sycord_selected_model') as ModelType) : null) || 'deepseek-v4-flash',
     isDeploying: false,
-    theme: (localStorage.getItem('theme') as 'dark' | 'light') || 'dark',
-    showTokenCounter: localStorage.getItem('showTokenCounter') === 'true',
+    theme: (typeof window !== 'undefined' ? (localStorage.getItem('theme') as 'dark' | 'light') : null) || 'dark',
+    showTokenCounter: typeof window !== 'undefined' && localStorage.getItem('showTokenCounter') === 'true',
 
     // Agent run lifecycle
     isRunning: false,
@@ -374,13 +374,24 @@ export const useStore = create<AppState>((set) => ({
     // Other actions
     setPreviewUrl: (url) => set({ previewUrl: url }),
     setIsDeploying: (isDeploying) => set({ isDeploying }),
-    setSelectedModel: (selectedModel) => set({ selectedModel }),
+    setSelectedModel: (selectedModel) => {
+        try {
+            if (typeof window !== 'undefined' && selectedModel) {
+                localStorage.setItem('sycord_selected_model', String(selectedModel));
+            }
+        } catch {}
+        set({ selectedModel });
+    },
     setTheme: (theme) => {
-        localStorage.setItem('theme', theme);
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('theme', theme);
+        } catch {}
         set({ theme });
     },
     setShowTokenCounter: (showTokenCounter) => {
-        localStorage.setItem('showTokenCounter', String(showTokenCounter));
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('showTokenCounter', String(showTokenCounter));
+        } catch {}
         set({ showTokenCounter });
     },
     // Chats

@@ -9,7 +9,6 @@ import {
 import { useStore } from '../store';
 import { getChatHistory, deleteChat } from '../lib/api';
 import { SettingsModal } from './SettingsModal';
-import { DeepMemoryModal } from './DeepMemoryModal';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -35,7 +34,6 @@ export function Sidebar({ onClose }: SidebarProps) {
     const { user, currentChatId, setCurrentChatId, setMessages, setFiles, theme, setTheme, chats, setChats } = useStore();
     const [loading, setLoading] = useState(chats.length === 0);
     const [showSettings, setShowSettings] = useState(false);
-    const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [recentExpanded, setRecentExpanded] = useState(true);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -204,10 +202,6 @@ export function Sidebar({ onClose }: SidebarProps) {
                                 <Settings className="w-3.5 h-3.5" />
                                 Settings
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setShowDeepMemory(true); }} className="gap-2.5 text-xs">
-                                <Brain className="w-3.5 h-3.5 text-blue-500" />
-                                Deep Memory
-                            </DropdownMenuItem>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger className="text-xs gap-2.5">
                                     {isDark ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
@@ -234,7 +228,6 @@ export function Sidebar({ onClose }: SidebarProps) {
             </div>
 
             {showSettings && createPortal(<SettingsModal onClose={() => setShowSettings(false)} />, document.body)}
-            {showDeepMemory && createPortal(<DeepMemoryModal onClose={() => setShowDeepMemory(false)} />, document.body)}
         </>
     );
 }

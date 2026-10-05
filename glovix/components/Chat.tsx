@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, extractTextToolCalls, stripToolCallMarkup, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -26,6 +26,7 @@ import {
     answerProjectAgentQuestion,
     type AgentQuestionAnswerValue,
 } from './AgentQuestionCard';
+import { AnsweredQuestionBox } from '@/components/agents/modern-tools/answered-question-box';
 import {
     CreditsPanel,
     HelpSupportPanel,
@@ -37,6 +38,7 @@ import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
+import { DebugInfoModal, ShareDebugWarningModal, type DebugReportData } from './DebugInfoModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
 import {
     DropdownMenu,
@@ -53,6 +55,8 @@ import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
 import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
+import { LivePlanCard } from '@/components/agents/live-plan-card';
+import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -455,10 +459,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active);
-        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || activeAiTabChoice || availableModelChoices[0];
-        if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
-        setAiModel(selected.apiModel);
+        const savedModel = typeof window !== 'undefined' ? localStorage.getItem('sycord_selected_model') : null;
+        const candidateModel = selectedModel || savedModel;
+        const matchingChoice = availableModelChoices.find(
+            choice => choice.modelType === candidateModel || choice.apiModel === candidateModel
+        );
+        if (matchingChoice) {
+            if (matchingChoice.modelType !== selectedModel) {
+                setSelectedModel(matchingChoice.modelType);
+            }
+            setAiModel(matchingChoice.apiModel);
+        } else {
+            const activeAiTabChoice =
+                availableModelChoices.find(c => c.isAiTabActive || c.active) || availableModelChoices[0];
+            if (activeAiTabChoice) {
+                setSelectedModel(activeAiTabChoice.modelType);
+                setAiModel(activeAiTabChoice.apiModel);
+            }
+        }
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
     // Live execution actions. Remote project-agent actions are also copied onto
@@ -560,13 +578,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [questionError, setQuestionError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const isUserExplicitStopRef = useRef(false);
+    const isRemoteAgentRunningRef = useRef(false);
     const [isListening, setIsListening] = useState(false);
     const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
+        isUserExplicitStopRef.current = false;
         setIsRunning(true);
         setAbortCurrentRun(() => {
+            isUserExplicitStopRef.current = true;
             controller.abort();
         });
     };
@@ -583,15 +605,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     };
 
-    // Abort in-flight work on unmount so isRunning never sticks after navigation.
+    // Abort in-flight client-only work on unmount, but preserve remote VM agent runs
     useEffect(() => {
         return () => {
             const controller = abortControllerRef.current;
-            if (controller) {
+            if (controller && !isRemoteAgentRunningRef.current) {
                 controller.abort();
             }
             const state = useStore.getState();
-            if (state.isRunning) {
+            if (state.isRunning && !isRemoteAgentRunningRef.current) {
                 state.setIsRunning(false);
                 state.setAbortCurrentRun(null);
             }
@@ -852,6 +874,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
                         currentGroup.agentActions = Array.from(byId.values());
                     }
+                    if (Array.isArray((msg as any).segments) && (msg as any).segments.length > 0) {
+                        if (!currentGroup.segments) currentGroup.segments = [];
+                        for (const seg of (msg as any).segments as AssistantSegment[]) {
+                            if (seg.type === 'question' && seg.question) {
+                                const exists = currentGroup.segments.some(
+                                    s => s.type === 'question' && s.question?.id === seg.question?.id
+                                );
+                                if (!exists) {
+                                    currentGroup.segments.push(seg);
+                                }
+                            }
+                        }
+                    }
                     if (!currentGroup.createdAt && (msg as any).createdAt) {
                         currentGroup.createdAt = (msg as any).createdAt;
                     }
@@ -932,6 +967,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, [messages]);
 
     const handleStop = () => {
+        isUserExplicitStopRef.current = true;
         const projectId = getHostProjectId();
         if (projectId) {
             // Cancel the durable Syte turn (interrupt), not only the local poller.
@@ -997,23 +1033,33 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         );
         setQuestionSubmitting(false);
 
-        // Also update the inline segment in messages so user sees the answered state right away
+        // Also update all message segments in state so user sees the answered state right away
         const state = useStore.getState();
-        const lastMsg = state.messages[state.messages.length - 1] as any;
-        if (lastMsg && lastMsg.role === 'assistant') {
-            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-            let updated = false;
-            for (const s of segs) {
-                if (s.type === 'question' && s.question?.id === question.id) {
-                    s.question = { ...s.question, status: 'answered', answer };
-                    s.answered = true;
-                    s.answer = answer;
-                    updated = true;
+        let anyUpdated = false;
+        const updatedMessages = state.messages.map((m: any) => {
+            if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                let msgUpdated = false;
+                const segs = m.segments.map((s: AssistantSegment) => {
+                    if (s.type === 'question' && (!question.id || s.question?.id === question.id)) {
+                        msgUpdated = true;
+                        anyUpdated = true;
+                        return {
+                            ...s,
+                            question: { ...s.question, status: 'answered', answer },
+                            answered: true,
+                            answer,
+                        };
+                    }
+                    return s;
+                });
+                if (msgUpdated) {
+                    return { ...m, segments: segs };
                 }
             }
-            if (updated) {
-                updateLastMessage(lastMsg.content || '', undefined, undefined, undefined, segs);
-            }
+            return m;
+        });
+        if (anyUpdated) {
+            useStore.setState({ messages: updatedMessages });
         }
 
         // Prefer clearing bottom bar card immediately; inline question segment stays visible and answered
@@ -1266,10 +1312,37 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Fallback resolution when the agent finishes without a direct assistant text message
+    const resolveFallbackAssistantContent = (actions: StreamingAction[], currentContent: string): string => {
+        if (currentContent && currentContent.trim() && currentContent.trim() !== 'Done.') {
+            return currentContent;
+        }
+        // Look for rich results from completed actions
+        for (let i = actions.length - 1; i >= 0; i--) {
+            const action = actions[i];
+            const res = action?.result;
+            if (typeof res === 'string' && res.trim() && res.trim() !== 'Done.') {
+                // If it's a JSON array or object, or long text (e.g. repo list, search result)
+                return res.trim();
+            }
+        }
+        // Check if there was an action displayName / label describing what was performed
+        const lastAction = actions[actions.length - 1];
+        if (lastAction?.displayName && lastAction.displayName !== 'Agent tool' && lastAction.displayName !== 'Action') {
+            return `Completed ${lastAction.displayName}.`;
+        }
+        if (actions.length > 0) {
+            return `Completed ${actions.length} action${actions.length > 1 ? 's' : ''}. Workspace updated and verified.`;
+        }
+        return 'Task completed successfully. Workspace is up to date.';
+    };
+
     // When returning to a host project chat, resume any open Turso agent turn
-    // so previous activity is reloaded from the durable database.
+    // so previous activity is reloaded from the durable database and streaming continues.
     const agentResumeKeyRef = useRef<string | null>(null);
     const agentResumeDoneRef = useRef(false);
+    const [resumeTrigger, setResumeTrigger] = useState(0);
+
     useEffect(() => {
         const projectId = getHostProjectId();
         if (!projectId || !currentChatId) return;
@@ -1279,7 +1352,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             agentResumeKeyRef.current = resumeKey;
             agentResumeDoneRef.current = false;
         }
-        if (agentResumeDoneRef.current) return;
+        if (agentResumeDoneRef.current && resumeTrigger === 0) return;
 
         let cancelled = false;
         const controller = new AbortController();
@@ -1302,6 +1375,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 last.content.startsWith('Error: Failed to fetch') ||
                                 last.content.includes('Stopped listening') ||
                                 last.content.includes('Connection interrupted') ||
+                                last.content.includes('background') ||
                                 last.content.includes('continue working in the background') ||
                                 last.content.includes('reload the agent activity') ||
                                 last.content.includes('reload previous agent activity'))));
@@ -1411,7 +1485,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 }
                                 break;
                             }
-                            case 'plan': {
+                            case 'plan':
+                            case 'plan_update':
+                            case 'plan_step': {
                                 syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
@@ -1560,26 +1636,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 setQuestionError(null);
                                 break;
                             }
-                            case 'delta':
+                            case 'delta': {
                                 assistantContent += event.text || '';
+                                const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                                if (pcl.hasPlanBlock && pcl.plan) {
+                                    const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                                    if (nextPlan) setGenerationPlan(nextPlan);
+                                }
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
+                            }
                             case 'message':
                                 if (!assistantContent) {
                                     assistantContent = event.text || '';
                                     if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 }
                                 break;
-                            case 'done':
-                                if (!assistantContent && event.text) {
-                                    assistantContent = event.text;
+                            case 'done': {
+                                const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                                if (doneText) {
+                                    assistantContent = doneText;
                                 }
-                                assistantContent = assistantContent || 'Done.';
+                                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
                                 clearPendingQuestion();
                                 markAgentTimelineLoaded();
                                 break;
+                            }
                             case 'stopped':
                                 if (!replayHistoryOnly && !assistantContent) {
                                     updateLastMessage(event.text || 'Stopped.');
@@ -1610,11 +1694,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     void syncPendingQuestions(projectId, controller.signal);
 
+                    // Check sessionStorage for instant cursor before network lookup
+                    let cachedTursoId = knownTursoId;
+                    let cachedEventId = highestEventId;
+                    try {
+                        if (typeof window !== 'undefined' && projectId) {
+                            const raw = sessionStorage.getItem(`syra_session_${projectId}`);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (parsed?.tursoSessionId) {
+                                    cachedTursoId = parsed.tursoSessionId;
+                                    cachedEventId = Math.max(cachedEventId, Number(parsed.highestEventId) || 0);
+                                }
+                            }
+                        }
+                    } catch {}
+
                     const resumed = await resumeProjectAgent({
                         projectId,
-                        tursoSessionId: knownTursoId || undefined,
-                        afterEventId: lastLooksIncomplete ? highestEventId : 0,
-                        allowCompleted: Boolean(knownTursoId),
+                        tursoSessionId: cachedTursoId || undefined,
+                        afterEventId: lastLooksIncomplete ? cachedEventId : 0,
+                        allowCompleted: Boolean(cachedTursoId),
                         signal: controller.signal,
                         onEvent: applyEvent,
                     });
@@ -1631,13 +1731,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     // streaming forever or render a false interruption error.
                     if (!completed && resumed.status === 'completed') {
                         completed = true;
-                        assistantContent ||= 'Done.';
+                        assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                         if (!replayHistoryOnly) updateLastMessage(assistantContent);
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     } else if (!completed && resumed.status === 'stopped') {
                         completed = true;
                         if (!replayHistoryOnly && !assistantContent) updateLastMessage('Stopped.');
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     }
 
                     if (errorText && !completed) {
@@ -1672,21 +1782,44 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setCurrentThinking('');
                     setThinkingStartTime(null);
                     if (!cancelled) {
-                        setTimeout(() => replaceActions([], false), 500);
+                        setTimeout(() => replaceActions([], false), 300);
                     }
                 }
             })();
-        }, 700);
+        }, 100);
 
         return () => {
             cancelled = true;
             window.clearTimeout(timer);
             controller.abort();
         };
-        // Resume after messages hydrate for this chat. Do not depend on isRunning —
-        // toggling it would cancel an in-flight resume.
+        // Resume after messages hydrate for this chat or when returning to tab
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentChatId, messages.length]);
+    }, [currentChatId, messages.length, resumeTrigger]);
+
+    // Automatically reconnect & continue streaming when returning to this tab or website
+    useEffect(() => {
+        const handleVisibilityOrFocus = () => {
+            if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+            const projectId = getHostProjectId();
+            if (!projectId || !currentChatId) return;
+
+            if (!abortControllerRef.current && !isRemoteAgentRunningRef.current) {
+                agentResumeDoneRef.current = false;
+                setResumeTrigger(c => c + 1);
+                void syncPendingQuestions(projectId);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.addEventListener('focus', handleVisibilityOrFocus);
+        window.addEventListener('online', handleVisibilityOrFocus);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+            window.removeEventListener('focus', handleVisibilityOrFocus);
+            window.removeEventListener('online', handleVisibilityOrFocus);
+        };
+    }, [currentChatId]);
 
     const triggerProjectAgentResponse = async (
         userMessage: Message,
@@ -1700,6 +1833,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setCurrentThinking('');
         setThinkingDuration(0);
         const controller = new AbortController();
+        isRemoteAgentRunningRef.current = true;
         beginRun(controller);
 
         const chatId = chatIdOverride || currentChatId;
@@ -1725,17 +1859,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
                 setMessages([...state.messages]);
             }
+            try {
+                if (typeof window !== 'undefined' && projectId && tursoSessionId) {
+                    sessionStorage.setItem(`syra_session_${projectId}`, JSON.stringify({
+                        tursoSessionId,
+                        activeSession,
+                        highestEventId,
+                        updatedAt: Date.now(),
+                    }));
+                }
+            } catch {}
         };
 
         const applyEvent = (event: ProjectAgentEvent) => {
             if (controller.signal.aborted) return;
-            if (event.tursoSessionId) tursoSessionId = event.tursoSessionId;
+            if (event.tursoSessionId) {
+                tursoSessionId = event.tursoSessionId;
+                latestTursoSessionIdRef.current = event.tursoSessionId;
+            }
             if (event.session) {
                 activeSession = event.sessionAuthoritative
                     ? event.session
                     : Math.max(activeSession, event.session);
+                latestAgentSessionRef.current = activeSession;
             }
-            if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
+            if (event.eventId) {
+                highestEventId = Math.max(highestEventId, event.eventId);
+                latestEventIdRef.current = highestEventId;
+            }
 
             switch (event.type) {
                 case 'processing':
@@ -1851,7 +2002,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 }
-                case 'plan': {
+                case 'plan':
+                case 'plan_update':
+                case 'plan_step': {
                     syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
@@ -1938,6 +2091,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!pendingActions.includes(actionId)) pendingActions.push(actionId);
                     actionByCall.set(key, pendingActions);
                     updateAction(actionId, { status: 'running', args });
+                    logActivity({
+                        type: 'agent_used',
+                        tool: tool,
+                        toolCallId: event.toolCallId,
+                        arguments: event.arguments ?? args,
+                        eventId: event.eventId,
+                    });
                     break;
                 }
                 case 'tool_finished': {
@@ -1967,6 +2127,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         args: args === '{}' ? actionsRef.current.find(action => action.id === actionId)?.args : args,
                         eventId: event.eventId,
                         completedAt: Date.now(),
+                    });
+                    logActivity({
+                        type: 'agent_returned_tool',
+                        tool: tool,
+                        toolCallId: event.toolCallId,
+                        status: event.ok === false ? 'error' : 'done',
+                        result: event.text,
+                        eventId: event.eventId,
                     });
                     break;
                 }
@@ -2012,19 +2180,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setQuestionError(null);
 
                     const state = useStore.getState();
-                    const lastMsg = state.messages[state.messages.length - 1] as any;
-                    if (lastMsg && lastMsg.role === 'assistant') {
-                        const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
-                        for (const s of segs) {
-                            if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
-                                if (s.question) {
-                                    s.question = { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text };
+                    let anyUpdated = false;
+                    const updatedMessages = state.messages.map((m: any) => {
+                        if (m.role === 'assistant' && Array.isArray(m.segments)) {
+                            let msgUpdated = false;
+                            const segs = m.segments.map((s: AssistantSegment) => {
+                                if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
+                                    msgUpdated = true;
+                                    anyUpdated = true;
+                                    return {
+                                        ...s,
+                                        question: s.question ? { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text } : s.question,
+                                        answered: true,
+                                        answer: event.question?.answer ?? event.text,
+                                    };
                                 }
-                                s.answered = true;
-                                s.answer = event.question?.answer ?? event.text;
+                                return s;
+                            });
+                            if (msgUpdated) {
+                                return { ...m, segments: segs };
                             }
                         }
-                        updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                        return m;
+                    });
+                    if (anyUpdated) {
+                        useStore.setState({ messages: updatedMessages });
                     }
                     break;
                 }
@@ -2032,6 +2212,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const deltaPiece = event.delta || event.tokenDelta || event.text || '';
                     if (deltaPiece) {
                         assistantContent += deltaPiece;
+                        const pcl = parsePlanFromConnectionStream(assistantContent, useStore.getState().generationPlan);
+                        if (pcl.hasPlanBlock && pcl.plan) {
+                            const nextPlan = planFromAgentUpdate(pcl.plan, useStore.getState().generationPlan);
+                            if (nextPlan) setGenerationPlan(nextPlan);
+                        }
                         const state = useStore.getState();
                         const lastMsg = state.messages[state.messages.length - 1] as any;
                         const segs: AssistantSegment[] = Array.isArray(lastMsg?.segments) ? [...lastMsg.segments] : [];
@@ -2052,15 +2237,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     }
                     break;
                 case 'done': {
-                    const doneText = event.text || event.content || '';
-                    if (!assistantContent && doneText) {
+                    const doneText = event.text || event.content || (event as any).reply || (event as any).message || '';
+                    if (doneText) {
                         assistantContent = doneText;
                     }
-                    assistantContent = assistantContent || 'Done.';
+                    assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                     updateLastMessage(assistantContent);
                     completed = true;
                     clearPendingQuestion();
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'vm_responded',
+                        statusCode: 200,
+                    });
+                    logActivity({
+                        type: 'backend_displayed',
+                        exactResponseDisplayed: assistantContent,
+                    });
                     break;
                 }
                 case 'stopped':
@@ -2073,6 +2266,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             : action
                     ));
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'vm_responded',
+                        statusCode: 200,
+                        status: 'stopped',
+                    });
+                    logActivity({
+                        type: 'backend_displayed',
+                        exactResponseDisplayed: assistantContent || 'Stopped.',
+                    });
                     break;
                 case 'error':
                     errorText = (typeof event.text === 'string' && event.text.trim()) ||
@@ -2085,6 +2287,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             : action
                     ));
                     markAgentTimelineLoaded();
+                    logActivity({
+                        type: 'model_error',
+                        error: errorText,
+                        code: 'STREAM_ERROR',
+                        eventId: event.eventId,
+                    });
+                    logActivity({
+                        type: 'failed_task',
+                        error: errorText,
+                        eventId: event.eventId,
+                    });
                     break;
             }
 
@@ -2109,10 +2322,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 || selectedModel
                 || 'syra-base';
 
+            logActivity({
+                type: 'vm_accepted_request',
+                vmApiUsed: `/api/projects/${encodeURIComponent(projectId)}/agent`,
+                session: afterSession,
+                tursoSessionId,
+            });
+
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
                 modelProfile: activeModelProfile,
+                planMode: 'auto',
+                agentMode: 'build',
                 thinkingLevel: effortLevel,
                 executionSpeed: effortLevel === 'low' ? 'ultra_fast' : effortLevel === 'extra_high' ? 'deep_reasoning' : 'balanced',
                 afterSession,
@@ -2130,7 +2352,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             // status before declaring the response incomplete.
             if (!completed && result.status === 'completed') {
                 completed = true;
-                assistantContent ||= 'Done.';
+                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                 updateLastMessage(assistantContent);
                 clearPendingQuestion();
                 markAgentTimelineLoaded();
@@ -2142,9 +2364,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
                 return;
             }
             if (errorText) throw new Error(errorText);
@@ -2157,21 +2383,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } catch (error: any) {
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped.');
-                clearPendingQuestion();
-                markAgentTimelineLoaded();
+                if (isUserExplicitStopRef.current) {
+                    updateLastMessage(assistantContent || 'Stopped.');
+                    clearPendingQuestion();
+                    markAgentTimelineLoaded();
+                } else {
+                    persistCursor();
+                }
             } else {
                 const msg = String(error?.message || '');
                 const looksTransient =
-                    /load failed|failed to fetch|network|fetch failed/i.test(msg);
+                    /load failed|failed to fetch|network|fetch failed|the project agent stopped/i.test(msg);
 
                 if (looksTransient) {
-                    // Do not leave a dead "Error: Load failed" — keep turso cursor and explain resume.
                     persistCursor();
-                    updateLastMessage(
-                        assistantContent ||
-                            'Connection interrupted. Reopen this chat to reload previous agent activity from the database.',
-                    );
+                    if (!assistantContent) {
+                        updateLastMessage(
+                            'Agent is executing in the background. Return here or refresh to resume live progress.',
+                        );
+                    }
                 } else {
                     console.error('[ProjectAgent] Error:', error);
                     updateLastMessage(`Error: ${msg || 'Failed to run the project agent.'}`);
@@ -2179,11 +2409,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             }
         } finally {
+            isRemoteAgentRunningRef.current = false;
             const wasAborted = controller.signal.aborted;
             endRun(controller);
             setCurrentThinking('');
             setThinkingStartTime(null);
             setTimeout(() => replaceActions([], false), 500);
+            setGenerationPlan(null);
 
             if (!wasAborted && completed && onAiComplete) {
                 onAiComplete('remote');
@@ -2539,8 +2771,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
 
-                // Clean tool_call tags that some models output incorrectly
-                cleanContent = cleanContent.replace(/<tool_call>/g, '').trim();
+                // Clean tool_call markup using stripToolCallMarkup
+                cleanContent = stripToolCallMarkup(cleanContent);
+
+                // If no native tool calls were sent by the provider, extract any text-formatted tool calls
+                if (toolCalls.length === 0) {
+                    const textToolCalls = extractTextToolCalls(assistantMessageContent);
+                    if (textToolCalls.length > 0) {
+                        console.log(`[Chat] Extracted ${textToolCalls.length} tool call(s) from text response`);
+                        toolCalls = textToolCalls;
+                        // Ensure extracted tools are registered in UI actions
+                        toolCalls.forEach(tc => {
+                            if (!toolIdToActionId.has(tc.id)) {
+                                const displayName = getActionDisplayName(tc.function.name, tc.function.arguments || '');
+                                const id = addAction(tc.function.name, displayName);
+                                toolIdToActionId.set(tc.id, id);
+                                updateAction(id, { status: 'running' });
+                            }
+                        });
+                        updateLastMessage(cleanContent, toolCalls, thinkingContent || undefined, undefined);
+                    }
+                }
 
                 // If AI responded with tool_calls but no text on the first turn,
                 // add an auto-generated status message so the user sees something
@@ -2573,16 +2824,26 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     (assistantMessage as any).thinking = thinkingContent;
                 }
 
-                // Store thinking separately (not sent to API but shown in UI)
-                if (thinkingContent) {
-                    (assistantMessage as any).thinking = thinkingContent;
-                }
-
                 // Message is already in store via updateLastMessage, just add to context
                 currentMessages.push(assistantMessage);
 
                 if (toolCalls.length === 0) {
-                    // No tool calls - AI is done or just responded with text
+                    const continuationMatch = /(?:i\s*['’]?\s*m\s+(?:starting|continuing|inspecting|reviewing|going|working|implementing|creating)|starting\s+(?:with|step|at|to)|i\s+will\s+(?:now|start|inspect|continue|create|build|edit|run)|proceeding|continuing|let\s*['’]?\s*(?:s|us|me)|next\s+(?:step|i\s+will|we\s+will)|moving\s+on\s+to|step\s*\d+|in\s+the\s+next\s+turn|now\s+(?:implementing|creating|editing|running|proceeding|inspecting))/i.test(cleanContent || '');
+                    const currentPlan = useStore.getState().generationPlan;
+                    const pendingSteps = currentPlan?.steps?.filter(s => s.status === 'in_progress' || s.status === 'pending') || [];
+                    const hasPendingSteps = pendingSteps.length > 0;
+
+                    if ((continuationMatch || hasPendingSteps || turns === 0) && turns < MAX_TURNS - 1) {
+                        const nextStepDesc = pendingSteps[0]?.title ? `'${pendingSteps[0].title}'` : 'the next planned task';
+                        console.log(`[Chat] Continuation intent (${continuationMatch}), pending steps (${hasPendingSteps}) or initial turn (${turns === 0}) without tools on turn ${turns + 1}. Continuing loop for ${nextStepDesc}.`);
+                        currentMessages.push({
+                            role: 'user',
+                            content: `[Autonomous Execution Directive]: Incomplete plan steps remain for ${nextStepDesc}. Proceed immediately by invoking the required tool calls (createFile, editFile, runCommand, planning). Do not output text promises without tool calls.`,
+                        });
+                        continue;
+                    }
+
+                    // No tool calls and no continuation required — agent has finished
                     console.log('[Chat] AI response (no tool calls):', cleanContent?.slice(0, 200));
                     console.log('[Chat] Done - no tool calls received, ending loop');
                     break;
@@ -2926,6 +3187,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const wasAborted = controller.signal.aborted;
             endRun(controller);
             setCurrentThinking('');
+            setGenerationPlan(null);
 
             // Notify parent that AI finished a complete response (not aborted)
             if (!wasAborted && onAiComplete) {
@@ -2962,29 +3224,47 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         e.preventDefault();
         if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
 
-        // Handle /debug command - fetch VM connection debug info
+        // Handle /debug command - open rich debug modal & collect telemetry JSON
         if (input.trim().startsWith("/debug")) {
-            setDebugLoading(true);
-            setDebugInfo(null);
             setInput("");
+            setShowSlashMenu(false);
+            setShowDebugModal(true);
+            setDebugModalLoading(true);
             try {
-                const res = await fetch("/api/debug", { headers: { Accept: "application/json" } });
-                const data = await res.json();
-                setDebugInfo(data);
+                const report = await buildDebugReportData();
+                setDebugReportData(report);
             } catch (err: any) {
-                setDebugInfo({ error: err?.message || "Debug request failed" });
+                console.error("Debug report failed:", err);
             } finally {
-                setDebugLoading(false);
+                setDebugModalLoading(false);
             }
             return;
         }
 
-        // Slash commands — attach / libraries / help (do not send as chat)
+        // Handle /support command
+        if (input.trim().startsWith("/support") || input.trim().startsWith("/share")) {
+            setInput("");
+            setShowSlashMenu(false);
+            setShowStandaloneShareWarning(true);
+            return;
+        }
+
+        // Slash commands — attach / libraries / connections / help / credits
         const slashCmd = input.trim().toLowerCase();
-        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
+        if (
+            slashCmd === '/' ||
+            slashCmd === '/skills' ||
+            slashCmd === '/mcp' ||
+            slashCmd === '/integrations' ||
+            slashCmd === '/connections' ||
+            slashCmd === '/connection' ||
+            slashCmd === '/help' ||
+            slashCmd === '/credit' ||
+            slashCmd === '/credits'
+        ) {
             setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
-            else if (slashCmd === '/mcp' || slashCmd === '/integrations') setLibraryView('mcp');
+            else if (slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/connections' || slashCmd === '/connection') setLibraryView('mcp');
             else if (slashCmd === '/help') setLibraryView('help');
             else if (slashCmd === '/credit' || slashCmd === '/credits') setLibraryView('credits');
             setInput('');
@@ -2996,7 +3276,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             fileInputRef.current?.click();
             return;
         }
-        if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file') {
+        if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file' || slashCmd === '/upload') {
             setInput('');
             setShowSlashMenu(false);
             documentInputRef.current?.click();
@@ -3097,9 +3377,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
 
         addMessage(displayMessage);
+        logActivity({
+            type: 'user_asked',
+            messageId: (displayMessage as any).id || `usr_${Date.now()}`,
+            prompt: aiText,
+            attachments: [...selectedImages, ...selectedDocuments.map(d => ({ name: d.name, size: d.content.length }))],
+            pickedElement: pickedElementForSend,
+        });
         setInput('');
         setSelectedImages([]);
         setSelectedDocuments([]);
+        setPendingQuestion(null);
+        setQuestionError(null);
+        setQuestionSubmitting(false);
+        setGenerationPlan(null);
+        isUserExplicitStopRef.current = false;
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
         }
@@ -3115,8 +3407,311 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showOmniModal, setShowOmniModal] = useState(false);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
-    const [debugInfo, setDebugInfo] = useState<any>(null);
-    const [debugLoading, setDebugLoading] = useState(false);
+    const [showDebugModal, setShowDebugModal] = useState(false);
+    const [showStandaloneShareWarning, setShowStandaloneShareWarning] = useState(false);
+    const [debugModalLoading, setDebugModalLoading] = useState(false);
+    const [debugReportData, setDebugReportData] = useState<DebugReportData | null>(null);
+    const [userCredits, setUserCredits] = useState<{
+        credits: number;
+        maxCredits: number;
+        isPremium: boolean;
+        resetTime: string;
+    } | null>(null);
+
+    const activityLogRef = useRef<any[]>([]);
+    const latestTursoSessionIdRef = useRef<string | null>(null);
+    const latestAgentSessionRef = useRef<number | null>(null);
+    const latestEventIdRef = useRef<number | null>(null);
+
+    const logActivity = useCallback((entry: any) => {
+        const act = {
+            id: `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            ...entry,
+        };
+        activityLogRef.current = [...activityLogRef.current.slice(-150), act];
+    }, []);
+
+    const loadUserCredits = useCallback(async () => {
+        try {
+            const res = await fetch('/api/user/credits', { headers: { Accept: 'application/json' } });
+            if (res.ok) {
+                const data = await res.json();
+                const cr = typeof data?.credits === 'number' ? data.credits : 5;
+                const maxCr = data?.isPremium ? 200 : 10;
+                setUserCredits({
+                    credits: cr,
+                    maxCredits: maxCr,
+                    isPremium: Boolean(data?.isPremium),
+                    resetTime: 'Resets daily at 00:00 UTC',
+                });
+            }
+        } catch {
+            // keep existing
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadUserCredits();
+    }, [loadUserCredits]);
+
+    const buildDebugReportData = useCallback(async (): Promise<DebugReportData> => {
+        const projectId = getHostProjectId() || 'global';
+        const chatId = currentChatId || getEmbeddedChatId() || 'global';
+
+        let vmDebug: any = null;
+        try {
+            const res = await fetch('/api/debug', { headers: { Accept: 'application/json' } });
+            vmDebug = await res.json();
+        } catch (e: any) {
+            vmDebug = { error: e?.message || 'Failed to fetch debug endpoint' };
+        }
+
+        let creditsData = userCredits;
+        if (!creditsData) {
+            try {
+                const cres = await fetch('/api/user/credits', { headers: { Accept: 'application/json' } });
+                const cjson = await cres.json();
+                creditsData = {
+                    credits: typeof cjson?.credits === 'number' ? cjson.credits : 5,
+                    maxCredits: cjson?.isPremium ? 200 : 10,
+                    isPremium: !!cjson?.isPremium,
+                    resetTime: 'Resets daily at 00:00 UTC',
+                };
+                setUserCredits(creditsData);
+            } catch {
+                creditsData = {
+                    credits: 5,
+                    maxCredits: 10,
+                    isPremium: false,
+                    resetTime: 'Resets daily at 00:00 UTC',
+                };
+            }
+        }
+
+        const state = useStore.getState();
+        const allMsgs = state.messages || [];
+        const lastAssistantMsg = [...allMsgs].reverse().find(m => m.role === 'assistant');
+        const exactDisplayed = typeof lastAssistantMsg?.content === 'string'
+            ? lastAssistantMsg.content
+            : Array.isArray(lastAssistantMsg?.content)
+                ? lastAssistantMsg.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                : '';
+
+        let resolvedTursoSessionId = latestTursoSessionIdRef.current || null;
+        let resolvedAgentSession = latestAgentSessionRef.current || null;
+        let resolvedAgentEventId = latestEventIdRef.current || null;
+
+        // If in-memory refs are null (e.g. after refresh), recover from action history
+        if (!resolvedTursoSessionId || !resolvedAgentEventId) {
+            for (let i = allMsgs.length - 1; i >= 0; i--) {
+                const msg = allMsgs[i] as any;
+                if (Array.isArray(msg?.agentActions) && msg.agentActions.length > 0) {
+                    for (let j = msg.agentActions.length - 1; j >= 0; j--) {
+                        const act = msg.agentActions[j];
+                        if (act?.eventId && !resolvedAgentEventId) {
+                            resolvedAgentEventId = act.eventId;
+                        }
+                        if (act?.id && typeof act.id === 'string' && act.id.startsWith('agent_') && !resolvedTursoSessionId) {
+                            const parts = act.id.split('_');
+                            if (parts.length >= 3) {
+                                resolvedTursoSessionId = parts.slice(1, -1).join('_');
+                            }
+                        }
+                    }
+                }
+                if (resolvedTursoSessionId && resolvedAgentEventId) break;
+            }
+        }
+
+        const formattedMessages = allMsgs.map((m: any, idx) => {
+            const textContent = typeof m.content === 'string'
+                ? m.content
+                : Array.isArray(m.content)
+                    ? m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                    : '';
+            return {
+                messageId: m.id || `msg-${idx}`,
+                role: m.role,
+                timestamp: m.createdAt || Date.now(),
+                whatBackendDisplayed: textContent,
+                exactResponseDisplayed: m.role === 'assistant' ? textContent : undefined,
+                thinking: m.thinking,
+                actionsCount: Array.isArray(m.agentActions) ? m.agentActions.length : undefined,
+                actions: m.agentActions,
+                segments: m.segments,
+            };
+        });
+
+        // Hydrate activity log from messages if in-memory log is empty
+        let resolvedActivityLog = [...activityLogRef.current];
+        if (resolvedActivityLog.length === 0 && allMsgs.length > 0) {
+            allMsgs.forEach((m: any, idx) => {
+                const textContent = typeof m.content === 'string'
+                    ? m.content
+                    : Array.isArray(m.content)
+                        ? m.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n')
+                        : '';
+                const msgTime = new Date(m.createdAt || Date.now()).toISOString();
+
+                if (m.role === 'user') {
+                    resolvedActivityLog.push({
+                        id: `act_${m.id || idx}_usr`,
+                        type: 'user_asked',
+                        messageId: m.id || `msg-${idx}`,
+                        prompt: textContent,
+                        timestamp: msgTime,
+                    });
+                } else if (m.role === 'assistant') {
+                    if (Array.isArray(m.agentActions)) {
+                        m.agentActions.forEach((act: any, aIdx: number) => {
+                            const toolName = act.tool || act.title || 'agent_action';
+                            resolvedActivityLog.push({
+                                id: `act_${act.id || `${idx}_${aIdx}`}_used`,
+                                type: 'agent_used',
+                                tool: toolName,
+                                toolCallId: act.toolCallId,
+                                arguments: act.args,
+                                eventId: act.eventId,
+                                timestamp: msgTime,
+                            });
+                            if (act.status === 'done' || act.status === 'error') {
+                                resolvedActivityLog.push({
+                                    id: `act_${act.id || `${idx}_${aIdx}`}_ret`,
+                                    type: 'agent_returned_tool',
+                                    tool: toolName,
+                                    toolCallId: act.toolCallId,
+                                    status: act.status,
+                                    result: act.result,
+                                    eventId: act.eventId,
+                                    timestamp: act.completedAt ? new Date(act.completedAt).toISOString() : msgTime,
+                                });
+                            }
+                        });
+                    }
+
+                    const isGatewayError = textContent.includes('VERCEL_AI_GATEWAY Error') || textContent.includes('HTTP 403');
+                    const isGenericError = textContent.startsWith('Error:') || m.status === 'error';
+
+                    if (isGatewayError || isGenericError) {
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_err`,
+                            type: 'model_error',
+                            error: textContent,
+                            code: isGatewayError ? 'GATEWAY_FORBIDDEN' : 'MODEL_ERROR',
+                            timestamp: msgTime,
+                        });
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_fail`,
+                            type: 'failed_task',
+                            error: textContent,
+                            timestamp: msgTime,
+                        });
+                    } else if (textContent) {
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_resp`,
+                            type: 'vm_responded',
+                            statusCode: 200,
+                            timestamp: msgTime,
+                        });
+                        resolvedActivityLog.push({
+                            id: `act_${m.id || idx}_disp`,
+                            type: 'backend_displayed',
+                            exactResponseDisplayed: textContent,
+                            timestamp: msgTime,
+                        });
+                    }
+                }
+            });
+        }
+
+        const hasGatewayError = allMsgs.some((m: any) => {
+            const txt = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+            return txt.includes('VERCEL_AI_GATEWAY Error') || txt.includes('Free tier users do not have access');
+        });
+        const hasRateLimit = resolvedActivityLog.some(a => a.type === 'rate_limit') ||
+            allMsgs.some((m: any) => {
+                const txt = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
+                return txt.includes('429') || txt.includes('rate limit') || txt.includes('RESOURCE_EXHAUSTED');
+            });
+
+        const hasError = hasGatewayError || resolvedActivityLog.some(a => a.type === 'model_error' || a.status === 'error');
+        const failedTasks = resolvedActivityLog
+            .filter(a => a.status === 'error' || a.type === 'failed_task' || a.type === 'model_error')
+            .map(a => ({
+                name: a.tool || a.type,
+                reason: a.error || String(a.result || 'Failed task'),
+                timestamp: a.timestamp,
+            }));
+
+        const activeChoice = availableModelChoices?.find(c => c.modelType === selectedModel || c.apiModel === selectedModel);
+
+        return {
+            topLevel: {
+                timestamp: new Date().toISOString(),
+                localTime: new Date().toLocaleTimeString(),
+                chosenModel: {
+                    modelType: selectedModel,
+                    apiModel: activeChoice?.apiModel || selectedModel,
+                    label: activeChoice?.label || selectedModel,
+                    thinkingLevel: effortLevel,
+                },
+                vmConnectionDetails: {
+                    status: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable || vmDebug?.coolify?.reachable) ? 'connected' : vmDebug?.error ? 'error' : 'connecting',
+                    reachable: Boolean(vmDebug?.syte?.reachable ?? vmDebug?.dokploy?.reachable ?? vmDebug?.coolify?.reachable),
+                    apiUrl: vmDebug?.syte?.apiUrl || vmDebug?.dokploy?.apiUrl || vmDebug?.coolify?.apiUrl || '/api/projects/[id]/agent',
+                    platform: vmDebug?.platform || 'syte',
+                    latencyMs: vmDebug?.syte?.latencyMs ?? vmDebug?.dokploy?.latencyMs ?? vmDebug?.coolify?.latencyMs ?? null,
+                    tursoSessionId: resolvedTursoSessionId,
+                    agentSession: resolvedAgentSession,
+                    agentEventId: resolvedAgentEventId,
+                    connectionsConnected: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 1 : 0,
+                    connectionsFailed: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? 0 : 1,
+                    error: vmDebug?.error || vmDebug?.syte?.error || vmDebug?.dokploy?.error || null,
+                    syte: vmDebug?.syte,
+                    dokploy: vmDebug?.dokploy,
+                    coolify: vmDebug?.coolify,
+                },
+                creditInfo: {
+                    remainingCredits: creditsData?.credits ?? 5,
+                    maxCredits: creditsData?.maxCredits ?? 10,
+                    formatted: `${creditsData?.credits ?? 5}/${creditsData?.maxCredits ?? 10} credit`,
+                    isPremium: Boolean(creditsData?.isPremium),
+                    resetTime: creditsData?.resetTime || 'Resets daily at 00:00 UTC',
+                },
+                projectContext: {
+                    projectId: projectId,
+                    chatId: chatId,
+                    clientUrl: typeof window !== 'undefined' ? window.location.href : '',
+                    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+                },
+            },
+            secondLevel: {
+                activityLog: resolvedActivityLog,
+                rateLimit: {
+                    encountered: hasRateLimit,
+                    retryAfter: null,
+                    details: hasRateLimit ? 'Rate limit or resource exhausted encountered during session' : null,
+                },
+                modelError: {
+                    encountered: hasError,
+                    error: failedTasks[0]?.reason || (hasGatewayError ? 'VERCEL_AI_GATEWAY Error (HTTP 403): Free tier model access limitation' : null),
+                    code: hasGatewayError ? 'GATEWAY_FORBIDDEN' : hasError ? 'MODEL_ERROR' : null,
+                },
+                failedTask: {
+                    failed: failedTasks.length > 0,
+                    failedTasks: failedTasks,
+                },
+                connectionsSummary: {
+                    connected: (vmDebug?.syte?.reachable || vmDebug?.dokploy?.reachable) ? ['syte_workspace_vm', 'agent_stream_api'] : ['local_client'],
+                    failed: vmDebug?.error ? [String(vmDebug.error)] : [],
+                },
+                allMessages: formattedMessages,
+                exactResponseDisplayed: exactDisplayed,
+            },
+        };
+    }, [availableModelChoices, currentChatId, effortLevel, selectedModel, userCredits]);
+
     const slashLoadedForRef = useRef<string | null>(null);
 
     const loadSlashExtras = async (projectId: string, force = false) => {
@@ -3167,16 +3762,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const renderAssistantMarkdown = (raw: string) => {
         const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
-        if (/```mermaid/.test(content)) {
+
+        const pcl = parsePlanFromConnectionStream(content);
+        const textToRender = (pcl.hasPlanBlock && pcl.cleanText) ? pcl.cleanText : content;
+
+        if (/```mermaid/.test(textToRender)) {
             return (
                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {content}
+                        {textToRender}
                     </ReactMarkdown>
                 </div>
             );
         }
-        return <Markdown content={content} className="an-markdown w-full max-w-none" />;
+
+        return <Markdown content={textToRender} className="an-markdown w-full max-w-none" />;
     };
 
     // Embedded inside a Sycord project → show the mobile chrome (back button,
@@ -3184,17 +3784,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     // safe-area aware spacing. The host injects the real Google avatar + a back
     // handler via window globals (see GlovixBuilder).
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
-    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
-    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
-    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
+    const hostProjectName = typeof window !== 'undefined' ? ((window as any).__glovixProjectName as string | undefined) : undefined;
+    // Prefer host-injected user avatar (Google profile picture) or user photoURL
+    const profileImage = hostUserImage || user?.photoURL;
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
     };
 
+    const AstroAvatar = ({ className = "" }: { className?: string }) => (
+        <div className={`h-6 w-6 shrink-0 flex items-center justify-center ${className}`}>
+            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-contain rounded-full" />
+        </div>
+    );
+
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#131313]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3240,14 +3846,39 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId={hostProjectIdForSlash || 'global'}
                 isDark={isDark}
                 modelChoices={availableModelChoices || []}
-                onSelectModel={(modelId) => {
+                onSelectModel={(modelId, modelObj) => {
                     const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
                     if (choice) {
                         setSelectedModel(choice.modelType);
                         setAiModel(choice.apiModel);
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return prev;
+                            return prev.map(c => ({
+                                ...c,
+                                active: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                                isAiTabActive: c.modelType === choice.modelType || c.apiModel === choice.apiModel,
+                            }));
+                        });
                     } else {
                         setSelectedModel(modelId as any);
                         setAiModel(modelId);
+                        // Optimistically insert into availableModelChoices so the model selector and dropdowns display it instantly
+                        const newChoice: ModelChoice = {
+                            id: modelId,
+                            label: modelObj?.name || modelId,
+                            subtitle: modelObj?.provider_display || modelObj?.provider || 'Omni',
+                            modelType: modelId as any,
+                            apiModel: modelId,
+                            icon: getProviderIconUrl(modelId, isDark) || '/model-logos/gemini.svg',
+                            iconAlt: modelObj?.name || modelId,
+                            active: true,
+                            isAiTabActive: true,
+                        };
+                        setAvailableModelChoices(prev => {
+                            if (!prev) return [newChoice];
+                            const filtered = prev.filter(c => c.modelType !== modelId && c.apiModel !== modelId);
+                            return [newChoice, ...filtered];
+                        });
                     }
                     void loadAvailableModels();
                 }}
@@ -3267,45 +3898,47 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
                         />
                         <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#181818] via-[#181818]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#131313] via-[#131313]/85 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
                         />
                     </div>
 
                     <div
-                        className="pointer-events-auto relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-4 sm:px-6"
+                        className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
                         style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        <button
-                            type="button"
-                            onClick={handleBack}
-                            aria-label="Back"
-                            className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
-                        >
-                            <ArrowLeft className="size-5" strokeWidth={1.8} />
-                        </button>
+                        <div className="flex items-center gap-2.5 min-w-0 z-10 relative">
+                            <button
+                                type="button"
+                                onClick={handleBack}
+                                aria-label="Toggle Sidebar or Go Back"
+                                className={`relative z-10 flex size-11 items-center justify-center rounded-[14px] transition-all active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900'}`}
+                            >
+                                <PanelLeft className="size-5" strokeWidth={1.75} />
+                            </button>
 
-                        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
-                            <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
-                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-[#F5F5F5]' : 'text-gray-900'}`}>
+                                {hostProjectName || 'Test project'}
+                            </span>
+                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2">
                             {showPreviewButton && onOpenPreview && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}
                                     aria-label="Open preview"
                                     title="Open preview"
-                                    className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                    className={`flex size-11 items-center justify-center rounded-[14px] transition-colors active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                                 >
-                                    <Eye className="size-[18px]" strokeWidth={1.8} />
+                                    <Eye className="size-[18px]" strokeWidth={1.75} />
                                 </button>
                             )}
                             <button
                                 type="button"
                                 onClick={() => setShowDeepMemory(true)}
                                 aria-label="Profile"
-                                className={`flex size-9 items-center justify-center overflow-hidden rounded-xl transition-transform active:scale-95 ${isDark ? 'bg-white/[0.08] text-white' : 'bg-black/[0.05] text-gray-900'}`}
+                                className={`flex size-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-[0.97] border ${isDark ? 'bg-[#1D1D1D] text-[#F5F5F5] border-[#292929]' : 'border-gray-300 bg-black/[0.05] text-gray-900'}`}
                             >
                                 {profileImage && !profileImgError ? (
                                     <img
@@ -3316,7 +3949,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         className="h-full w-full object-cover"
                                     />
                                 ) : (
-                                    <span className="text-sm font-semibold">M</span>
+                                    <span className="text-sm font-semibold">
+                                        {(user?.email?.[0] || 'M').toUpperCase()}
+                                    </span>
                                 )}
                             </button>
                         </div>
@@ -3334,149 +3969,88 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     className={`mx-auto w-full max-w-[760px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
-                    {groupedMessages.map((group, idx) => (
-                        <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && !group.segments?.some(s => s.type === 'thinking') && (
-                                <ThinkingBlock
-                                    thinking={group.thinking}
-                                    isDark={isDark}
-                                    thinkingTime={group.thinkingDuration || undefined}
-                                    startTime={idx === groupedMessages.length - 1 && isRunning ? thinkingStartTime : undefined}
-                                />
-                            )}
+                    {groupedMessages.length === 0 && !isRunning && (
+                        <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
+                            <AstroAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
+                            <span className={`text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                                Tell me how can i help you?
+                            </span>
+                        </div>
+                    )}
 
-                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && !group.segments?.some(s => s.type === 'tools') && (
-                                <ActionsList
-                                    actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
-                                    isLive={idx === groupedMessages.length - 1 && isRunning}
-                                    isDark={isDark}
-                                />
-                            )}
+                    {groupedMessages.map((group, idx) => {
+                        const isLastGroup = idx === groupedMessages.length - 1;
+                        const isLiveTurn = isRunning && isLastGroup;
 
-                            {group.role === 'user' && group.attachments && group.attachments.length > 0 && (
-                                <div className="flex justify-end mb-1">
-                                    <div className="flex flex-col gap-1.5">
-                                        {group.attachments.map((file, i) => (
-                                            <FileAttachmentBlock key={i} file={file} isDark={isDark} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                        // For assistant messages, extract the latest text content across segments or direct content
+                        let assistantText = '';
+                        if (group.role === 'assistant') {
+                            if (group.segments && group.segments.length > 0) {
+                                // Gather all text segment content
+                                const textSegs = group.segments.filter(s => s.type === 'text' && s.content);
+                                if (textSegs.length > 0) {
+                                    assistantText = textSegs.map(s => typeof s.content === 'string' ? s.content : '').filter(Boolean).join('\n\n');
+                                }
+                            }
+                            if (!assistantText && group.content) {
+                                assistantText = typeof group.content === 'string' ? group.content : '';
+                            }
+                        }
 
-                            {/* Render segments in order for assistant messages */}
-                            {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
-                                <>
-                                    {group.segments.map((seg, segIdx) => {
-                                        if (seg.type === 'thinking') {
-                                            return (
-                                                <div key={`seg-thinking-${segIdx}`}>
-                                                    <ThinkingBlock
-                                                        thinking={seg.thinking || ''}
-                                                        isDark={isDark}
-                                                        thinkingTime={seg.thinkingDuration}
-                                                        startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
-                                                    />
+                        const questionSegments = group.role === 'assistant' && Array.isArray(group.segments)
+                            ? group.segments.filter(s => {
+                                if (s.type !== 'question' || !s.question) return false;
+                                const q = s.question;
+                                const isAnswered = q.status === 'answered' || s.answered || (q.answer !== undefined && q.answer !== null);
+                                return !isAnswered;
+                            })
+                            : [];
+
+                        return (
+                            <div key={idx} className="space-y-3 animate-fade-in-up">
+                                {group.role === 'user' && (
+                                    <>
+                                        {group.attachments && group.attachments.length > 0 && (
+                                            <div className="flex justify-end mb-1">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {group.attachments.map((file, i) => (
+                                                        <FileAttachmentBlock key={i} file={file} isDark={isDark} />
+                                                    ))}
                                                 </div>
-                                            );
-                                        }
-                                        if (seg.type === 'question' && seg.question) {
-                                            return (
-                                                <div key={`seg-q-${segIdx}`} className="my-2.5">
-                                                    <AgentQuestionCard
-                                                        question={seg.question}
-                                                        isDark={isDark}
-                                                        submitting={questionSubmitting}
-                                                        error={questionError}
-                                                        onSubmit={handleAgentQuestionSubmit}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'text' && seg.content) {
-                                            const textContent = typeof seg.content === 'string' ? seg.content : '';
-                                            if (!textContent) return null;
-                                            const isLiveSeg = isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1;
-                                            return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <StreamingResponse
-                                                        status={isLiveSeg ? 'streaming' : 'complete'}
-                                                        copyText={textContent}
-                                                        showActions={!isLiveSeg}
-                                                        className="w-full"
-                                                    >
-                                                        <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
-                                                            {renderAssistantMarkdown(textContent)}
+                                            </div>
+                                        )}
+                                        <div className="flex justify-end">
+                                            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
+                                                <div
+                                                    className={`text-[15px] leading-[1.5] break-words ${
+                                                        isDark
+                                                            ? 'bg-[#1D1D1D] text-[#F5F5F5] rounded-[24px] px-4.5 py-3 border border-[#292929]'
+                                                            : 'bg-zinc-100 text-zinc-900 rounded-[24px] px-4.5 py-3 border border-zinc-200/80'
+                                                    }`}
+                                                >
+                                                    {/* Picked element indicator */}
+                                                    {(group as any).pickedElement && (
+                                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/80' : 'text-blue-500/80'}`}>
+                                                            <MousePointer2 className="w-3 h-3 flex-shrink-0" />
+                                                            <span className="font-medium">
+                                                                {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
+                                                            </span>
+                                                            {(group as any).pickedElement.text && (
+                                                                <span className="truncate opacity-70">
+                                                                    {(group as any).pickedElement.text.length > 30
+                                                                        ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                                        : (group as any).pickedElement.text}
+                                                                </span>
+                                                            )}
                                                         </div>
-                                                    </StreamingResponse>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'tools') {
-                                            const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
-                                            const segActions = showLive
-                                                ? actions.filter(a => a.toolName !== 'drawDiagram')
-                                                : (seg.actions && seg.actions.length > 0
-                                                    ? seg.actions.filter(a => a.toolName !== 'drawDiagram')
-                                                    : (seg.toolCalls && seg.toolCalls.length > 0
-                                                        ? seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                            id: `completed_${idx}_${segIdx}_${i}`,
-                                                            toolName: tc.call.function.name,
-                                                            displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                            result: tc.result,
-                                                            args: tc.call.function.arguments || ''
-                                                        }))
-                                                        : []));
-
-                                            if (segActions.length === 0) return null;
-                                            return (
-                                                <div key={`seg-${segIdx}`}>
-                                                    <ActionsList
-                                                        actions={segActions}
-                                                        isLive={showLive}
-                                                        isDark={isDark}
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-                                    {/* Live actions if no segments have tools yet */}
-                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                    )}
-                                    <MessageMetaFooter
-                                        content={group.content}
-                                        createdAt={group.createdAt}
-                                        isDark={isDark}
-                                        hide={idx === groupedMessages.length - 1 && isRunning}
-                                        group={group}
-                                        projectId={hostProjectIdForSlash || undefined}
-                                        chatId={currentChatId || undefined}
-                                        selectedModel={selectedModel}
-                                        effortLevel={effortLevel}
-                                    />
-                                </>
-                            ) : (
-                                <>
-                                    {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        {group.role === 'assistant' ? (
-                                            <StreamingResponse
-                                                status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
-                                                copyText={typeof group.content === 'string' ? group.content : ''}
-                                                showActions={!(idx === groupedMessages.length - 1 && isRunning)}
-                                                className="w-full"
-                                            >
-                                                <div className={`text-[14px] leading-relaxed max-w-full ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                    )}
                                                     {group.content && (
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-[1.5] ${isDark ? 'prose-invert prose-pre:bg-[#131313] prose-pre:border prose-pre:border-[#292929] prose-pre:rounded-xl prose-code:text-[#F5F5F5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             {Array.isArray(group.content) ? (
                                                                 <div className="space-y-2">
                                                                     {group.content.map((part, i) => {
                                                                         if (part.type === 'image_url') {
-                                                                            return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                                            return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-xl max-h-[250px] object-contain border border-[#292929]" />;
                                                                         }
                                                                         return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
                                                                     })}
@@ -3487,138 +4061,140 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                         </div>
                                                     )}
                                                 </div>
-                                            </StreamingResponse>
-                                        ) : (
-                                            <div
-                                                className={`text-[14px] leading-relaxed break-words ${
-                                                    isDark
-                                                        ? 'bg-zinc-800/90 text-zinc-100 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-700/50 shadow-sm'
-                                                        : 'bg-zinc-100 text-zinc-900 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
-                                                }`}
-                                            >
-                                                {/* Picked element indicator */}
-                                                {(group as any).pickedElement && (
-                                                    <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                        <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                        <span className="font-medium">
-                                                            {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                        </span>
-                                                        {(group as any).pickedElement.text && (
-                                                            <span className="truncate opacity-70">
-                                                                {(group as any).pickedElement.text.length > 30
-                                                                    ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                    : (group as any).pickedElement.text}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {group.content && (
-                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                        {Array.isArray(group.content) ? (
-                                                            <div className="space-y-2">
-                                                                {group.content.map((part, i) => {
-                                                                    if (part.type === 'image_url') {
-                                                                        return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                    }
-                                                                    return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
-                                                                })}
-                                                            </div>
-                                                        ) : (
-                                                            renderAssistantMarkdown(String(group.content || ''))
-                                                        )}
-                                                    </div>
+                                                {group.createdAt && (
+                                                    <span className="text-[11px] text-[#737373] mt-1 px-1 tracking-tight font-mono">
+                                                        {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                    </span>
                                                 )}
                                             </div>
-                                        )}
+                                        </div>
+                                    </>
+                                )}
+
+                                {group.role === 'assistant' && (
+                                    <div className="flex items-start gap-3 w-full">
+                                        <AstroAvatar className="mt-0.5 shrink-0" />
+                                        <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                            {/* Questions / Answered Questions */}
+                                            {questionSegments.length > 0 && (
+                                                <div className="my-2 space-y-2">
+                                                    {questionSegments.map((qSeg, qIdx) => {
+                                                        const q = qSeg.question!;
+                                                        const isAnswered = q.status === 'answered' || qSeg.answered || (q.answer !== undefined && q.answer !== null);
+                                                        if (isAnswered) {
+                                                            return (
+                                                                <AnsweredQuestionBox
+                                                                    key={q.id || `q-${qIdx}`}
+                                                                    prompt={q.prompt}
+                                                                    answer={(q.answer ?? qSeg.answer ?? '') as any}
+                                                                    isDark={isDark}
+                                                                    questionId={q.id}
+                                                                />
+                                                            );
+                                                        }
+                                                        return (
+                                                            <AgentQuestionCard
+                                                                key={q.id || `q-${qIdx}`}
+                                                                question={q}
+                                                                isDark={isDark}
+                                                                submitting={questionSubmitting}
+                                                                error={questionError}
+                                                                onSubmit={handleAgentQuestionSubmit}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Non-permanent live thinking indicator */}
+                                            {isLiveTurn && currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) && (
+                                                <ThinkingBlock
+                                                    thinking={currentThinking}
+                                                    isDark={isDark}
+                                                    startTime={thinkingStartTime}
+                                                    effortLevel={effortLevel}
+                                                />
+                                            )}
+
+                                            {/* Live single active tool indicator */}
+                                            {isLiveTurn && actions.length > 0 && (
+                                                <ActionsList
+                                                    actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                                    isLive={true}
+                                                    isDark={isDark}
+                                                />
+                                            )}
+
+                                            {/* Unified permanent assistant text response */}
+                                            {assistantText ? (
+                                                <StreamingResponse
+                                                    status={isLiveTurn ? 'streaming' : 'complete'}
+                                                    copyText={assistantText}
+                                                    showActions={!isLiveTurn}
+                                                    className="w-full"
+                                                >
+                                                    <div className={`text-[15px] sm:text-[15.5px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-[#F5F5F5]' : 'text-gray-800'}`}>
+                                                        {renderAssistantMarkdown(assistantText)}
+                                                    </div>
+                                                </StreamingResponse>
+                                            ) : isLiveTurn && (!actions.length || actions.length === 0) && (!currentThinking || isSystemProcessingText(currentThinking)) ? (
+                                                <div className="flex items-center gap-2 text-[13.5px] text-[#737373] select-none py-0.5">
+                                                    <Marker role="status" className="px-0">
+                                                        <MarkerContent className="shimmer text-[#737373]">Thinking...</MarkerContent>
+                                                    </Marker>
+                                                </div>
+                                            ) : null}
+
+                                            <MessageMetaFooter
+                                                content={assistantText || group.content}
+                                                createdAt={group.createdAt}
+                                                isDark={isDark}
+                                                hide={isLiveTurn}
+                                                group={group}
+                                                projectId={hostProjectIdForSlash || undefined}
+                                                chatId={currentChatId || undefined}
+                                                selectedModel={selectedModel}
+                                                effortLevel={effortLevel}
+                                            />
+                                        </div>
                                     </div>
-                                    {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                    )}
-                                    {group.role === 'assistant' && (
-                                        <MessageMetaFooter
-                                            content={group.content}
-                                            createdAt={group.createdAt}
-                                            isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isRunning}
-                                            group={group}
-                                            projectId={hostProjectIdForSlash || undefined}
-                                            chatId={currentChatId || undefined}
-                                            selectedModel={selectedModel}
-                                            effortLevel={effortLevel}
-                                        />
-                                    )}
-                                </>
-                            )}
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* Live Thinking/Action fallback when no assistant message in list yet */}
+                    {isRunning && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
+                        <div className="flex items-start gap-3 w-full">
+                            <AstroAvatar className="mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                {currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) ? (
+                                    <ThinkingBlock
+                                        thinking={currentThinking}
+                                        isDark={isDark}
+                                        startTime={thinkingStartTime}
+                                        effortLevel={effortLevel}
+                                    />
+                                ) : actions.length > 0 ? (
+                                    <ActionsList
+                                        actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                        isLive={true}
+                                        isDark={isDark}
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                        <Marker role="status" className="px-0">
+                                            <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                        </Marker>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    ))}
-
-                    {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
-                    {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
-                        <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
-                    )}
-
-                    {/* Live Actions - only show here if there's no assistant message group yet */}
-                    {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                    )}
-
-                    {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
-                    {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
-                        !groupedMessages.length ||
-                        groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
-                    ) && (
-                        <Marker role="status" className="animate-fade-in-up px-1">
-                            <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                        </Marker>
                     )}
 
                     <div ref={messagesEndRef} />
                 </div>
             </div>
-
-            {/* Debug Panel */}
-            {debugLoading && (
-                <div className={`px-4 pb-2 ${isDark ? 'text-[#888]' : 'text-gray-500'} text-xs flex items-center gap-2`}>
-                    <span className="animate-spin">⟳</span>
-                    Checking Dokploy API...
-                </div>
-            )}
-            {debugInfo && !debugLoading && (
-                <div className="px-4 pb-3">
-                    <div className={`max-w-[720px] mx-auto rounded-xl overflow-hidden ${isDark ? 'bg-[#1c1c1c] border border-[#2a2a2a]' : 'bg-gray-50 border border-gray-200'}`}>
-                        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${isDark ? 'border-[#2a2a2a]' : 'border-gray-200'}`}>
-                            <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${debugInfo.dokploy?.reachable ? 'bg-green-500' : 'bg-red-500'}`} />
-                                <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API Status</span>
-                            </div>
-                            <button type="button" onClick={() => setDebugInfo(null)}
-                                className={`p-1 rounded ${isDark ? 'hover:bg-[#2a2a2a] text-[#666]' : 'hover:bg-gray-200 text-gray-400'}`}>
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <div className="p-4 font-mono text-[11px] leading-relaxed max-h-80 overflow-y-auto">
-                            {debugInfo.error ? (
-                                <div className="text-red-400">{debugInfo.error}</div>
-                            ) : (
-                                <div className="space-y-2">
-                                    <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                        <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API</div>
-                                        <div>Configured: <span className={debugInfo.dokploy?.configured ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.configured ? 'Yes' : 'No'}</span></div>
-                                        <div>Reachable: <span className={debugInfo.dokploy?.reachable ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.reachable ? 'Yes' : 'No'}</span></div>
-                                        <div>API URL: <span className={isDark ? 'text-[#7c3aed]' : 'text-purple-700'}>{debugInfo.dokploy?.apiUrl || 'N/A'}</span></div>
-                                        {debugInfo.dokploy?.projectsCount !== undefined && <div>Projects: {debugInfo.dokploy.projectsCount}</div>}
-                                        {debugInfo.dokploy?.latencyMs && <div>Latency: {debugInfo.dokploy.latencyMs}ms</div>}
-                                        {debugInfo.dokploy?.error && <div className="text-red-400">Error: {debugInfo.dokploy.error}</div>}
-                                    </div>
-                                    <div className={`text-xs ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>Timestamp: {debugInfo.timestamp}</div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Input Area - centered with margins */}
             <div className="px-4 pb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
@@ -3706,48 +4282,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Connected integrations pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
-                            <div className="flex justify-start px-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setLibraryView('mcp')}
-                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
-                                        isDark
-                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
-                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                                    }`}
-                                    aria-label="Connected integrations"
-                                >
-                                    <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
-                                            <span
-                                                key={addon.id}
-                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#181818] bg-[#1c1d1f]' : 'border-white bg-white'
-                                                }`}
-                                            >
-                                                <McpBrandIcon
-                                                    id={addon.id}
-                                                    name={addon.name}
-                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
-                                                />
-                                            </span>
-                                        ))}
-                                    </span>
-                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
-                                </button>
-                            </div>
-                        )}
-
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
-                            pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        <div className={`rounded-[28px] border px-3 transition-all ${
+                            pendingQuestion ? 'py-1.5' : 'pt-2 pb-2.5'
+                        } ${isDark ? 'bg-[#171717] border-[#292929] focus-within:border-[#383838]' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
                                     value={input}
+                                    disabled={isRunning}
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         setInput(value);
@@ -3760,9 +4303,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                         target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                     }}
-                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                    style={{ height: 'auto', minHeight: '76px' }}
+                                    placeholder={
+                                        isRunning
+                                            ? "AI is working on your task..."
+                                            : "Help you write code, debug and ship production-ready work. Type / for skills & integrations."
+                                    }
+                                    className={`w-full bg-transparent text-[15px] sm:text-[15.5px] leading-[1.5] px-3 pt-2 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${
+                                        isRunning
+                                            ? 'cursor-not-allowed text-[#737373] placeholder:text-[#737373]'
+                                            : isDark
+                                            ? 'text-[#F5F5F5] placeholder:text-[#737373]'
+                                            : 'text-gray-900 placeholder:text-gray-400'
+                                    }`}
+                                    style={{ height: 'auto', minHeight: isRunning ? '44px' : '76px' }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape' && showSlashMenu) {
                                             e.preventDefault();
@@ -3791,7 +4344,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-[12px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#292929] bg-[#1D1D1D] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -3799,73 +4352,107 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#e5e5e5]' : ''}`}
+                                        className={`w-[min(88vw,16.5rem)] p-2.5 rounded-[18px] ${isDark ? "border-[#292929] bg-[#171717] text-[#F5F5F5] shadow-2xl shadow-black/80" : "bg-zinc-100 border-zinc-200/80 text-zinc-800 shadow-xl"}`}
                                     >
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                fileInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
+                                        {/* Credit Segment */}
+                                        <div
+                                            className={`p-2.5 rounded-xl cursor-pointer transition-colors ${
+                                                isDark ? "bg-[#202020] hover:bg-[#262626]" : "bg-zinc-200/60 hover:bg-zinc-200"
+                                            }`}
+                                            onClick={() => {
+                                                setShowSlashMenu(false);
+                                                setLibraryView("credits");
                                             }}
                                         >
-                                            <ImageIcon className="h-4 w-4 opacity-70" />
-                                            Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
-                                        </DropdownMenuItem>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[12px] font-bold tracking-tight text-[#F5F5F5]">
+                                                    {userCredits ? `${userCredits.credits} credit left` : "5 credit left"}
+                                                </span>
+
+                                                {/* Blue Pill Progress Bar */}
+                                                <div className="w-24 bg-zinc-700/60 rounded-full h-1.5 overflow-hidden flex items-center p-0.5">
+                                                    <div
+                                                        className="bg-[#00a3ff] h-full rounded-full transition-all duration-300"
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                Math.max(
+                                                                    0,
+                                                                    ((userCredits?.credits ?? 5) / (userCredits?.maxCredits ?? 10)) * 100
+                                                                )
+                                                            )}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-[10px] text-zinc-400 font-normal">
+                                                <span>Remaining balance.</span>
+                                                <span>{userCredits?.resetTime || "Resets daily at 00:00 UTC"}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
+
+                                        {/* Segment 1: Upload file */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
                                                 documentInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
                                             }}
                                         >
-                                            <FileUp className="h-4 w-4 opacity-70" />
-                                            File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/file</span>
+                                            <FileUp className="h-3.5 w-3.5 text-zinc-400" />
+                                            Upload file
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/file</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+
+                                        {/* Segment 2: Upload image */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
-                                                setLibraryView('skills');
-                                                if (input.startsWith('/')) setInput('');
+                                                fileInputRef.current?.click();
+                                                if (input.startsWith("/")) setInput("");
                                             }}
                                         >
-                                            <Sparkles className="h-4 w-4 opacity-70" />
-                                            Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/skills</span>
+                                            <ImageIcon className="h-3.5 w-3.5 text-zinc-400" />
+                                            Upload image
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/image</span>
                                         </DropdownMenuItem>
+
+                                        <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
+
+                                        {/* Segment 3: Debug Information */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('mcp');
-                                                if (input.startsWith('/')) setInput('');
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            onSelect={async () => {
+                                                if (input.startsWith("/")) setInput("");
+                                                setShowDebugModal(true);
+                                                setDebugModalLoading(true);
+                                                try {
+                                                    const report = await buildDebugReportData();
+                                                    setDebugReportData(report);
+                                                } finally {
+                                                    setDebugModalLoading(false);
+                                                }
                                             }}
                                         >
-                                            <Puzzle className="h-4 w-4 opacity-70" />
-                                            Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
+                                            <Bug className="h-3.5 w-3.5 text-zinc-400" />
+                                            Debug information
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/debug</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+
+                                        {/* Segment 4: Support */}
                                         <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
-                                                setLibraryView('help');
-                                                if (input.startsWith('/')) setInput('');
+                                                if (input.startsWith("/")) setInput("");
+                                                setShowStandaloneShareWarning(true);
                                             }}
                                         >
-                                            <HelpCircle className="h-4 w-4 opacity-70" />
-                                            Help and support
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('credits');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <CreditCard className="h-4 w-4 opacity-70" />
-                                            Credit
+                                            <HelpCircle className="h-3.5 w-3.5 text-zinc-400" />
+                                            Support
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/support</span>
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -3874,24 +4461,48 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     effort={effortLevel}
                                     onEffortChange={handleEffortChange}
                                     selectedModel={selectedModel}
-                                    modelChoices={(availableModelChoices || []).map(c => ({
-                                        id: c.modelType,
-                                        label: c.label || c.apiModel,
-                                        apiModel: c.apiModel,
-                                        subtitle: c.subtitle,
-                                        iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
-                                        active: c.active,
-                                        isAiTabActive: c.isAiTabActive,
-                                    }))}
+                                    modelChoices={(availableModelChoices || []).map(c => {
+                                        const isSelected = c.modelType === selectedModel || c.apiModel === selectedModel;
+                                        return {
+                                            id: c.modelType,
+                                            label: c.label || c.apiModel,
+                                            apiModel: c.apiModel,
+                                            subtitle: c.subtitle,
+                                            iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                            active: isSelected || c.active,
+                                            isAiTabActive: isSelected || c.isAiTabActive,
+                                        };
+                                    })}
                                     onModelSelect={(modelId) => {
                                         const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
-                                        if (choice) {
-                                            setSelectedModel(choice.modelType);
-                                            setAiModel(choice.apiModel);
-                                        } else {
-                                            setSelectedModel(modelId as any);
-                                            setAiModel(modelId);
-                                        }
+                                        const targetModelType = choice ? choice.modelType : (modelId as any);
+                                        const targetApiModel = choice ? choice.apiModel : modelId;
+                                        setSelectedModel(targetModelType);
+                                        setAiModel(targetApiModel);
+                                        try {
+                                            if (typeof window !== 'undefined') {
+                                                localStorage.setItem('sycord_selected_model', String(targetModelType));
+                                            }
+                                        } catch {}
+
+                                        setAvailableModelChoices(prev => {
+                                            if (!prev) return prev;
+                                            return prev.map(c => ({
+                                                ...c,
+                                                active: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                                isAiTabActive: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                                            }));
+                                        });
+
+                                        const pId = getHostProjectId();
+                                        void fetch('/api/ai/omni', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                model_id: targetApiModel,
+                                                project_id: pId || 'global',
+                                            }),
+                                        }).catch(() => {});
                                     }}
                                     onAddModelsClick={() => {
                                         setShowOmniModal(true);
@@ -3906,9 +4517,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         aria-label="Voice input"
                                         aria-pressed={isListening}
                                         onClick={handleVoiceInput}
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        className={`flex size-10 items-center justify-center rounded-[12px] transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
                                     >
-                                        <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
+                                        <Mic className={`size-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
 
                                     {isRunning ? (
@@ -3916,30 +4527,81 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
+                                            className="flex size-10 flex-shrink-0 items-center justify-center rounded-full bg-[#F5F5F5] text-[#131313] transition-all active:scale-[0.97] hover:bg-white"
                                         >
-                                            <div className="h-3 w-3 rounded-sm bg-black" />
+                                            <div className="size-3 rounded-sm bg-[#131313]" />
                                         </button>
                                     ) : (
                                         <button
                                             type="submit"
                                             disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
                                             aria-label="Send"
-                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
+                                            className={`flex size-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-[0.97] disabled:cursor-not-allowed ${
                                                 !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-white text-black hover:bg-gray-200'
-                                                    : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'
+                                                    ? 'bg-[#F5F5F5] text-[#131313] hover:bg-white'
+                                                    : isDark ? 'bg-[#202020] text-[#737373] border border-[#292929]' : 'bg-zinc-200 text-zinc-400'
                                             }`}
                                         >
-                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+                                            <ArrowUp className="size-5" strokeWidth={2.25} />
                                         </button>
                                     )}
                                 </div>
                             </div>
                         </div>
+
                     </form>
                 </div>
             </div>
+
+            {/* Telemetry & Debug Information Modal */}
+            <DebugInfoModal
+                isOpen={showDebugModal}
+                onClose={() => setShowDebugModal(false)}
+                data={debugReportData}
+                loading={debugModalLoading}
+                onRefresh={async () => {
+                    setDebugModalLoading(true);
+                    try {
+                        const report = await buildDebugReportData();
+                        setDebugReportData(report);
+                    } finally {
+                        setDebugModalLoading(false);
+                    }
+                }}
+                isDark={isDark}
+            />
+
+            {/* Standalone Debug Share Warning Modal (Triggered by /support) */}
+            <ShareDebugWarningModal
+                isOpen={showStandaloneShareWarning}
+                onClose={() => setShowStandaloneShareWarning(false)}
+                onConfirmDownload={async () => {
+                    try {
+                        let report = debugReportData;
+                        if (!report) {
+                            report = await buildDebugReportData();
+                            setDebugReportData(report);
+                        }
+                        const jsonString = JSON.stringify(report, null, 2);
+                        const blob = new Blob([jsonString], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                        a.download = `sycord-debug-report-${report.topLevel.projectContext.projectId || 'global'}-${ts}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    } catch (e) {
+                        console.error('[Support] Share download error:', e);
+                    }
+                }}
+                debugId={debugReportData?.topLevel.projectContext.chatId
+                    ? `${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) % 9000) + 1000}-${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) * 31 % 900000) + 100000}-${Math.abs(debugReportData.topLevel.projectContext.chatId.split('').reduce((acc, c) => (acc << 5) - acc + c.charCodeAt(0), 0) * 17 % 900000) + 100000}`
+                    : '5836-384638-736439'}
+                isDark={isDark}
+            />
         </div>
     );
 }
@@ -4065,22 +4727,6 @@ function MessageMetaFooter({
 
     return (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 px-1">
-            {showDebug && (
-                <button
-                    type="button"
-                    onClick={handleDownloadDebug}
-                    title="Download debug diagnostics JSON"
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-md border transition-all active:scale-95 ${
-                        isDark
-                            ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'
-                            : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700'
-                    }`}
-                >
-                    <Bug className="size-3" />
-                    <Download className="size-3" />
-                    <span>Debug JSON</span>
-                </button>
-            )}
             <span className={`text-xs tabular-nums ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{timeLabel}</span>
             <button
                 type="button"
@@ -4106,45 +4752,22 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [startTime, thinkingTime]);
-
+function ThinkingBlock({ thinking, isDark, thinkingTime, startTime, effortLevel }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null; effortLevel?: string }) {
+    if (effortLevel === 'low') return null;
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
     const isLive = Boolean(startTime) && thinkingTime === undefined;
 
-    const activityItems: AgentActivityItem[] = [
-        {
-            id: 'thinking-stream',
-            type: 'text',
-            content: thinking,
-        },
-    ];
+    if (isLive) {
+        return (
+            <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-1 animate-fade-in">
+                <Brain className="size-4 text-zinc-400 shrink-0 animate-pulse" />
+                <span className="font-normal text-zinc-400">Thinking…</span>
+            </div>
+        );
+    }
 
-    return (
-        <div className="mb-3 animate-fade-in px-1">
-            <AgentActivity
-                items={activityItems}
-                status={isLive ? 'working' : 'complete'}
-                duration={displayTime}
-                activeLabel="Reasoning…"
-            />
-        </div>
-    );
+    return null;
 }
 
 function FileAttachmentBlock({ file, isDark }: { file: FileAttachment; isDark: boolean }) {

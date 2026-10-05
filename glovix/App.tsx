@@ -165,7 +165,7 @@ function AppContent() {
 
     if (loading) {
         return (
-            <div className={`h-screen w-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
+            <div className={`h-screen w-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#131313]' : 'bg-white'}`}>
                 <div className={`text-xl tracking-widest font-light ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     Syra
                 </div>
