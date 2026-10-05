@@ -39,7 +39,7 @@ export function DashboardModeToggle({
       role="toolbar"
       aria-label="Access / Resource Tool Bar"
       className={cn(
-        "relative inline-flex items-center rounded-[14px] bg-[#181818] border border-[#282828] shadow-sm px-1 py-1 select-none",
+        "relative inline-flex items-center rounded-[14px] bg-surface border border-border shadow-xs px-1 py-1 select-none",
         className
       )}
     >
@@ -49,7 +49,7 @@ export function DashboardModeToggle({
         title="Copy active project link"
         aria-label="Copy active project link"
         onClick={() => handleAction("link")}
-        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-text-muted hover:text-foreground hover:bg-surface-muted transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <svg
           viewBox="0 0 24 24"
@@ -66,7 +66,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 1 */}
-      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-border shrink-0" />
 
       {/* Section 2: Copy / Add */}
       <button
@@ -74,7 +74,7 @@ export function DashboardModeToggle({
         title="Create or duplicate project"
         aria-label="Create or duplicate project"
         onClick={() => handleAction("copy-add")}
-        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-text-muted hover:text-foreground hover:bg-surface-muted transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <svg
           viewBox="0 0 24 24"
@@ -93,7 +93,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 2 */}
-      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-border shrink-0" />
 
       {/* Section 3: Astro AI Orb (blue/purple gradient circle) */}
       <button
@@ -101,12 +101,12 @@ export function DashboardModeToggle({
         title={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
         aria-label={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
         onClick={() => handleAction(activeMode === "astro" ? "projects" : "astro")}
-        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] hover:bg-surface-muted transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <div
           className={cn(
             "size-[20px] rounded-full shrink-0 transition-all duration-200",
-            activeMode === "astro" && "ring-2 ring-indigo-400/90 ring-offset-2 ring-offset-[#171717] scale-105"
+            activeMode === "astro" && "ring-2 ring-indigo-400/90 ring-offset-2 ring-offset-surface scale-105"
           )}
           style={{
             background: "linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 70%, #c4b5fd 100%)",
@@ -116,7 +116,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 3 */}
-      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-border shrink-0" />
 
       {/* Section 4: ChevronDown with DropdownMenu */}
       <DropdownMenu>
@@ -125,7 +125,7 @@ export function DashboardModeToggle({
             type="button"
             title="Dashboard options"
             aria-label="Dashboard options"
-            className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+            className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-text-muted hover:text-foreground hover:bg-surface-muted transition-all duration-150 active:scale-95 outline-none cursor-pointer"
           >
             <svg
               viewBox="0 0 24 24"
@@ -140,35 +140,35 @@ export function DashboardModeToggle({
             </svg>
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-52 bg-[#171717] border border-[#292929] text-foreground rounded-[16px] p-1.5 shadow-2xl">
+        <DropdownMenuContent align="start" className="w-52 bg-surface border border-border text-foreground rounded-[16px] p-1.5 shadow-2xl">
           <DropdownMenuLabel className="text-[11px] font-medium text-text-muted px-2.5 py-1">
             Dashboard View
           </DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() => handleAction("projects")}
-            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer"
           >
             <Folder className="mr-2 size-3.5" />
             <span>Projects Dashboard</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => handleAction("astro")}
-            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer"
           >
             <Sparkles className="mr-2 size-3.5 text-indigo-400" />
             <span>Astro AI Agent</span>
           </DropdownMenuItem>
-          <DropdownMenuSeparator className="bg-[#292929]" />
+          <DropdownMenuSeparator className="bg-border" />
           <DropdownMenuItem
             onClick={() => handleAction("copy-add")}
-            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer"
           >
             <Plus className="mr-2 size-3.5" />
             <span>New Project</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => handleAction("link")}
-            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer"
           >
             <ExternalLink className="mr-2 size-3.5" />
             <span>Copy Project URL</span>

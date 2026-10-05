@@ -5,7 +5,8 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone, Monitor, FileSpreadsheet } from "lucide-react"
 import { useState, useEffect, Suspense, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -110,14 +111,18 @@ function DashboardContent() {
           ...sampleArtifacts,
         ]
 
+  const [artifactFilter, setArtifactFilter] = useState<"all" | "website" | "spreadsheet">("all")
+
   const q = searchQuery.trim().toLowerCase()
-  const filteredArtifacts = q
-    ? allArtifacts.filter(
-        (a) =>
-          a.name.toLowerCase().includes(q) ||
-          (a.meta && a.meta.toLowerCase().includes(q))
-      )
-    : allArtifacts
+  const filteredArtifacts = allArtifacts.filter((a) => {
+    const matchesQuery =
+      !q ||
+      a.name.toLowerCase().includes(q) ||
+      (a.meta && a.meta.toLowerCase().includes(q))
+    const matchesFilter =
+      artifactFilter === "all" || a.type === artifactFilter
+    return matchesQuery && matchesFilter
+  })
 
   const handleAiSubmit = async (
     promptText: string,
@@ -276,18 +281,19 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        <header className="sticky top-0 bg-background/80 backdrop-blur-md z-50 border-b border-[#222222]/40">
-          <div className="max-w-4xl mx-auto px-5 sm:px-8 py-3.5 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 focus:outline-none">
+        {/* Compact Header Sizing */}
+        <header className="sticky top-0 bg-background/90 backdrop-blur-md z-50 border-b border-border/40">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2.5 focus:outline-none">
               <Image
                 src="/brand-logo.png"
                 alt="Sycord"
-                width={38}
-                height={18}
+                width={32}
+                height={16}
                 priority
                 className="object-contain shrink-0"
               />
-              <span className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+              <span className="text-sm sm:text-base font-semibold tracking-tight text-foreground">
                 Sycord
               </span>
             </Link>
@@ -296,7 +302,7 @@ function DashboardContent() {
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-9 rounded-[10px] bg-[#553f35] border border-[#6d4c41]/50 flex items-center justify-center text-[#f5f5f5] font-semibold text-sm transition-transform active:scale-[0.97] outline-none cursor-pointer shadow-sm hover:brightness-110 overflow-hidden"
+                  className="relative size-8 rounded-[10px] bg-[#553f35] border border-[#6d4c41]/50 flex items-center justify-center text-[#f5f5f5] font-semibold text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer shadow-sm hover:brightness-110 overflow-hidden"
                 >
                   {session?.user?.image ? (
                     <img
@@ -305,7 +311,7 @@ function DashboardContent() {
                       className="size-full object-cover"
                     />
                   ) : (
-                    "M"
+                    userInitials
                   )}
                 </button>
               </DropdownMenuTrigger>
@@ -338,8 +344,8 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-16 flex-1 flex flex-col justify-between min-h-[calc(100vh-65px)]">
-          <div className="space-y-6">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-16 flex-1 flex flex-col justify-between min-h-[calc(100vh-56px)]">
+          <div className="space-y-5">
             {announcements.length > 0 && (
               <div className="space-y-2">
                 {announcements.map((ann) => (
@@ -364,41 +370,70 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* 1. Artifact Search & Action Row */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-              <div className="relative flex items-center flex-1 h-[48px] bg-[#181818] border border-[#282828] focus-within:border-[#3d3d3d] rounded-[14px] px-3.5 transition-colors shadow-sm">
-                <Search className="size-4 text-zinc-400 shrink-0 mr-3" strokeWidth={2} />
-                <input
-                  type="text"
+            {/* 1. Artifact Search & Action Row using Shadcn */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-text-muted pointer-events-none" />
+                <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="search for file or artifact"
+                  placeholder="Search for file or artifact..."
                   aria-label="Search for file or artifact"
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-zinc-500 outline-none"
+                  className="pl-10 pr-9 h-11 bg-surface border-border focus-visible:border-border-strong focus-visible:ring-1 focus-visible:ring-border-strong rounded-[14px] text-sm shadow-xs"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="text-xs text-zinc-400 hover:text-white px-1.5 py-0.5"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted hover:text-foreground p-1 cursor-pointer"
                   >
                     ✕
                   </button>
                 )}
               </div>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="default"
                 onClick={() => router.push("/dashboard/create")}
                 aria-label="Create new project or artifact"
-                title="Create new project or artifact"
-                className="h-[48px] w-full sm:w-[104px] rounded-[14px] bg-[#464646] hover:bg-[#525252] text-white text-sm font-medium transition-all active:scale-[0.97] cursor-pointer shrink-0 flex items-center justify-center shadow-sm"
+                className="h-11 px-5 rounded-[14px] border border-border bg-surface hover:bg-surface-muted text-foreground font-medium shrink-0 shadow-xs"
               >
+                <Plus className="size-4 mr-1.5" />
                 <span>New</span>
-              </button>
+              </Button>
             </div>
 
-            {/* 2. Access / Tool Bar */}
-            <div className="flex items-center pt-1">
+            {/* 2. Filter Buttons and Access Bar using Shadcn */}
+            <div className="flex items-center justify-between gap-3 pt-1 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant={artifactFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setArtifactFilter("all")}
+                  className="rounded-[10px] h-8 text-xs font-medium px-3"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={artifactFilter === "website" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setArtifactFilter("website")}
+                  className="rounded-[10px] h-8 text-xs font-medium px-3 gap-1.5"
+                >
+                  <Monitor className="size-3.5" />
+                  <span>Websites</span>
+                </Button>
+                <Button
+                  variant={artifactFilter === "spreadsheet" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setArtifactFilter("spreadsheet")}
+                  className="rounded-[10px] h-8 text-xs font-medium px-3 gap-1.5"
+                >
+                  <FileSpreadsheet className="size-3.5" />
+                  <span>Files</span>
+                </Button>
+              </div>
+
               <DashboardModeToggle
                 activeMode={activeMode}
                 onChange={(mode) => {
@@ -450,7 +485,7 @@ function DashboardContent() {
                 </div>
               ) : (
                 /* Artifacts rail: horizontal scrollable on mobile, flex-wrap on desktop */
-                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
                   {filteredArtifacts.map((artifact) => (
                     <DashboardArtifactCard
                       key={artifact.id}
@@ -474,8 +509,8 @@ function DashboardContent() {
 
             {/* If in Astro mode, show full Astro Dashboard tools */}
             {activeMode === "astro" && (
-              <div className="rounded-[22px] border border-[#282828] bg-[#151515]/30 p-4 sm:p-5 mt-4">
-                <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#282828]">
+              <div className="rounded-[22px] border border-border bg-surface/40 p-4 sm:p-5 mt-4">
+                <div className="flex items-center justify-between pb-3 mb-2 border-b border-border">
                   <span className="text-xs font-medium text-text-muted">Astro AI Workspace Active</span>
                   <button
                     type="button"
@@ -490,13 +525,11 @@ function DashboardContent() {
             )}
           </div>
 
-          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (MOST IMPORTANT ELEMENT) */}
-          <div className="pt-10 sm:pt-16 pb-4">
+          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (Exact Astro chat style & logic) */}
+          <div className="pt-8 sm:pt-12 pb-4">
             <AiComposer
               selectedArtifact={selectedArtifact}
               onClearArtifact={() => setSelectedArtifact(null)}
-              onSubmit={handleAiSubmit}
-              isSubmitting={isExecutingAi}
             />
           </div>
         </main>

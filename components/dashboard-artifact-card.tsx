@@ -88,8 +88,8 @@ export function DashboardArtifactCard({
       className={cn(
         "group relative flex items-center justify-between min-w-[200px] sm:min-w-[220px] max-w-[280px] rounded-[18px] border p-3 sm:p-3.5 transition-all duration-150 select-none cursor-pointer outline-none text-left shrink-0",
         isSelected
-          ? "bg-[#1d1d28] border-indigo-500/80 shadow-[0_0_12px_rgba(99,102,241,0.18)] ring-1 ring-indigo-500/50"
-          : "bg-[#181818] border-[#292929] hover:bg-[#1e1e1e] hover:border-[#383838]"
+          ? "bg-surface-raised border-indigo-500/80 shadow-md ring-1 ring-indigo-500/50"
+          : "bg-surface border-border hover:bg-surface-muted hover:border-border-strong"
       )}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
