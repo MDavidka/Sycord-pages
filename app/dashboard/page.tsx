@@ -5,7 +5,7 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone } from "lucide-react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, SlidersHorizontal, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone } from "lucide-react"
 import { useState, useEffect, Suspense, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -54,6 +54,7 @@ function DashboardContent() {
   const [projects, setProjects] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [projectFilter, setProjectFilter] = useState<"all" | "owned" | "shared">("all")
   const [flaggedDeployments] = useState<Set<string>>(new Set())
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
@@ -63,9 +64,9 @@ function DashboardContent() {
   const [isDeleting, setIsDeleting] = useState(false)
 
   const q = searchQuery.trim().toLowerCase()
-  const filtered: any[] = q
-    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
-    : projects
+  const filtered: any[] = projects
+    .filter((p: any) => projectFilter === "all" || (projectFilter === "owned" ? !p?.isCollaborator : p?.isCollaborator))
+    .filter((p: any) => !q || (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
   const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
   const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
@@ -274,9 +275,11 @@ function DashboardContent() {
               type="button"
               onClick={() => router.push("/dashboard/create")}
               aria-label="Create new project"
-              className="h-9 px-5 rounded-[14px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs sm:text-sm font-medium text-foreground transition-all active:scale-[0.97] cursor-pointer"
+              className="inline-flex h-11 min-h-11 items-center gap-2 rounded-[14px] border border-foreground/15 bg-foreground px-4 text-sm font-semibold text-background shadow-[0_4px_14px_rgba(0,0,0,0.18)] transition-all hover:bg-foreground/90 active:scale-[0.97] cursor-pointer"
             >
-              <span>+ New Project</span>
+              <Plus className="size-4" strokeWidth={2.3} />
+              <span className="hidden sm:inline">New Project</span>
+              <span className="sm:hidden">New</span>
             </button>
           </div>
 
@@ -304,18 +307,43 @@ function DashboardContent() {
             /* PROJECTS MODE: Projects List & Search */
             <div className="space-y-5 pt-2 animate-in fade-in duration-200">
               {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
-              <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
-                <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
-                />
-                <span className="text-xs text-text-muted shrink-0 pl-3 select-none">
-                  {filtered.length} {filtered.length === 1 ? "result" : "results"}
-                </span>
+              <div className="flex items-center gap-2">
+                <div className="relative flex h-12 min-w-0 flex-1 items-center rounded-[16px] border border-border/80 bg-surface/80 px-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors focus-within:border-border-strong focus-within:bg-surface">
+                  <Search className="mr-3 size-[17px] shrink-0 text-text-muted" strokeWidth={1.8} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search projects"
+                    aria-label="Search projects"
+                    className="min-w-0 w-full bg-transparent text-[16px] text-foreground placeholder:text-text-muted outline-none"
+                  />
+                  <span className="hidden shrink-0 select-none pl-3 text-xs text-text-muted sm:inline">
+                    {filtered.length} {filtered.length === 1 ? "result" : "results"}
+                  </span>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Filter projects"
+                      className={cn(
+                        "inline-flex h-12 shrink-0 items-center gap-2 rounded-[16px] border px-3.5 text-sm transition-colors active:scale-[0.98]",
+                        projectFilter === "all" ? "border-border/80 bg-surface/80 text-text-muted hover:bg-surface" : "border-foreground/30 bg-foreground/10 text-foreground"
+                      )}
+                    >
+                      <SlidersHorizontal className="size-[17px]" strokeWidth={1.8} />
+                      <span className="hidden sm:inline">Filter</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-40">
+                    <DropdownMenuLabel>Show projects</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setProjectFilter("all")}>All projects</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setProjectFilter("owned")}>My projects</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setProjectFilter("shared")}>Shared with me</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Segmented Projects / Solar Switch */}
