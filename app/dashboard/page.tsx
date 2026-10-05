@@ -34,15 +34,18 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[26px] p-5 sm:p-6 flex items-center justify-between bg-surface border border-border">
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <Skeleton className="size-14 rounded-[16px] shrink-0 bg-surface-raised" />
-        <div className="space-y-2 flex-1 min-w-0">
-          <Skeleton className="h-5 w-32 bg-surface-raised rounded-[8px]" />
-          <Skeleton className="h-3.5 w-44 bg-surface-muted rounded-[6px]" />
+    <div className="rounded-[26px] border border-border/80 bg-surface/80 overflow-hidden">
+      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border/60">
+        <div className="flex items-center gap-3.5 flex-1 min-w-0">
+          <Skeleton className="size-10 sm:size-11 rounded-[12px] shrink-0 bg-surface-raised" />
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
+            <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
+          </div>
         </div>
+        <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0" />
       </div>
-      <Skeleton className="size-9 rounded-[12px] shrink-0 bg-surface-raised ml-2" />
+      <Skeleton className="w-full h-[260px] sm:h-[320px] bg-surface-raised/40" />
     </div>
   )
 }
@@ -178,22 +181,35 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        <header className="border-b border-border sticky top-0 bg-background/90 backdrop-blur-md z-50">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+        <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5">
-              <Image src="/logo.png" alt="Logo" width={28} height={28} priority className="rounded-[6px] object-contain shrink-0" />
-              <span className="text-base font-medium tracking-tight text-foreground">
-                {userStatus.isPremium ? (userStatus.subscription === "Sycord Enterprise" ? "Sycord Enterprise" : "Sycord+") : "Sycord"}
+              <div className="size-7 rounded-[8px] bg-foreground/10 flex items-center justify-center overflow-hidden">
+                <svg className="size-4 text-foreground/80" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 18h4v-7.5l4 4.5 4-4.5V18h4V6h-4l-4 4.5L8 6H4v12z" />
+                </svg>
+              </div>
+              <span className="text-base font-semibold tracking-tight text-foreground lowercase">
+                sycord
               </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" aria-label="User account menu" className="relative size-11 rounded-full p-0 transition-transform active:scale-[0.97]">
-                  <Avatar className="size-10">
-                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">{userInitials}</AvatarFallback>
-                  </Avatar>
-                </Button>
+                <button
+                  type="button"
+                  aria-label="User account menu"
+                  className="relative size-8 rounded-full bg-amber-900/40 border border-amber-700/50 flex items-center justify-center text-amber-200 font-medium text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer"
+                >
+                  {session?.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      className="size-full rounded-full object-cover"
+                    />
+                  ) : (
+                    userInitials
+                  )}
+                </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal px-2.5 py-2">
@@ -224,7 +240,7 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-8 space-y-6">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-7 pb-20 md:pb-12 space-y-6">
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (
@@ -249,17 +265,19 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* Page Title Area & New Project Button */}
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">Projects</h1>
-            <Button
+          {/* Page Title Area & Rounded Pill Action Button */}
+          <div className="flex items-center justify-between gap-4 pt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground lowercase">
+              projects
+            </h1>
+            <button
               type="button"
               onClick={() => router.push("/dashboard/create")}
               aria-label="Create new project"
+              className="h-9 px-5 rounded-[14px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs sm:text-sm font-medium text-foreground transition-all active:scale-[0.97] cursor-pointer"
             >
-              <Plus className="size-4" strokeWidth={2} />
-              <span>New Project</span>
-            </Button>
+              <span>+ New Project</span>
+            </button>
           </div>
 
           {activeMode === "astro" ? (
@@ -284,26 +302,24 @@ function DashboardContent() {
             </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Search Bar & Counter */}
-              <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1 flex items-center min-h-[44px] bg-surface border border-border focus-within:border-border-strong rounded-[18px] px-3.5 transition-colors">
-                  <Search className="size-4 text-text-muted shrink-0 mr-2.5" strokeWidth={1.75} />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search projects..."
-                    className="w-full bg-transparent text-xs sm:text-sm text-foreground placeholder:text-text-muted outline-none"
-                  />
-                </div>
-                <div className="min-h-[44px] px-4 border border-border rounded-[18px] bg-surface text-xs font-mono font-medium text-text-secondary flex items-center justify-center shrink-0 tabular-nums">
-                  {ownedCount}/{MAX_FREE_PROJECTS}
-                </div>
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
+              <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
+                <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
+                />
+                <span className="text-xs text-text-muted shrink-0 pl-3 select-none">
+                  {filtered.length} {filtered.length === 1 ? "result" : "results"}
+                </span>
               </div>
 
-              {/* Segmented Projects / Astro Switch */}
-              <div className="flex items-center">
+              {/* Segmented Projects / Solar Switch */}
+              <div className="flex items-center pt-1">
                 <DashboardModeToggle
                   activeMode={activeMode}
                   onChange={(mode) => {
@@ -320,8 +336,8 @@ function DashboardContent() {
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                  {[1, 2].map((i) => (
                     <CardSkeleton key={i} />
                   ))}
                 </div>
@@ -355,30 +371,7 @@ function DashboardContent() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {/* Arc-style New Project Card */}
-                  {canCreateMore && !q && (
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard/create")}
-                      aria-label="Create new project"
-                      className="group relative flex flex-col items-center justify-center min-h-[116px] p-5 rounded-[26px] border border-dashed border-border hover:border-border-strong bg-surface/40 hover:bg-surface transition-all duration-200 text-center cursor-pointer select-none active:scale-[0.99]"
-                    >
-                      <div className="size-10 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center mb-2 group-hover:border-border transition-all">
-                        <Plus className="size-4 text-text-muted group-hover:text-foreground transition-colors" strokeWidth={2} />
-                      </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-foreground transition-colors">
-                        New Project
-                      </h3>
-                      <p className="text-[11px] text-text-muted mt-0.5">
-                        Create a new site in a few clicks
-                      </p>
-                      <span className="mt-1.5 text-[10.5px] text-text-muted font-mono">
-                        {ownedCount}/{MAX_FREE_PROJECTS} used
-                      </span>
-                    </button>
-                  )}
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                   {filtered.map((project: any) => {
                     const liveUrl = getValidProjectUrl(project)
                     const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
