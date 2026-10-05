@@ -179,27 +179,24 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5">
+        <header className="h-[268px] border-b border-border/40 bg-background sticky top-0 z-50">
+          <div className="relative mx-auto flex h-full max-w-4xl items-end justify-center px-4 pb-[84px] sm:px-6">
+            <Link href="/" aria-label="Sycord home" className="flex items-center justify-center">
               <Image
                 src="/logo.png"
                 alt="Sycord"
-                width={28}
-                height={28}
+                width={84}
+                height={42}
                 priority
-                className="rounded-[6px] object-contain shrink-0"
+                className="h-[42px] w-[84px] object-contain opacity-75"
               />
-              <span className="text-base font-semibold tracking-tight text-foreground lowercase">
-                sycord
-              </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-8 rounded-full bg-amber-900/40 border border-amber-700/50 flex items-center justify-center text-amber-200 font-medium text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer"
+                  className="absolute right-4 bottom-[75px] flex size-[72px] items-center justify-center rounded-[18px] border border-[#704e45] bg-[#563832] text-[28px] font-medium text-[#f5e8e5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform active:scale-[0.97] outline-none cursor-pointer sm:right-6"
                 >
                   {session?.user?.image ? (
                     <img
@@ -241,7 +238,16 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-7 pb-20 md:pb-12 space-y-6">
+        <main className="mx-auto max-w-4xl space-y-6 px-4 py-0 pb-20 sm:px-6 md:pb-12">
+          <section className="-mx-4 flex min-h-[229px] flex-col justify-center gap-6 bg-[linear-gradient(100deg,#263656_0%,#1c273e_34%,#171717_72%)] px-8 py-8 sm:-mx-6 sm:px-12" aria-labelledby="welcome-heading">
+            <h1 id="welcome-heading" className="text-[38px] font-bold leading-none tracking-[-0.04em] text-white sm:text-5xl">Welcome back {session?.user?.name?.split(" ")[0] || "David"}!</h1>
+            <div className="flex items-center gap-4 text-[27px] text-[#e4e4e7]">
+              <span aria-hidden="true" className="text-black">◉</span>
+              <span className="truncate">testapp</span>
+              <span className="size-5 rounded-full bg-[#6388f4]" aria-label="Successful" />
+              <span>successful</span>
+            </div>
+          </section>
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (

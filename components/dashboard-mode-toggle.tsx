@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { BarChart3, ChevronDown, FolderKanban } from "lucide-react"
+import { ChevronDown, CopyPlus, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type DashboardMode = "projects" | "astro"
@@ -31,7 +31,7 @@ export function DashboardModeToggle({
       role="toolbar"
       aria-label="Floating Action Bar"
       className={cn(
-        "relative inline-flex w-full max-w-[496px] items-center rounded-[64px] border border-[#303030] bg-[#181818] p-3 shadow-[0_10px_30px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.04)] select-none",
+        "relative inline-flex h-[84px] w-full max-w-[428px] items-center rounded-[24px] border-2 border-[#292929] bg-[#171717] p-1.5 shadow-[0_8px_22px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.025)] select-none",
         className
       )}
     >
@@ -46,11 +46,11 @@ export function DashboardModeToggle({
           activeMode === "projects" ? "text-white" : "text-[#F0F0F0] hover:text-white hover:bg-white/[0.04]"
         )}
       >
-        <FolderKanban className="size-[28px] shrink-0" strokeWidth={2.2} />
+        <Link2 className="size-[31px] shrink-0" strokeWidth={2} />
       </button>
 
       {/* Divider 1 */}
-      <div className="h-[60px] w-px shrink-0 bg-[#343434]" />
+      <div className="h-[52px] w-px shrink-0 bg-[#343434]" />
 
       {/* Section 2: Astro */}
       <button
@@ -63,11 +63,11 @@ export function DashboardModeToggle({
           activeMode === "astro" ? "text-white" : "text-[#F0F0F0] hover:text-white hover:bg-white/[0.04]"
         )}
       >
-        <img src="/astro-icon.png" alt="Astro" className="size-[30px] rounded-[8px] object-cover" />
+        <CopyPlus className="size-[31px] shrink-0" strokeWidth={1.9} />
       </button>
 
       {/* Divider 2 */}
-      <div className="h-[60px] w-px shrink-0 bg-[#343434]" />
+      <div className="h-[52px] w-px shrink-0 bg-[#343434]" />
 
       {/* Section 3: Stats */}
       <button
@@ -76,11 +76,11 @@ export function DashboardModeToggle({
         onClick={() => handleAction("stats")}
         className="flex items-center justify-center min-w-[68px] sm:min-w-[80px] h-[58px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.04] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
-        <BarChart3 className="size-[28px] shrink-0" strokeWidth={2.2} />
+        <span aria-hidden="true" className="size-[50px] rounded-full bg-[linear-gradient(135deg,#4f83ee_0%,#a993ff_100%)] shadow-[0_0_18px_rgba(102,137,244,0.22)]" />
       </button>
 
       {/* Divider 3 */}
-      <div className="h-[60px] w-px shrink-0 bg-[#343434]" />
+      <div className="h-[52px] w-px shrink-0 bg-[#343434]" />
 
       {/* Section 4: More options */}
       <button
