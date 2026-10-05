@@ -2,6 +2,15 @@
 
 import React from "react"
 import { cn } from "@/lib/utils"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import { Folder, Sparkles, Plus, Globe, Settings, ExternalLink } from "lucide-react"
 
 export type DashboardMode = "projects" | "astro"
 
@@ -37,7 +46,8 @@ export function DashboardModeToggle({
       {/* Section 1: Link */}
       <button
         type="button"
-        aria-label="Link"
+        title="Copy active project link"
+        aria-label="Copy active project link"
         onClick={() => handleAction("link")}
         className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
@@ -61,7 +71,8 @@ export function DashboardModeToggle({
       {/* Section 2: Copy / Add */}
       <button
         type="button"
-        aria-label="Copy / Add"
+        title="Create or duplicate project"
+        aria-label="Create or duplicate project"
         onClick={() => handleAction("copy-add")}
         className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
@@ -87,12 +98,16 @@ export function DashboardModeToggle({
       {/* Section 3: Astro AI Orb (blue/purple gradient circle) */}
       <button
         type="button"
-        aria-label="Astro AI"
-        onClick={() => handleAction("astro")}
+        title={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
+        aria-label={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
+        onClick={() => handleAction(activeMode === "astro" ? "projects" : "astro")}
         className="flex items-center justify-center w-[44px] h-[40px] rounded-full hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <div
-          className="size-[22px] rounded-full shrink-0"
+          className={cn(
+            "size-[22px] rounded-full shrink-0 transition-all duration-200",
+            activeMode === "astro" && "ring-2 ring-indigo-400/90 ring-offset-2 ring-offset-[#171717] scale-105"
+          )}
           style={{
             background: "linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 70%, #c4b5fd 100%)",
             boxShadow: "0 0 8px rgba(99,102,241,0.5)",
@@ -103,25 +118,64 @@ export function DashboardModeToggle({
       {/* Divider 3 */}
       <div className="h-[28px] w-[1px] bg-[#303030] shrink-0" />
 
-      {/* Section 4: ChevronDown */}
-      <button
-        type="button"
-        aria-label="More options"
-        onClick={() => handleAction("more")}
-        className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="size-[20px] shrink-0"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
+      {/* Section 4: ChevronDown with DropdownMenu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title="Dashboard options"
+            aria-label="Dashboard options"
+            className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-[20px] shrink-0"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-52 bg-[#171717] border border-[#292929] text-foreground rounded-[16px] p-1.5 shadow-2xl">
+          <DropdownMenuLabel className="text-[11px] font-medium text-text-muted px-2.5 py-1">
+            Dashboard View
+          </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => handleAction("projects")}
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+          >
+            <Folder className="mr-2 size-3.5" />
+            <span>Projects Dashboard</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleAction("astro")}
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+          >
+            <Sparkles className="mr-2 size-3.5 text-indigo-400" />
+            <span>Astro AI Agent</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-[#292929]" />
+          <DropdownMenuItem
+            onClick={() => handleAction("copy-add")}
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+          >
+            <Plus className="mr-2 size-3.5" />
+            <span>New Project</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => handleAction("link")}
+            className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-white/[0.06] cursor-pointer"
+          >
+            <ExternalLink className="mr-2 size-3.5" />
+            <span>Copy Project URL</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
+
