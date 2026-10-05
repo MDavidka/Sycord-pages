@@ -178,20 +178,17 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5">
+        <header className="sticky top-0 bg-background/80 backdrop-blur-md z-50">
+          <div className="max-w-[430px] sm:max-w-4xl mx-auto px-5 sm:px-6 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center">
               <Image
                 src="/logo.png"
                 alt="Sycord"
-                width={28}
-                height={28}
+                width={32}
+                height={32}
                 priority
-                className="rounded-[6px] object-contain shrink-0"
+                className="rounded-[8px] object-contain shrink-0"
               />
-              <span className="text-base font-semibold tracking-tight text-foreground lowercase">
-                sycord
-              </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -240,7 +237,7 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-7 pb-20 md:pb-12 space-y-6">
+        <main className="max-w-[430px] sm:max-w-4xl mx-auto px-5 sm:px-6 pt-4 pb-20 md:pb-12 space-y-5">
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (
@@ -265,24 +262,35 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* Page Title Area & Rounded Pill Action Button */}
-          <div className="flex items-center justify-between gap-4 pt-3 pb-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground lowercase">
-              projects
-            </h1>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/create")}
-              aria-label="Create new project"
-              className="h-9 px-5 rounded-[14px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs sm:text-sm font-medium text-foreground transition-all active:scale-[0.97] cursor-pointer"
-            >
-              <span>+ New Project</span>
-            </button>
+          {/* Welcome Banner — dark card with blue-indigo left accent */}
+          <div className="relative overflow-hidden rounded-[20px] bg-[#1a1a2e]/60 border border-[#292940]/60 px-5 py-5">
+            {/* Left accent stripe */}
+            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-500 to-indigo-700/60 rounded-l-[20px]" />
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
+              Welcome back {session?.user?.name?.split(" ")[0] || "there"}!
+            </h2>
+            {/* Latest project status line */}
+            {!isLoading && projects.length > 0 && (() => {
+              const latest: any = projects[0]
+              const liveUrl = getValidProjectUrl(latest)
+              const isLive = Boolean(liveUrl)
+              return (
+                <div className="flex items-center gap-2 mt-2">
+                  {/* GitHub icon */}
+                  <svg className="size-[18px] text-text-secondary shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z" />
+                  </svg>
+                  <span className="text-sm text-text-secondary font-medium">{latest.businessName || "project"}</span>
+                  <span className={cn("size-[8px] rounded-full shrink-0", isLive ? "bg-blue-500" : "bg-text-muted")} />
+                  <span className="text-sm text-text-muted">{isLive ? "succesful" : "pending"}</span>
+                </div>
+              )
+            })()}
           </div>
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <div className="space-y-6 pt-2 animate-in fade-in duration-200">
+            <div className="space-y-5 animate-in fade-in duration-200">
               <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
@@ -301,25 +309,32 @@ function DashboardContent() {
               <AstroDashboard />
             </div>
           ) : (
-            /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-5 pt-2 animate-in fade-in duration-200">
-              {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
-              <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
-                <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
-                />
-                <span className="text-xs text-text-muted shrink-0 pl-3 select-none">
-                  {filtered.length} {filtered.length === 1 ? "result" : "results"}
-                </span>
+            /* PROJECTS MODE */
+            <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Search Bar + New Project Button — side by side */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center flex-1 h-11 bg-transparent border border-[#292929] focus-within:border-[#3a3a3a] rounded-[14px] px-3.5 transition-colors">
+                  <Search className="size-[18px] text-text-muted shrink-0 mr-2.5" strokeWidth={2} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search..."
+                    className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/create")}
+                  aria-label="Create new project"
+                  className="h-11 px-5 rounded-[14px] bg-[#2a2a2a] hover:bg-[#333] border border-[#3a3a3a] text-sm font-medium text-text-secondary hover:text-foreground transition-all active:scale-[0.97] cursor-pointer shrink-0"
+                >
+                  New
+                </button>
               </div>
 
-              {/* Segmented Projects / Solar Switch */}
-              <div className="flex items-center pt-1 pb-1">
+              {/* Compact floating pill toolbar */}
+              <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
                   onChange={(mode) => {
@@ -335,75 +350,79 @@ function DashboardContent() {
                 />
               </div>
 
-              {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[1, 2].map((i) => (
-                    <CardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : projects.length === 0 ? (
-                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
-                  <div className="max-w-sm mx-auto space-y-4">
-                    <div className="space-y-1">
-                      <h3 className="text-base font-medium text-foreground">No projects yet</h3>
-                      <p className="text-xs sm:text-sm text-text-muted">
-                        Create your first project to get started.
+              {/* Projects Content Area — large rounded container */}
+              <div className="rounded-[22px] border border-[#292929]/80 bg-transparent min-h-[340px] sm:min-h-[420px] p-4 sm:p-5">
+                {isLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[1, 2].map((i) => (
+                      <CardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : projects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-center">
+                    <div className="space-y-3">
+                      <Folder className="size-8 text-text-muted mx-auto opacity-40" strokeWidth={1.5} />
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-medium text-foreground">No projects yet</h3>
+                        <p className="text-xs text-text-muted">
+                          Create your first project to get started.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => router.push("/dashboard/create")}
+                        aria-label="Create new project"
+                      >
+                        <Plus className="size-4" strokeWidth={2} />
+                        <span>New Project</span>
+                      </Button>
+                    </div>
+                  </div>
+                ) : q && filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[300px] text-center">
+                    <div className="space-y-2">
+                      <Search className="size-5 text-text-muted mx-auto opacity-60" strokeWidth={1.75} />
+                      <h3 className="text-sm font-medium text-foreground">No results</h3>
+                      <p className="text-xs text-text-muted">
+                        No project matches &quot;{searchQuery}&quot;.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      onClick={() => router.push("/dashboard/create")}
-                      aria-label="Create new project"
-                    >
-                      <Plus className="size-4" strokeWidth={2} />
-                      <span>New Project</span>
-                    </Button>
                   </div>
-                </div>
-              ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
-                  <div className="max-w-sm mx-auto space-y-2">
-                    <Search className="size-5 text-text-muted mx-auto opacity-60" strokeWidth={1.75} />
-                    <h3 className="text-sm font-medium text-foreground">No results</h3>
-                    <p className="text-xs text-text-muted">
-                      No project matches &quot;{searchQuery}&quot;.
-                    </p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtered.map((project: any) => {
+                      const liveUrl = getValidProjectUrl(project)
+                      const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
+                      const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
+                      const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
+                      const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
+                      return (
+                        <ProjectDashboardCard
+                          key={project._id}
+                          domain={projectDomain}
+                          isLive={isLive}
+                          deploymentId={deploymentKey}
+                          projectId={project._id}
+                          businessName={project.businessName}
+                          createdAt={project.createdAt}
+                          chatSession={project.chatSession}
+                          style={project.style || "default"}
+                          framework={project.framework}
+                          fallbackHtml={fallbackHtml}
+                          githubOwner={project.githubOwner}
+                          githubRepo={project.githubRepo}
+                          githubBranch={project.githubBranch}
+                          githubUrl={project.githubUrl}
+                          githubSavedAt={project.githubSavedAt}
+                          githubCommitMessage={project.githubCommitMessage}
+                          profileImage={project.profileImage}
+                          onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+                        />
+                      )
+                    })}
                   </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                  {filtered.map((project: any) => {
-                    const liveUrl = getValidProjectUrl(project)
-                    const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
-                    const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
-                    const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
-                    const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
-                    return (
-                      <ProjectDashboardCard
-                        key={project._id}
-                        domain={projectDomain}
-                        isLive={isLive}
-                        deploymentId={deploymentKey}
-                        projectId={project._id}
-                        businessName={project.businessName}
-                        createdAt={project.createdAt}
-                        chatSession={project.chatSession}
-                        style={project.style || "default"}
-                        framework={project.framework}
-                        fallbackHtml={fallbackHtml}
-                        githubOwner={project.githubOwner}
-                        githubRepo={project.githubRepo}
-                        githubBranch={project.githubBranch}
-                        githubUrl={project.githubUrl}
-                        githubSavedAt={project.githubSavedAt}
-                        githubCommitMessage={project.githubCommitMessage}
-                        profileImage={project.profileImage}
-                        onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
-                      />
-                    )
-                  })}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </main>
