@@ -8,7 +8,7 @@ import {
   syteAgentChange,
   syteAgentSessions,
 } from "@/lib/deploy/syte-client"
-import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { requireSyteWorkspaceUuid, ensureSyteWorkspaceForProject } from "@/lib/deploy/syte-workspace"
 import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
@@ -145,7 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? body.planMode
     : agentMode === "plan"
       ? "always"
-      : "off"
+      : "auto"
   const thinkingLevel = typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined
   const executionSpeed = typeof body?.executionSpeed === "string" ? body.executionSpeed : undefined
 
@@ -160,7 +160,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: "Project not found" }, { status: 404 })
   }
 
-  const workspace = await requireSyteWorkspaceUuid(project, projectId)
+  const workspace = await ensureSyteWorkspaceForProject(db, session.user.id, projectId, project)
   if ("error" in workspace) {
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }
@@ -175,14 +175,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ...explicitCreds,
   }
 
-  // Check project fields for GitHub tokens
+  // Check user document and project fields for GitHub tokens
   if (!resolvedCredentials.github_token && !resolvedCredentials.GITHUB_TOKEN) {
     if (typeof (project as any).githubToken === "string" && (project as any).githubToken) {
       resolvedCredentials.github_token = (project as any).githubToken
       resolvedCredentials.GITHUB_TOKEN = (project as any).githubToken
+      resolvedCredentials.GH_TOKEN = (project as any).githubToken
     } else if (typeof (project as any).githubAccessToken === "string" && (project as any).githubAccessToken) {
       resolvedCredentials.github_token = (project as any).githubAccessToken
       resolvedCredentials.GITHUB_TOKEN = (project as any).githubAccessToken
+      resolvedCredentials.GH_TOKEN = (project as any).githubAccessToken
+    } else {
+      try {
+        const userDoc = await db.collection("users").findOne<any>({
+          $or: [{ id: session.user.id }, { email: session.user.email }],
+        })
+        const userGhToken =
+          userDoc?.github_tokens?.[projectId]?.token ||
+          userDoc?.github_tokens?.[projectId] ||
+          userDoc?.github_token ||
+          userDoc?.githubAccessToken ||
+          userDoc?.githubToken
+        if (typeof userGhToken === "string" && userGhToken.trim()) {
+          resolvedCredentials.github_token = userGhToken.trim()
+          resolvedCredentials.GITHUB_TOKEN = userGhToken.trim()
+          resolvedCredentials.GH_TOKEN = userGhToken.trim()
+        }
+      } catch (err) {
+        console.warn("[Agent] Failed to read user github_tokens:", err)
+      }
     }
   }
 

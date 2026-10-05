@@ -684,7 +684,7 @@ export function EmbeddedChat() {
     );
 
     return (
-        <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#181818] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
+        <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#131313] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
             <div
                 ref={scrollerRef}
                 onScroll={handleScroll}

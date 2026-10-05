@@ -122,6 +122,24 @@ export function Workbench() {
     const startServer = async () => {
         if (status === 'installing' || status === 'starting' || status === 'running') return;
 
+        // If WebContainer is unsupported or unavailable, query Syte preview directly
+        if (!canBootWebContainer()) {
+            setStatus('starting');
+            setErrorMsg('');
+            try {
+                const pId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') : null;
+                if (pId) {
+                    const res = await fetch(`/api/workspace/preview?projectId=${encodeURIComponent(pId)}`);
+                    const data = await res.json().catch(() => null);
+                    if (data?.ok && data?.previewUrl) {
+                        useStore.getState().setPreviewUrl(data.previewUrl);
+                        setStatus('running');
+                        return;
+                    }
+                }
+            } catch {}
+        }
+
         setStatus('installing');
         setErrorMsg('');
 
@@ -317,6 +335,7 @@ export function Workbench() {
                                         className="absolute inset-0 w-full h-full border-none bg-white"
                                         title="Preview"
                                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                                     />
                                 </div>
                             </>
@@ -495,6 +514,7 @@ export function Workbench() {
                             className="absolute inset-0 w-full h-full border-none bg-white"
                             title="Preview Fullscreen"
                             allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                         />
                     </div>
                 </div>

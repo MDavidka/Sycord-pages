@@ -357,7 +357,118 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
     }
 }
 
+/**
+ * Fetch the Action Box environment JSON containing deployment logs, build status,
+ * dev server status, and chromium browser inspection state.
+ */
+export async function handleGetActionBox(): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ getActionBox is only available inside a Sycord project.';
+    }
+
+    try {
+        const res = await fetch(`/api/workspace/action-box?projectId=${encodeURIComponent(projectId)}`);
+        if (!res.ok) {
+            const err = await res.text().catch(() => `HTTP ${res.status}`);
+            return `[SYSTEM] ❌ Failed to fetch Action Box: ${err}`;
+        }
+        const data = await res.json();
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return `Error fetching Action Box environment: ${e.message}`;
+    }
+}
+
+/**
+ * Capture a Chromium screenshot of the active preview server or custom URL.
+ */
+export async function handleTakeScreenshot(args?: { url?: string; viewport?: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ takeScreenshot is only available inside a Sycord project.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                action: 'screenshot',
+                url: args?.url,
+            }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.ok) {
+            return `[SYSTEM] ❌ Screenshot failed: ${data?.message || data?.error || `HTTP ${res.status}`}`;
+        }
+
+        const viewports = data.viewports || {};
+        const desktopShot = viewports.desktop || {};
+        const shotInfo = [
+            `[SYSTEM] ✅ Screenshot captured successfully.`,
+            `Target URL: ${data.url || args?.url || 'Preview Server'}`,
+            desktopShot.width && desktopShot.height ? `Resolution: ${desktopShot.width}x${desktopShot.height}` : '',
+            desktopShot.title ? `Page Title: "${desktopShot.title}"` : '',
+            data.message || 'Chromium environment captured full viewport render.',
+        ].filter(Boolean);
+
+        return shotInfo.join('\n');
+    } catch (e: any) {
+        return `Error capturing preview screenshot: ${e.message}`;
+    }
+}
+
+/**
+ * Access browser console logs and runtime exceptions from the running preview.
+ */
+export async function handleGetBrowserLogs(args?: { url?: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ getBrowserLogs is only available inside a Sycord project.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                action: 'console',
+                url: args?.url,
+            }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+            return `[SYSTEM] ❌ Failed to fetch browser logs: ${data?.message || data?.error || `HTTP ${res.status}`}`;
+        }
+
+        const consoleItems: any[] = Array.isArray(data?.console) ? data.console : [];
+        const errors: any[] = Array.isArray(data?.errors) ? data.errors : [];
+
+        if (consoleItems.length === 0 && errors.length === 0) {
+            return `[SYSTEM] ✅ Chromium browser logs clean. No errors or warnings logged on ${data.url || 'preview'}.`;
+        }
+
+        const lines = [`[SYSTEM] Chromium Browser Console on ${data.url || 'preview'}:`];
+        if (errors.length > 0) {
+            lines.push(`\n🚨 Page Errors (${errors.length}):`);
+            errors.forEach(err => lines.push(`  - [${err.source || 'Exception'}] ${err.text || err.message || JSON.stringify(err)}`));
+        }
+        if (consoleItems.length > 0) {
+            lines.push(`\nConsole Output (${consoleItems.length}):`);
+            consoleItems.forEach(item => lines.push(`  - [${item.level || 'log'}] ${item.text || JSON.stringify(item)}`));
+        }
+
+        return lines.join('\n');
+    } catch (e: any) {
+        return `Error fetching browser logs: ${e.message}`;
+    }
+}
+
 export async function handlePlanning(args: {
+
     action: 'create' | 'updateStep' | 'get';
     title?: string;
     appType?: string;
@@ -1450,6 +1561,46 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install HeroUI" }, { title: "Bui
                 type: 'object',
                 properties: {
                     domain: { type: 'string', description: 'Optional domain to set before starting preview' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'getActionBox',
+            description: 'Fetch the Action Box environment JSON containing deployment logs, build status, dev server status, and chromium browser console metadata.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'takeScreenshot',
+            description: 'Capture a headless Chromium screenshot of the active preview server or custom URL.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    url: { type: 'string', description: 'Optional URL to screenshot. Defaults to active preview server.' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'getBrowserLogs',
+            description: 'Access browser console logs, warnings, and runtime uncaught exceptions from the running preview.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    url: { type: 'string', description: 'Optional URL to inspect. Defaults to active preview server.' },
                 },
                 required: [],
             },
@@ -2823,6 +2974,8 @@ const PARALLEL_SAFE_TOOLS = new Set([
     'shadcnDocs',
     'listShadcnComponents',
     'listDokployResources',
+    'getActionBox',
+    'getBrowserLogs',
 ]);
 
 export function isParallelSafeTool(name: string): boolean {
@@ -2876,6 +3029,15 @@ async function _executeToolInternal(
     if (toolName === 'startPreview') {
         if (argsList.length === 0) return handleStartPreview();
         return handleStartPreview(argsList[0] as { domain?: string });
+    }
+    if (toolName === 'getActionBox') return await handleGetActionBox();
+    if (toolName === 'takeScreenshot') {
+        if (argsList.length === 0) return await handleTakeScreenshot();
+        return await handleTakeScreenshot(argsList[0] as { url?: string; viewport?: string });
+    }
+    if (toolName === 'getBrowserLogs') {
+        if (argsList.length === 0) return await handleGetBrowserLogs();
+        return await handleGetBrowserLogs(argsList[0] as { url?: string });
     }
     if (toolName === 'typeCheck') return handleTypeCheck(ctx);
     if (toolName === 'listFiles') return await handleListFiles();

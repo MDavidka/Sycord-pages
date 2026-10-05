@@ -843,6 +843,7 @@ const ToolStack = memo(function ToolStack({
         return (
             <PlanTool
                 chatStatus={chatStatus}
+                isDark={isDark}
                 part={{
                     type: 'tool-PlanWrite',
                     toolCallId: group.actions[0]?.toolCallId || group.actions[0]?.id,

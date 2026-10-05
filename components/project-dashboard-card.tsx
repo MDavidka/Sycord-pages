@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { MoreVertical, Settings, Trash2, ExternalLink } from "lucide-react"
+import { MoreHorizontal, Settings, Trash2, ExternalLink } from "lucide-react"
 
 export interface ProjectDashboardCardProps {
   fallbackHtml?: string
@@ -65,95 +65,96 @@ export function ProjectDashboardCard({
   githubCommitMessage,
   profileImage,
 }: ProjectDashboardCardProps) {
-  const displayDomain = domain ? domain.replace(/^https?:\/\//, "") : "example.com"
+  const displayDomain = domain ? domain.replace(/^https?:\/\//, "") : "sycord.com"
   const displayUrl = domain ? (domain.startsWith("http") ? domain : `https://${domain}`) : "#"
   const isAstro = framework === "astro" || style === "astro" || businessName.toLowerCase().includes("astro")
   const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : null)
-  const initial = (businessName[0] || "P").toUpperCase()
 
   return (
-    <div className="group relative flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700/80 text-zinc-100 p-4 sm:p-4.5 transition-all duration-200 shadow-xs hover:shadow-md hover:shadow-black/20">
-      {/* Clickable primary area */}
+    <div className="group relative flex items-center justify-between rounded-[22px] border border-border/80 bg-surface/90 hover:bg-surface hover:border-border-strong text-foreground p-4 sm:p-5 transition-all duration-200 shadow-sm active:scale-[0.99]">
       <Link
         href={`/dashboard/sites/${projectId}`}
-        className="absolute inset-0 z-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-600/40"
-        aria-label={`Open project ${businessName}`}
-      />
-
-      {/* Main Content: Minimalist Icon + Info */}
-      <div className="relative z-10 flex items-center gap-3.5 min-w-0">
-        {/* Modern Minimalist Website Icon container (Vercel Style) */}
-        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg bg-zinc-950 border border-zinc-800/90 flex items-center justify-center shrink-0 overflow-hidden shadow-xs relative group-hover:border-zinc-700/90 transition-colors">
+        className="flex items-center gap-3.5 min-w-0 flex-1 focus:outline-none"
+      >
+        {/* Octopus / Project Avatar */}
+        <div className="size-11 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center shrink-0 overflow-hidden group-hover:border-border transition-colors">
           {resolvedIcon ? (
             <img
               src={resolvedIcon}
               alt={businessName}
-              className={isAstro ? "h-6 w-6 object-contain" : "h-full w-full object-cover"}
+              className={isAstro ? "size-6 object-contain" : "size-full object-cover"}
               onError={(e) => {
-                (e.currentTarget as HTMLElement).style.display = "none"
+                ;(e.currentTarget as HTMLElement).style.display = "none"
               }}
             />
           ) : (
-            <div className="h-full w-full bg-gradient-to-b from-zinc-800 to-zinc-950 flex items-center justify-center">
-              <span className="text-zinc-200 font-mono text-xs sm:text-sm font-semibold tracking-wider">
-                {initial}
-              </span>
+            <div className="size-full flex items-center justify-center bg-sky-500/10 text-sky-400">
+              <svg className="size-6 text-sky-400" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2a6 6 0 0 0-6 6v1c0 .6.4 1 1 1h.1c.5 0 .9-.4 1-.9.4-2.3 2.1-4.1 4.5-4.1s4.1 1.8 4.5 4.1c.1.5.5.9 1 .9h.1c.6 0 1-.4 1-1V8a6 6 0 0 0-6-6zm-7 9c-.6 0-1 .4-1 1v4c0 1.7 1.3 3 3 3 .6 0 1-.4 1-1s-.4-1-1-1c-.6 0-1-.4-1-1v-4c0-.6-.4-1-1-1zm14 0c-.6 0-1 .4-1 1v4c0 .6-.4 1-1 1s-1 .4-1 1c0 .6.4 1 1 1 1.7 0 3-1.3 3-3v-4c0-.6-.4-1-1-1zm-10 1c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm6 0c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm-3 1c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1s1-.4 1-1v-4c0-.6-.4-1-1-1z" />
+              </svg>
             </div>
           )}
         </div>
 
         <div className="flex flex-col min-w-0">
-          <h3 className="text-sm sm:text-[15px] font-medium text-zinc-100 group-hover:text-white transition-colors leading-tight tracking-tight truncate">
+          <h3 className="text-sm sm:text-base font-semibold text-foreground group-hover:text-white transition-colors leading-tight truncate">
             {businessName}
           </h3>
-          <div className="flex items-center gap-1.5 mt-1 min-w-0">
-            <a
-              href={displayUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors truncate flex items-center gap-1 font-mono z-20"
-              title={displayDomain}
-            >
-              <span>{displayDomain}</span>
-              <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
-            </a>
-          </div>
+          <span className="text-xs text-text-muted transition-colors truncate mt-0.5">
+            {displayDomain}
+          </span>
         </div>
-      </div>
+      </Link>
 
-      {/* Actions */}
-      <div className="relative z-20 flex items-center gap-1 shrink-0 ml-2">
+      {/* Action Button & Dropdown Menu */}
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <Link
+          href={`/dashboard/sites/${projectId}`}
+          className="inline-flex items-center justify-center h-8 sm:h-9 px-4 rounded-[12px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs font-medium text-foreground transition-all active:scale-[0.97]"
+        >
+          Manage
+        </Link>
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              onClick={(e) => e.stopPropagation()}
+              aria-label="Project actions"
+              className="size-8 sm:size-9 rounded-[10px] text-text-muted hover:text-foreground hover:bg-surface-muted transition-all"
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreHorizontal className="size-4" strokeWidth={1.75} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 bg-zinc-950 border border-zinc-800 text-zinc-200 shadow-xl rounded-lg p-1">
+          <DropdownMenuContent align="end" className="w-40 bg-surface border border-border text-foreground shadow-2xl rounded-[16px] p-1.5">
             <DropdownMenuItem asChild>
               <Link
                 href={`/dashboard/sites/${projectId}`}
-                className="cursor-pointer flex items-center gap-2 text-xs hover:bg-zinc-800 focus:bg-zinc-800 rounded-md py-1.5 px-2.5"
+                className="cursor-pointer flex items-center gap-2 text-xs hover:bg-surface-muted focus:bg-surface-muted rounded-[10px] py-2 px-2.5 text-text-secondary hover:text-foreground"
               >
-                <Settings className="h-3.5 w-3.5 text-zinc-400" />
+                <Settings className="size-3.5 text-text-muted" strokeWidth={1.75} />
                 <span>Settings</span>
               </Link>
             </DropdownMenuItem>
+            {displayUrl !== "#" && (
+              <DropdownMenuItem asChild>
+                <a
+                  href={displayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="cursor-pointer flex items-center gap-2 text-xs hover:bg-surface-muted focus:bg-surface-muted rounded-[10px] py-2 px-2.5 text-text-secondary hover:text-foreground"
+                >
+                  <ExternalLink className="size-3.5 text-text-muted" strokeWidth={1.75} />
+                  <span>Visit Live</span>
+                </a>
+              </DropdownMenuItem>
+            )}
             {onDelete && (
               <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(projectId)
-                }}
-                className="cursor-pointer text-red-400 focus:text-red-400 focus:bg-red-950/40 hover:bg-red-950/40 flex items-center gap-2 text-xs rounded-md py-1.5 px-2.5"
+                onClick={() => onDelete(projectId)}
+                className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10 hover:bg-destructive/10 flex items-center gap-2 text-xs rounded-[10px] py-2 px-2.5"
               >
-                <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                <Trash2 className="size-3.5 text-destructive" strokeWidth={1.75} />
                 <span>Delete</span>
               </DropdownMenuItem>
             )}

@@ -1,9 +1,6 @@
 import Link from "next/link"
 import Image from "next/image"
 import { headers } from "next/headers"
-import { Inter } from "next/font/google"
-
-const inter = Inter({ subsets: ["latin"], weight: ['400', '500', '600', '700'] })
 
 const BG = "#181818"
 const BORDER = "#2a2c30"
@@ -42,7 +39,7 @@ export default async function CompactServersPage() {
   const isOperational = globalStatus !== "outage"
 
   return (
-    <div className={`min-h-screen bg-[#1a1a1a] ${inter.className}`}>
+    <div className="min-h-screen bg-[#1a1a1a] font-sans">
       <header className="px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

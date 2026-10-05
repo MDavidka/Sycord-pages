@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { fetchVercelGatewayModels } from "@/lib/vercel-ai-gateway"
 import { syteSelectOmniModel } from "@/lib/deploy/syte-client"
+import { getAllModelConfigs } from "@/lib/models-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,27 @@ export async function GET(request: Request) {
 
   try {
     // Always fetch live model list from Vercel AI Gateway
-    const models = await fetchVercelGatewayModels(refresh)
+    const [rawModels, customConfigs] = await Promise.all([
+      fetchVercelGatewayModels(refresh),
+      getAllModelConfigs().catch(() => ({} as Record<string, { displayName?: string; enabledInLibrary?: boolean }>)),
+    ])
+
+    // Apply admin custom configs: filter out disabled models and update display names
+    const models = rawModels
+      .filter((m) => {
+        const config = customConfigs[m.id]
+        return config?.enabledInLibrary ?? true
+      })
+      .map((m) => {
+        const config = customConfigs[m.id]
+        if (config?.displayName) {
+          return {
+            ...m,
+            name: config.displayName,
+          }
+        }
+        return m
+      })
 
     // Group models by provider
     const providersMap = new Map<string, typeof models>()

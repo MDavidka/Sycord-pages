@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { getAllModelConfigs } from "@/lib/models-config"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -29,7 +30,10 @@ function getSycordModelsUrl(): string {
   return `${base}/api/models`
 }
 
-function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string; active: boolean; is_active_in_ai_tab: boolean }> {
+function normalizeModels(
+  payload: SycordModelsResponse,
+  configs: Record<string, { displayName?: string; enabledInLibrary?: boolean }> = {}
+): Array<{ id: string; profile: string; name: string; active: boolean; is_active_in_ai_tab: boolean }> {
   // Check available_models, models, ai_tab_models, or saved_providers from Sycord VM
   const source = Array.isArray(payload.available_models)
     ? payload.available_models
@@ -56,10 +60,18 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
     const rawName = typeof candidate.name === "string" ? candidate.name.trim() : ""
 
     const profile = rawModel || rawProfile || rawId
-    const name = rawName || rawModel || rawProfile || rawId
+    const baseName = rawName || rawModel || rawProfile || rawId
     const id = rawId || profile
 
-    if (!profile || !name || !id || seen.has(profile)) continue
+    if (!profile || !id || seen.has(profile)) continue
+
+    // Check admin config for model visibility and custom display name
+    const config = configs[profile] || configs[id]
+    if (config && config.enabledInLibrary === false) {
+      continue
+    }
+
+    const name = config?.displayName || baseName
 
     const isAiTabActive = Boolean(
       (candidate as any).is_active_in_ai_tab ||
@@ -129,7 +141,11 @@ export async function GET(request: Request) {
       })
     }
 
-    const payload = (await response.json().catch(() => null)) as SycordModelsResponse | null
+    const [payload, customConfigs] = await Promise.all([
+      (response.json().catch(() => null)) as Promise<SycordModelsResponse | null>,
+      getAllModelConfigs().catch(() => ({} as Record<string, { displayName?: string; enabledInLibrary?: boolean }>)),
+    ])
+
     if (!payload) {
       return Response.json(
         { message: "Sycord model API returned empty or invalid payload." },
@@ -137,12 +153,14 @@ export async function GET(request: Request) {
       )
     }
 
+    const normalized = normalizeModels(payload, customConfigs)
+
     if (wantsStream) {
       const encoder = new TextEncoder()
       const stream = new ReadableStream({
         async start(controller) {
           controller.enqueue(encoder.encode("retry: 2000\n\n"))
-          for (const model of normalizeModels(payload)) {
+          for (const model of normalized) {
             const data = JSON.stringify({ model })
             controller.enqueue(encoder.encode(`event: model_stream\ndata: ${data}\n\n`))
           }
@@ -161,8 +179,8 @@ export async function GET(request: Request) {
     }
 
     return Response.json({
-      models: normalizeModels(payload),
-      available_models: payload.available_models || normalizeModels(payload),
+      models: normalized,
+      available_models: normalized,
       saved_providers: payload.saved_providers || [],
       active_model: (payload as any).active_model || (payload as any).current_model || null,
       current_model: (payload as any).current_model || (payload as any).active_model || null,

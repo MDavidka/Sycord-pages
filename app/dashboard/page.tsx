@@ -34,15 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-xl p-4 sm:p-4.5 flex items-center justify-between bg-zinc-900/40 border border-zinc-800/80 shadow-xs">
+    <div className="rounded-[22px] border border-border/80 bg-surface/90 p-4 sm:p-5 flex items-center justify-between">
       <div className="flex items-center gap-3.5 flex-1 min-w-0">
-        <Skeleton className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg shrink-0 bg-zinc-800/80" />
+        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-surface-raised" />
         <div className="space-y-1.5 flex-1 min-w-0">
-          <Skeleton className="h-4 w-28 bg-zinc-800/80" />
-          <Skeleton className="h-3 w-36 bg-zinc-800/60" />
+          <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
+          <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
         </div>
       </div>
-      <Skeleton className="h-8 w-8 rounded-md shrink-0 bg-zinc-800/60 ml-2" />
+      <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0 ml-3" />
     </div>
   )
 }
@@ -177,93 +177,112 @@ function DashboardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background md:ml-16">
-        <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
-          <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <Image src="/logo.png" alt="Logo" width={28} height={28} priority />
-              <span className="text-base font-semibold text-foreground">
-                {userStatus.isPremium ? (userStatus.subscription === "Sycord Enterprise" ? "Sycord Enterprise" : "Sycord+") : "Sycord"}
+      <div className="min-h-screen bg-background md:ml-16 text-foreground">
+        <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2.5">
+              <Image
+                src="/logo.png"
+                alt="Sycord"
+                width={28}
+                height={28}
+                priority
+                className="rounded-[6px] object-contain shrink-0"
+              />
+              <span className="text-base font-semibold tracking-tight text-foreground lowercase">
+                sycord
               </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">{userInitials}</AvatarFallback>
-                  </Avatar>
-                </Button>
+                <button
+                  type="button"
+                  aria-label="User account menu"
+                  className="relative size-8 rounded-full bg-amber-900/40 border border-amber-700/50 flex items-center justify-center text-amber-200 font-medium text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer"
+                >
+                  {session?.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      className="size-full rounded-full object-cover"
+                    />
+                  ) : (
+                    userInitials
+                  )}
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
+              <DropdownMenuContent className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal px-2.5 py-2">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session?.user?.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{session?.user?.email}</p>
+                    <p className="text-sm font-medium leading-none text-foreground">{session?.user?.name}</p>
+                    <p className="text-xs leading-none text-text-muted">{session?.user?.email}</p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")}><CreditCard className="mr-2 h-4 w-4" /><span>Plans</span></DropdownMenuItem>
-                <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
                 {session?.user?.email === "dmarton336@gmail.com" && (
                   <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => router.push("/admin")}>
-                      <Shield className="mr-2 h-4 w-4 text-emerald-400" />
-                      <span className="text-emerald-400 font-semibold">Moderator View</span>
+                    <DropdownMenuSeparator className="bg-border" />
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="rounded-[10px] text-xs">
+                      <Shield className="mr-2 size-4 text-emerald-400" strokeWidth={1.75} />
+                      <span className="text-emerald-400 font-medium">Moderator View</span>
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" /><span>Sign out</span>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-destructive hover:text-destructive hover:bg-destructive/10">
+                  <LogOut className="mr-2 size-4" strokeWidth={1.75} /><span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6 space-y-5">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-7 pb-20 md:pb-12 space-y-6">
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (
                 <div
                   key={ann.id || ann._id}
                   className={cn(
-                    "flex items-start gap-3 p-3.5 rounded-xl border text-sm",
+                    "flex items-start gap-3 p-4 rounded-[18px] border text-xs leading-relaxed",
                     ann.type === "warning" || ann.type === "maintenance"
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
                       : ann.type === "important"
-                      ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                      : "bg-blue-500/10 border-blue-500/30 text-blue-200"
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
+                      : "bg-surface border-border text-text-secondary"
                   )}
                 >
-                  <Megaphone className="h-4 w-4 shrink-0 mt-0.5" />
+                  <Megaphone className="size-4 shrink-0 mt-0.5 text-text-secondary" strokeWidth={1.75} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-xs tracking-wide uppercase opacity-80">{ann.title}</p>
-                    <p className="text-xs text-foreground/90 mt-0.5">{ann.message}</p>
+                    <p className="font-medium text-xs text-foreground">{ann.title}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{ann.message}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <h1 className="text-base font-semibold text-foreground">Projects</h1>
-            <Button
+          {/* Page Title Area & Rounded Pill Action Button */}
+          <div className="flex items-center justify-between gap-4 pt-3 pb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground lowercase">
+              projects
+            </h1>
+            <button
+              type="button"
               onClick={() => router.push("/dashboard/create")}
-              size="sm"
-              className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
+              aria-label="Create new project"
+              className="h-9 px-5 rounded-[14px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs sm:text-sm font-medium text-foreground transition-all active:scale-[0.97] cursor-pointer"
             >
-              <Plus className="h-4 w-4" />
-              <span>New Project</span>
-            </Button>
+              <span>+ New Project</span>
+            </button>
           </div>
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <div className="space-y-5 animate-in fade-in duration-200">
+            <div className="space-y-6 pt-2 animate-in fade-in duration-200">
               <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
@@ -283,26 +302,24 @@ function DashboardContent() {
             </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-5 animate-in fade-in duration-200">
-              {/* Search Bar & Counter */}
-              <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search projects..."
-                    className="h-10 w-full pl-9 pr-4 rounded-lg bg-zinc-900/50 border border-zinc-800/80 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600/30 transition-all shadow-xs"
-                  />
-                </div>
-                <div className="h-10 px-3.5 border border-zinc-800/80 rounded-lg bg-zinc-900/50 text-xs font-mono font-medium text-zinc-400 flex items-center justify-center shrink-0 tabular-nums shadow-xs">
-                  {ownedCount}/{MAX_FREE_PROJECTS}
-                </div>
+            <div className="space-y-5 pt-2 animate-in fade-in duration-200">
+              {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
+              <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
+                <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
+                />
+                <span className="text-xs text-text-muted shrink-0 pl-3 select-none">
+                  {filtered.length} {filtered.length === 1 ? "result" : "results"}
+                </span>
               </div>
 
-              {/* Segmented Projects / Astro Switch */}
-              <div className="flex items-center">
+              {/* Segmented Projects / Solar Switch */}
+              <div className="flex items-center pt-1 pb-1">
                 <DashboardModeToggle
                   activeMode={activeMode}
                   onChange={(mode) => {
@@ -319,62 +336,42 @@ function DashboardContent() {
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2].map((i) => (
                     <CardSkeleton key={i} />
                   ))}
                 </div>
               ) : projects.length === 0 ? (
-                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
-                  <div className="max-w-sm mx-auto">
-                    <h3 className="text-sm font-semibold mb-1.5 text-zinc-200">No projects yet</h3>
-                    <p className="text-xs text-zinc-500 mb-4">
-                      Create your first project and get your site live in minutes.
-                    </p>
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
+                  <div className="max-w-sm mx-auto space-y-4">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-medium text-foreground">No projects yet</h3>
+                      <p className="text-xs sm:text-sm text-text-muted">
+                        Create your first project to get started.
+                      </p>
+                    </div>
                     <Button
+                      type="button"
                       onClick={() => router.push("/dashboard/create")}
-                      size="sm"
-                      className="rounded-lg gap-1.5 text-xs"
+                      aria-label="Create new project"
                     >
-                      <Plus className="h-3.5 w-3.5" />
-                      Create First Project
+                      <Plus className="size-4" strokeWidth={2} />
+                      <span>New Project</span>
                     </Button>
                   </div>
                 </div>
               ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
-                  <div className="max-w-sm mx-auto">
-                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-2.5 opacity-60" />
-                    <h3 className="text-sm font-semibold mb-1 text-zinc-200">No results</h3>
-                    <p className="text-xs text-zinc-500">
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
+                  <div className="max-w-sm mx-auto space-y-2">
+                    <Search className="size-5 text-text-muted mx-auto opacity-60" strokeWidth={1.75} />
+                    <h3 className="text-sm font-medium text-foreground">No results</h3>
+                    <p className="text-xs text-text-muted">
                       No project matches &quot;{searchQuery}&quot;.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {/* Modern New Project Card */}
-                  {canCreateMore && !q && (
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard/create")}
-                      className="group relative flex flex-col items-center justify-center min-h-[108px] sm:min-h-[116px] p-4 sm:p-5 rounded-xl border border-dashed border-zinc-800/90 hover:border-zinc-600 bg-zinc-900/20 hover:bg-zinc-900/50 transition-all duration-200 text-center cursor-pointer select-none"
-                    >
-                      <div className="h-9 w-9 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-center mb-1.5 group-hover:border-zinc-600 group-hover:scale-105 transition-all shadow-xs">
-                        <Plus className="h-4 w-4 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
-                      </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
-                        New Project
-                      </h3>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">
-                        Create a new site in a few clicks
-                      </p>
-                      <span className="mt-1.5 text-[10px] text-zinc-500/80 font-mono">
-                        {ownedCount}/{MAX_FREE_PROJECTS} used
-                      </span>
-                    </button>
-                  )}
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                   {filtered.map((project: any) => {
                     const liveUrl = getValidProjectUrl(project)
                     const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content

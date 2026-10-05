@@ -753,7 +753,7 @@ export async function syteAgentChange(
   execution: SyteAgentExecutionOptions = {},
 ): Promise<SyteResult<SyteAgentChangeResponse>> {
   const agentMode = execution.agentMode === "plan" ? "plan" : "build"
-  const planMode = execution.planMode ?? (agentMode === "plan" ? "always" : "off")
+  const planMode = execution.planMode ?? (agentMode === "plan" ? "always" : "auto")
   return syteWorkspaceRequest<SyteAgentChangeResponse>("POST", "agent_change", {
     body: {
       uuid,
