@@ -461,7 +461,7 @@ export async function smartInstall(
         }
 
         const currentHash = depsHash(pkgJson);
-        const cachedHash = localStorage.getItem(INSTALL_CACHE_KEY);
+        const cachedHash = typeof window !== 'undefined' ? localStorage.getItem(INSTALL_CACHE_KEY) : null;
         const hasNodeModules = await nodeModulesExist();
 
         if (cachedHash === currentHash && hasNodeModules) {
@@ -489,7 +489,11 @@ export async function smartInstall(
 
         if (exitCode === 0) {
             // Cache deps hash
-            localStorage.setItem(INSTALL_CACHE_KEY, currentHash);
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem(INSTALL_CACHE_KEY, currentHash);
+                } catch {}
+            }
 
             // Cache the generated lockfile for next time
             try {

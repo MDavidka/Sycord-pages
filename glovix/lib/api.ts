@@ -99,6 +99,7 @@ function shouldUseLocalProjectCache() {
 const localStore = {
     get: (key: string) => {
         try {
+            if (typeof window === 'undefined') return null;
             return JSON.parse(localStorage.getItem(`glovix_${key}`) || 'null');
         } catch {
             return null;
@@ -106,6 +107,7 @@ const localStore = {
     },
     set: (key: string, value: any): boolean => {
         try {
+            if (typeof window === 'undefined') return false;
             localStorage.setItem(`glovix_${key}`, JSON.stringify(value));
             return true;
         } catch (err) {
