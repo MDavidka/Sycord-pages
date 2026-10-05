@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Monitor, FileSpreadsheet, FileCode, FileText, ExternalLink, Check, Trash2, Globe } from "lucide-react"
+import { Folder, Monitor, FileSpreadsheet, FileCode, FileText, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type ArtifactType = "website" | "spreadsheet" | "code" | "document" | "other"
@@ -29,7 +29,6 @@ export function DashboardArtifactCard({
   isSelected,
   onSelect,
   onOpen,
-  onDelete,
 }: DashboardArtifactCardProps) {
   const getIcon = () => {
     if (artifact.profileImage) {
@@ -37,7 +36,7 @@ export function DashboardArtifactCard({
         <img
           src={artifact.profileImage}
           alt={artifact.name}
-          className="size-7 rounded-[8px] object-cover shrink-0"
+          className="size-5 rounded-md object-cover"
           onError={(e) => {
             ;(e.currentTarget as HTMLElement).style.display = "none"
           }}
@@ -47,30 +46,14 @@ export function DashboardArtifactCard({
 
     switch (artifact.type) {
       case "spreadsheet":
-        return (
-          <div className="size-8 rounded-[8px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-            <span className="text-[10px] font-bold tracking-tighter">XLS</span>
-          </div>
-        )
+        return <FileSpreadsheet className="size-4 text-zinc-300" strokeWidth={1.8} />
       case "code":
-        return (
-          <div className="size-8 rounded-[8px] bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
-            <FileCode className="size-4" strokeWidth={1.75} />
-          </div>
-        )
+        return <FileCode className="size-4 text-zinc-300" strokeWidth={1.8} />
       case "document":
-        return (
-          <div className="size-8 rounded-[8px] bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-            <FileText className="size-4" strokeWidth={1.75} />
-          </div>
-        )
+        return <FileText className="size-4 text-zinc-300" strokeWidth={1.8} />
       case "website":
       default:
-        return (
-          <div className="size-8 rounded-[8px] bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 shrink-0">
-            <Monitor className="size-4" strokeWidth={1.75} />
-          </div>
-        )
+        return <Folder className="size-4 text-zinc-300" strokeWidth={1.8} />
     }
   }
 
@@ -86,50 +69,40 @@ export function DashboardArtifactCard({
         }
       }}
       className={cn(
-        "group relative flex items-center justify-between min-w-[200px] sm:min-w-[220px] max-w-[280px] rounded-[18px] border p-3 sm:p-3.5 transition-all duration-150 select-none cursor-pointer outline-none text-left shrink-0",
+        "group relative flex flex-col justify-between w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] p-3 transition-all duration-150 select-none cursor-pointer outline-none text-left shrink-0",
         isSelected
-          ? "bg-surface-raised border-indigo-500/80 shadow-md ring-1 ring-indigo-500/50"
-          : "bg-surface border-border hover:bg-surface-muted hover:border-border-strong"
+          ? "bg-[#181818] border border-white/20 shadow-md ring-1 ring-white/10"
+          : "bg-[#151515] border border-[#242424] hover:bg-[#1a1a1a] hover:border-[#303030]"
       )}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center justify-between w-full">
         {getIcon()}
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs sm:text-sm font-semibold text-foreground truncate group-hover:text-white transition-colors">
-              {artifact.name}
-            </span>
-            {isSelected && (
-              <span className="size-1.5 rounded-full bg-indigo-400 shrink-0" />
-            )}
-          </div>
-          {artifact.meta && (
-            <span className="text-[11px] text-text-muted truncate mt-0.5 font-mono">
-              {artifact.meta}
-            </span>
-          )}
-        </div>
+        {artifact.url && (
+          <button
+            type="button"
+            title="Open"
+            aria-label={`Open ${artifact.name}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onOpen) {
+                onOpen(artifact)
+              } else {
+                window.open(artifact.url, "_blank", "noopener,noreferrer")
+              }
+            }}
+            className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-white p-0.5 transition-opacity"
+          >
+            <ExternalLink className="size-3" />
+          </button>
+        )}
       </div>
 
-      {/* Quick open / link trigger */}
-      {artifact.url && (
-        <button
-          type="button"
-          title="Open in new tab"
-          aria-label={`Open ${artifact.name}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (onOpen) {
-              onOpen(artifact)
-            } else {
-              window.open(artifact.url, "_blank", "noopener,noreferrer")
-            }
-          }}
-          className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1.5 rounded-[8px] text-text-muted hover:text-foreground hover:bg-white/[0.08] transition-all ml-1 shrink-0 cursor-pointer"
-        >
-          <ExternalLink className="size-3.5" strokeWidth={1.75} />
-        </button>
-      )}
+      <div className="w-full">
+        <span className="block text-[12px] sm:text-[13px] font-medium text-[#EDEDED] truncate tracking-tight">
+          {artifact.name}
+        </span>
+      </div>
     </div>
   )
 }
+

@@ -281,28 +281,26 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        {/* Compact Header Sizing */}
-        <header className="sticky top-0 bg-background/90 backdrop-blur-md z-50 border-b border-border/40">
+        {/* Minimal Header */}
+        <header className="sticky top-0 bg-background/90 backdrop-blur-md z-50">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2.5 focus:outline-none">
+            <Link href="/" className="flex items-center focus:outline-none opacity-90 hover:opacity-100 transition-opacity">
               <Image
                 src="/brand-logo.png"
                 alt="Sycord"
-                width={32}
-                height={16}
+                width={26}
+                height={26}
                 priority
                 className="object-contain shrink-0"
               />
-              <span className="text-sm sm:text-base font-semibold tracking-tight text-foreground">
-                Sycord
-              </span>
             </Link>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-8 rounded-[10px] bg-[#553f35] border border-[#6d4c41]/50 flex items-center justify-center text-[#f5f5f5] font-semibold text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer shadow-sm hover:brightness-110 overflow-hidden"
+                  className="relative size-7.5 rounded-full bg-[#a855f7] flex items-center justify-center text-white font-semibold text-xs transition-transform active:scale-[0.95] outline-none cursor-pointer shadow-sm hover:brightness-105 overflow-hidden"
                 >
                   {session?.user?.image ? (
                     <img
@@ -344,8 +342,8 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-16 flex-1 flex flex-col justify-between min-h-[calc(100vh-56px)]">
-          <div className="space-y-5">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-3 sm:pt-4 pb-8 flex-1 flex flex-col justify-between min-h-[calc(100vh-56px)]">
+          <div className="space-y-4">
             {announcements.length > 0 && (
               <div className="space-y-2">
                 {announcements.map((ann) => (
@@ -370,124 +368,58 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* 1. Artifact Search & Action Row using Shadcn */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-text-muted pointer-events-none" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for file or artifact..."
-                  aria-label="Search for file or artifact"
-                  className="pl-10 pr-9 h-11 bg-surface border-border focus-visible:border-border-strong focus-visible:ring-1 focus-visible:ring-border-strong rounded-[14px] text-sm shadow-xs"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted hover:text-foreground p-1 cursor-pointer"
-                  >
-                    ✕
-                  </button>
+            {/* Filter Pills matching exact uploaded image */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+              <button
+                type="button"
+                onClick={() => setArtifactFilter("all")}
+                className={cn(
+                  "h-8 px-4 rounded-[14px] text-xs font-medium transition-all select-none cursor-pointer",
+                  artifactFilter === "all"
+                    ? "bg-white text-black font-semibold shadow-sm"
+                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
                 )}
-              </div>
-              <Button
-                variant="secondary"
-                size="default"
-                onClick={() => router.push("/dashboard/create")}
-                aria-label="Create new project or artifact"
-                className="h-11 px-5 rounded-[14px] border border-border bg-surface hover:bg-surface-muted text-foreground font-medium shrink-0 shadow-xs"
               >
-                <Plus className="size-4 mr-1.5" />
-                <span>New</span>
-              </Button>
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setArtifactFilter("website")}
+                className={cn(
+                  "h-8 px-3 rounded-[14px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  artifactFilter === "website"
+                    ? "bg-white text-black font-semibold shadow-sm"
+                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
+                )}
+              >
+                <Monitor className="size-3.5" strokeWidth={1.75} />
+                <span>Websites</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setArtifactFilter("spreadsheet")}
+                className={cn(
+                  "h-8 px-3 rounded-[14px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  artifactFilter === "spreadsheet"
+                    ? "bg-white text-black font-semibold shadow-sm"
+                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
+                )}
+              >
+                <FileSpreadsheet className="size-3.5" strokeWidth={1.75} />
+                <span>Files</span>
+              </button>
             </div>
 
-            {/* 2. Filter Buttons and Access Bar using Shadcn */}
-            <div className="flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2.5 pt-1">
-              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                <Button
-                  variant={artifactFilter === "all" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setArtifactFilter("all")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3"
-                >
-                  All
-                </Button>
-                <Button
-                  variant={artifactFilter === "website" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setArtifactFilter("website")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3 gap-1.5"
-                >
-                  <Monitor className="size-3.5" />
-                  <span>Websites</span>
-                </Button>
-                <Button
-                  variant={artifactFilter === "spreadsheet" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setArtifactFilter("spreadsheet")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3 gap-1.5"
-                >
-                  <FileSpreadsheet className="size-3.5" />
-                  <span>Files</span>
-                </Button>
-              </div>
-
-              <div className="self-end xs:self-auto">
-                <DashboardModeToggle
-                  activeMode={activeMode}
-                  onChange={(mode) => {
-                    setActiveMode(mode)
-                    const u = new URL(window.location.href)
-                    if (mode === "projects") {
-                      u.searchParams.delete("mode")
-                    } else {
-                      u.searchParams.set("mode", mode)
-                    }
-                    window.history.replaceState({}, "", u.toString())
-                  }}
-                  onAction={(actionId) => {
-                    if (actionId === "copy-add") {
-                      router.push("/dashboard/create")
-                    } else if (actionId === "link") {
-                      const target = selectedArtifact?.url || (projects[0] ? getValidProjectUrl(projects[0]) : null)
-                      if (target) {
-                        navigator.clipboard.writeText(target)
-                        alert(`Copied link to clipboard: ${target}`)
-                      } else {
-                        alert("No active artifact link available to copy.")
-                      }
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* 3. Artifacts Section (Websites, Files, Resources) */}
-            <div className="pt-2 space-y-2.5">
-              <div className="flex items-center justify-between text-xs text-text-muted px-0.5">
-                <span className="font-medium tracking-wide">Available Artifacts</span>
-                <span className="text-[11px] font-mono">
-                  {selectedArtifact ? `1 selected` : `${filteredArtifacts.length} ready`}
-                </span>
-              </div>
-
+            {/* Artifacts grid / rail matching minimal folder card + dashed + card */}
+            <div className="pt-1">
               {isLoading ? (
                 <div className="flex items-center gap-3 overflow-hidden py-1">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="min-w-[190px] sm:min-w-[210px] h-[64px] rounded-[18px] border border-[#252525] bg-[#181818] animate-pulse" />
+                  {[1, 2].map((i) => (
+                    <div key={i} className="w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-[#252525] bg-[#181818] animate-pulse" />
                   ))}
                 </div>
-              ) : filteredArtifacts.length === 0 ? (
-                <div className="rounded-[18px] border border-dashed border-[#282828] bg-[#161616]/40 p-5 sm:p-6 text-center">
-                  <p className="text-xs text-text-muted">
-                    No artifacts found matching &quot;{searchQuery}&quot;.
-                  </p>
-                </div>
               ) : (
-                /* Artifacts rail: horizontal scrollable on mobile, flex-wrap on desktop */
-                <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
                   {filteredArtifacts.map((artifact) => (
                     <DashboardArtifactCard
                       key={artifact.id}
@@ -505,6 +437,19 @@ function DashboardContent() {
                       }}
                     />
                   ))}
+
+                  {/* Minimalist Dashed "+ New" Card from Screenshot */}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/create")}
+                    title="Create new project or artifact"
+                    aria-label="Create new project or artifact"
+                    className="flex items-center justify-center w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-dashed border-[#2f2f2f] hover:border-[#404040] bg-[#141414]/50 hover:bg-[#181818] transition-all cursor-pointer select-none group shrink-0 active:scale-[0.98]"
+                  >
+                    <div className="size-7 rounded-full bg-[#1e1e1e] group-hover:bg-[#252525] flex items-center justify-center transition-colors">
+                      <Plus className="size-3.5 text-[#9e9e9e] group-hover:text-white transition-colors" strokeWidth={2.5} />
+                    </div>
+                  </button>
                 </div>
               )}
             </div>
@@ -527,8 +472,8 @@ function DashboardContent() {
             )}
           </div>
 
-          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (Syra chat style & logic) */}
-          <div className="pt-6 sm:pt-10 pb-4 sm:pb-6">
+          {/* AI Input / Chat Composer (Bottom positioned, matching uploaded layout) */}
+          <div className="pt-6 pb-2">
             <AiComposer
               selectedArtifact={selectedArtifact}
               onClearArtifact={() => setSelectedArtifact(null)}
