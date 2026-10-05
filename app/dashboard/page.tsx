@@ -34,15 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[26px] p-5 sm:p-6 flex items-center justify-between bg-[#171717] border border-[#292929]">
+    <div className="rounded-[26px] p-5 sm:p-6 flex items-center justify-between bg-surface border border-border">
       <div className="flex items-center gap-4 flex-1 min-w-0">
-        <Skeleton className="size-14 rounded-[16px] shrink-0 bg-[#1D1D1D]" />
+        <Skeleton className="size-14 rounded-[16px] shrink-0 bg-surface-raised" />
         <div className="space-y-2 flex-1 min-w-0">
-          <Skeleton className="h-5 w-32 bg-[#1D1D1D] rounded-[8px]" />
-          <Skeleton className="h-3.5 w-44 bg-[#202020] rounded-[6px]" />
+          <Skeleton className="h-5 w-32 bg-surface-raised rounded-[8px]" />
+          <Skeleton className="h-3.5 w-44 bg-surface-muted rounded-[6px]" />
         </div>
       </div>
-      <Skeleton className="size-9 rounded-[12px] shrink-0 bg-[#1D1D1D] ml-2" />
+      <Skeleton className="size-9 rounded-[12px] shrink-0 bg-surface-raised ml-2" />
     </div>
   )
 }
@@ -177,12 +177,12 @@ function DashboardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-[#131313] md:ml-16 text-[#F5F5F5]">
-        <header className="border-b border-[#292929] sticky top-0 bg-[#131313]/90 backdrop-blur-md z-50">
+      <div className="min-h-screen bg-background md:ml-16 text-foreground">
+        <header className="border-b border-border sticky top-0 bg-background/90 backdrop-blur-md z-50">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5">
               <Image src="/logo.png" alt="Logo" width={28} height={28} priority className="rounded-[6px] object-contain shrink-0" />
-              <span className="text-base font-medium tracking-tight text-[#F5F5F5]">
+              <span className="text-base font-medium tracking-tight text-foreground">
                 {userStatus.isPremium ? (userStatus.subscription === "Sycord Enterprise" ? "Sycord Enterprise" : "Sycord+") : "Sycord"}
               </span>
             </Link>
@@ -195,28 +195,28 @@ function DashboardContent() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-[#171717] border border-[#292929] text-[#F5F5F5] rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal px-2.5 py-2">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-[#F5F5F5]">{session?.user?.name}</p>
-                    <p className="text-xs leading-none text-[#737373]">{session?.user?.email}</p>
+                    <p className="text-sm font-medium leading-none text-foreground">{session?.user?.name}</p>
+                    <p className="text-xs leading-none text-text-muted">{session?.user?.email}</p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-[#292929]" />
-                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
-                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
                 {session?.user?.email === "dmarton336@gmail.com" && (
                   <>
-                    <DropdownMenuSeparator className="bg-[#292929]" />
+                    <DropdownMenuSeparator className="bg-border" />
                     <DropdownMenuItem onClick={() => router.push("/admin")} className="rounded-[10px] text-xs">
                       <Shield className="mr-2 size-4 text-emerald-400" strokeWidth={1.75} />
                       <span className="text-emerald-400 font-medium">Moderator View</span>
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator className="bg-[#292929]" />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30">
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-destructive hover:text-destructive hover:bg-destructive/10">
                   <LogOut className="mr-2 size-4" strokeWidth={1.75} /><span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -236,13 +236,13 @@ function DashboardContent() {
                       ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
                       : ann.type === "important"
                       ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
-                      : "bg-[#171717] border-[#292929] text-[#A3A3A3]"
+                      : "bg-surface border-border text-text-secondary"
                   )}
                 >
-                  <Megaphone className="size-4 shrink-0 mt-0.5 text-[#A3A3A3]" strokeWidth={1.75} />
+                  <Megaphone className="size-4 shrink-0 mt-0.5 text-text-secondary" strokeWidth={1.75} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs text-[#F5F5F5]">{ann.title}</p>
-                    <p className="text-xs text-[#737373] mt-0.5">{ann.message}</p>
+                    <p className="font-medium text-xs text-foreground">{ann.title}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{ann.message}</p>
                   </div>
                 </div>
               ))}
@@ -251,16 +251,15 @@ function DashboardContent() {
 
           {/* Page Title Area & New Project Button */}
           <div className="flex items-center justify-between gap-4">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">Projects</h1>
-            <button
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">Projects</h1>
+            <Button
               type="button"
               onClick={() => router.push("/dashboard/create")}
               aria-label="Create new project"
-              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
             >
               <Plus className="size-4" strokeWidth={2} />
               <span>New Project</span>
-            </button>
+            </Button>
           </div>
 
           {activeMode === "astro" ? (
@@ -288,17 +287,17 @@ function DashboardContent() {
             <div className="space-y-6 animate-in fade-in duration-200">
               {/* Search Bar & Counter */}
               <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1 flex items-center min-h-[44px] bg-[#171717] border border-[#292929] focus-within:border-[#383838] rounded-[18px] px-3.5 transition-colors">
-                  <Search className="size-4 text-[#737373] shrink-0 mr-2.5" strokeWidth={1.75} />
+                <div className="relative flex-1 flex items-center min-h-[44px] bg-surface border border-border focus-within:border-border-strong rounded-[18px] px-3.5 transition-colors">
+                  <Search className="size-4 text-text-muted shrink-0 mr-2.5" strokeWidth={1.75} />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search projects..."
-                    className="w-full bg-transparent text-xs sm:text-sm text-[#F5F5F5] placeholder:text-[#737373] outline-none"
+                    className="w-full bg-transparent text-xs sm:text-sm text-foreground placeholder:text-text-muted outline-none"
                   />
                 </div>
-                <div className="min-h-[44px] px-4 border border-[#292929] rounded-[18px] bg-[#171717] text-xs font-mono font-medium text-[#A3A3A3] flex items-center justify-center shrink-0 tabular-nums">
+                <div className="min-h-[44px] px-4 border border-border rounded-[18px] bg-surface text-xs font-mono font-medium text-text-secondary flex items-center justify-center shrink-0 tabular-nums">
                   {ownedCount}/{MAX_FREE_PROJECTS}
                 </div>
               </div>
@@ -327,31 +326,30 @@ function DashboardContent() {
                   ))}
                 </div>
               ) : projects.length === 0 ? (
-                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
                   <div className="max-w-sm mx-auto space-y-4">
                     <div className="space-y-1">
-                      <h3 className="text-base font-medium text-[#F5F5F5]">No projects yet</h3>
-                      <p className="text-xs sm:text-sm text-[#737373]">
+                      <h3 className="text-base font-medium text-foreground">No projects yet</h3>
+                      <p className="text-xs sm:text-sm text-text-muted">
                         Create your first project to get started.
                       </p>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
                       aria-label="Create new project"
-                      className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
                     >
                       <Plus className="size-4" strokeWidth={2} />
                       <span>New Project</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
                   <div className="max-w-sm mx-auto space-y-2">
-                    <Search className="size-5 text-[#737373] mx-auto opacity-60" strokeWidth={1.75} />
-                    <h3 className="text-sm font-medium text-[#F5F5F5]">No results</h3>
-                    <p className="text-xs text-[#737373]">
+                    <Search className="size-5 text-text-muted mx-auto opacity-60" strokeWidth={1.75} />
+                    <h3 className="text-sm font-medium text-foreground">No results</h3>
+                    <p className="text-xs text-text-muted">
                       No project matches &quot;{searchQuery}&quot;.
                     </p>
                   </div>
@@ -364,18 +362,18 @@ function DashboardContent() {
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
                       aria-label="Create new project"
-                      className="group relative flex flex-col items-center justify-center min-h-[116px] p-5 rounded-[26px] border border-dashed border-[#292929] hover:border-[#383838] bg-[#171717]/40 hover:bg-[#171717] transition-all duration-200 text-center cursor-pointer select-none active:scale-[0.99]"
+                      className="group relative flex flex-col items-center justify-center min-h-[116px] p-5 rounded-[26px] border border-dashed border-border hover:border-border-strong bg-surface/40 hover:bg-surface transition-all duration-200 text-center cursor-pointer select-none active:scale-[0.99]"
                     >
-                      <div className="size-10 rounded-[14px] bg-[#1D1D1D] border border-[#222222] flex items-center justify-center mb-2 group-hover:border-[#292929] transition-all">
-                        <Plus className="size-4 text-[#737373] group-hover:text-[#F5F5F5] transition-colors" strokeWidth={2} />
+                      <div className="size-10 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center mb-2 group-hover:border-border transition-all">
+                        <Plus className="size-4 text-text-muted group-hover:text-foreground transition-colors" strokeWidth={2} />
                       </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-[#F5F5F5] transition-colors">
+                      <h3 className="text-xs sm:text-sm font-medium text-foreground transition-colors">
                         New Project
                       </h3>
-                      <p className="text-[11px] text-[#737373] mt-0.5">
+                      <p className="text-[11px] text-text-muted mt-0.5">
                         Create a new site in a few clicks
                       </p>
-                      <span className="mt-1.5 text-[10.5px] text-[#737373] font-mono">
+                      <span className="mt-1.5 text-[10.5px] text-text-muted font-mono">
                         {ownedCount}/{MAX_FREE_PROJECTS} used
                       </span>
                     </button>

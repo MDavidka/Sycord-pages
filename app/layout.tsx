@@ -10,8 +10,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="bg-[#131313] dark">
-      <body className="font-sans antialiased bg-[#131313] text-[#F5F5F5]">
+    <html lang="en" suppressHydrationWarning className="bg-background text-foreground dark">
+      <body className="font-sans antialiased bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           <AuthProvider>
             {children}

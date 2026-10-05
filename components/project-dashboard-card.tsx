@@ -72,18 +72,18 @@ export function ProjectDashboardCard({
   const initial = (businessName[0] || "P").toUpperCase()
 
   return (
-    <div className="group relative flex items-center justify-between rounded-[26px] border border-[#292929] bg-[#171717] hover:bg-[#1D1D1D] hover:border-[#383838] text-[#F5F5F5] p-5 sm:p-6 transition-all duration-200 active:scale-[0.99]">
+    <div className="group relative flex items-center justify-between rounded-[26px] border border-border bg-surface hover:bg-surface-raised hover:border-border-strong text-foreground p-5 sm:p-6 transition-all duration-200 active:scale-[0.99]">
       {/* Clickable primary area */}
       <Link
         href={`/dashboard/sites/${projectId}`}
-        className="absolute inset-0 z-0 rounded-[26px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#383838]"
+        className="absolute inset-0 z-0 rounded-[26px] focus:outline-none focus-visible:ring-1 focus-visible:ring-border-strong"
         aria-label={`Open project ${businessName}`}
       />
 
       {/* Main Content: 56px Thumbnail Container + Stacked Info */}
       <div className="relative z-10 flex items-center gap-4 min-w-0">
         {/* Normalized 56px Thumbnail Container */}
-        <div className="size-14 rounded-[16px] bg-[#1D1D1D] border border-[#222222] flex items-center justify-center shrink-0 overflow-hidden relative group-hover:border-[#292929] transition-colors">
+        <div className="size-14 rounded-[16px] bg-surface-raised border border-border-subtle flex items-center justify-center shrink-0 overflow-hidden relative group-hover:border-border transition-colors">
           {resolvedIcon ? (
             <img
               src={resolvedIcon}
@@ -94,8 +94,8 @@ export function ProjectDashboardCard({
               }}
             />
           ) : (
-            <div className="size-full bg-[#1D1D1D] flex items-center justify-center">
-              <span className="text-[#A3A3A3] font-mono text-base font-medium">
+            <div className="size-full bg-surface-raised flex items-center justify-center">
+              <span className="text-text-secondary font-mono text-base font-medium">
                 {initial}
               </span>
             </div>
@@ -103,7 +103,7 @@ export function ProjectDashboardCard({
         </div>
 
         <div className="flex flex-col min-w-0">
-          <h3 className="text-base sm:text-lg font-medium text-[#F5F5F5] group-hover:text-white transition-colors leading-snug tracking-tight truncate">
+          <h3 className="text-base sm:text-lg font-medium text-foreground group-hover:text-white transition-colors leading-snug tracking-tight truncate">
             {businessName}
           </h3>
           <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
@@ -112,7 +112,7 @@ export function ProjectDashboardCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-xs sm:text-sm text-[#737373] hover:text-[#A3A3A3] transition-colors truncate flex items-center gap-1.5 z-20"
+              className="text-xs sm:text-sm text-text-muted hover:text-text-secondary transition-colors truncate flex items-center gap-1.5 z-20"
               title={displayDomain}
               aria-label={`Open ${displayDomain}`}
             >
@@ -131,19 +131,19 @@ export function ProjectDashboardCard({
               variant="ghost"
               size="icon"
               aria-label="Project actions"
-              className="size-9 rounded-[12px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              className="size-9 rounded-[12px] text-text-muted hover:text-foreground hover:bg-surface-muted transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal className="size-4" strokeWidth={1.75} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 bg-[#171717] border border-[#292929] text-[#F5F5F5] shadow-2xl rounded-[16px] p-1.5">
+          <DropdownMenuContent align="end" className="w-40 bg-surface border border-border text-foreground shadow-2xl rounded-[16px] p-1.5">
             <DropdownMenuItem asChild>
               <Link
                 href={`/dashboard/sites/${projectId}`}
-                className="cursor-pointer flex items-center gap-2 text-xs hover:bg-[#202020] focus:bg-[#202020] rounded-[10px] py-2 px-2.5 text-[#A3A3A3] hover:text-[#F5F5F5]"
+                className="cursor-pointer flex items-center gap-2 text-xs hover:bg-surface-muted focus:bg-surface-muted rounded-[10px] py-2 px-2.5 text-text-secondary hover:text-foreground"
               >
-                <Settings className="size-3.5 text-[#737373]" strokeWidth={1.75} />
+                <Settings className="size-3.5 text-text-muted" strokeWidth={1.75} />
                 <span>Settings</span>
               </Link>
             </DropdownMenuItem>
@@ -153,9 +153,9 @@ export function ProjectDashboardCard({
                   e.stopPropagation()
                   onDelete(projectId)
                 }}
-                className="cursor-pointer text-red-400 focus:text-red-300 focus:bg-red-950/30 hover:bg-red-950/30 flex items-center gap-2 text-xs rounded-[10px] py-2 px-2.5"
+                className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10 hover:bg-destructive/10 flex items-center gap-2 text-xs rounded-[10px] py-2 px-2.5"
               >
-                <Trash2 className="size-3.5 text-red-400" strokeWidth={1.75} />
+                <Trash2 className="size-3.5 text-destructive" strokeWidth={1.75} />
                 <span>Delete</span>
               </DropdownMenuItem>
             )}
