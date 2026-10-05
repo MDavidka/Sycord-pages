@@ -172,32 +172,34 @@ export function EmbeddedChat() {
 
         (async () => {
             try {
-                const data = await getChatMessages(chatId, projectId);
-                if (cancelled) return;
-                setMessages(Array.isArray(data?.messages) ? data.messages : []);
-            } catch (err) {
-                console.warn('[EmbeddedChat] Failed to restore messages:', err);
-                if (!cancelled) setMessages([]);
-            }
+                const [messagesData, projectData] = await Promise.all([
+                    getChatMessages(chatId, projectId).catch(err => {
+                        console.warn('[EmbeddedChat] Failed to restore messages:', err);
+                        return { messages: [] };
+                    }),
+                    getProject(chatId).catch(err => {
+                        console.warn('[EmbeddedChat] Failed to restore project files:', err);
+                        return null;
+                    }),
+                ]);
 
-            try {
-                const project = await getProject(chatId);
                 if (cancelled) return;
 
-                if (project?.files && Object.keys(project.files).length > 0) {
-                    setFiles(project.files);
-                    if (webContainerReady) mountFiles(project.files).catch(() => {});
-                    return;
+                if (Array.isArray(messagesData?.messages)) {
+                    setMessages(messagesData.messages);
                 }
 
-                if (!baseSeededRef.current) {
+                if (projectData?.files && Object.keys(projectData.files).length > 0) {
+                    setFiles(projectData.files);
+                    if (webContainerReady) mountFiles(projectData.files).catch(() => {});
+                } else if (!baseSeededRef.current) {
                     baseSeededRef.current = true;
                     const baseFiles = getBaseProjectFiles(presetId);
                     setFiles(baseFiles);
                     if (webContainerReady) mountFiles(baseFiles).catch(() => {});
                 }
             } catch (err) {
-                console.warn('[EmbeddedChat] Failed to restore project files:', err);
+                console.warn('[EmbeddedChat] Unexpected error during initial load:', err);
             }
         })();
 

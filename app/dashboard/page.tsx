@@ -6,8 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone, Monitor, FileSpreadsheet } from "lucide-react"
-import { useState, useEffect, Suspense, useCallback } from "react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone, Monitor, FileSpreadsheet, FilePlus, FolderPlus, Upload, FolderUp } from "lucide-react"
+import { useState, useEffect, Suspense, useCallback, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -67,6 +67,59 @@ function DashboardContent() {
   const [selectedArtifact, setSelectedArtifact] = useState<DashboardArtifact | null>(null)
   const [isExecutingAi, setIsExecutingAi] = useState(false)
 
+  const fileUploadInputRef = useRef<HTMLInputElement>(null)
+  const folderUploadInputRef = useRef<HTMLInputElement>(null)
+  const [createdArtifacts, setCreatedArtifacts] = useState<DashboardArtifact[]>([])
+
+  const handleCreateFile = () => {
+    const filename = prompt("Enter new file name (e.g. index.ts, notes.md):", "newfile.txt")
+    if (!filename?.trim()) return
+    const newArt: DashboardArtifact = {
+      id: `custom-file-${Date.now()}`,
+      name: filename.trim(),
+      type: filename.endsWith(".xls") || filename.endsWith(".xlsx") || filename.endsWith(".csv") ? "spreadsheet" : "document",
+      meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
+    }
+    setCreatedArtifacts((prev) => [newArt, ...prev])
+  }
+
+  const handleCreateFolder = () => {
+    const foldername = prompt("Enter new folder name:", "new-folder")
+    if (!foldername?.trim()) return
+    const newArt: DashboardArtifact = {
+      id: `custom-folder-${Date.now()}`,
+      name: foldername.trim(),
+      type: "website",
+      meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
+    }
+    setCreatedArtifacts((prev) => [newArt, ...prev])
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const newItems: DashboardArtifact[] = Array.from(files).map((f) => ({
+      id: `uploaded-${Date.now()}-${f.name}`,
+      name: f.name,
+      type: f.name.endsWith(".xls") || f.name.endsWith(".xlsx") || f.name.endsWith(".csv") ? "spreadsheet" : "document",
+      meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
+    }))
+    setCreatedArtifacts((prev) => [...newItems, ...prev])
+  }
+
+  const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const rootName = (files[0] as any).webkitRelativePath?.split("/")[0] || "uploaded-folder"
+    const newArt: DashboardArtifact = {
+      id: `uploaded-folder-${Date.now()}`,
+      name: rootName,
+      type: "website",
+      meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
+    }
+    setCreatedArtifacts((prev) => [newArt, ...prev])
+  }
+
   // Map user projects to unified workspace artifacts
   const projectArtifacts: DashboardArtifact[] = projects.map((p: any) => {
     const liveUrl = getValidProjectUrl(p)
@@ -97,19 +150,21 @@ function DashboardContent() {
     },
   ]
 
-  const allArtifacts: DashboardArtifact[] =
-    projectArtifacts.length > 0
+  const allArtifacts: DashboardArtifact[] = [
+    ...createdArtifacts,
+    ...(projectArtifacts.length > 0
       ? [...projectArtifacts, ...(projectArtifacts.length < 3 ? sampleArtifacts : [])]
       : [
           {
             id: "default-site",
             name: "test.sycord.site",
-            type: "website",
+            type: "website" as const,
             meta: "2026.9.92",
             url: "https://sycord.site",
           },
           ...sampleArtifacts,
-        ]
+        ]),
+  ]
 
   const [artifactFilter, setArtifactFilter] = useState<"all" | "website" | "spreadsheet">("all")
 
@@ -426,11 +481,16 @@ function DashboardContent() {
                       artifact={artifact}
                       isSelected={selectedArtifact?.id === artifact.id}
                       onSelect={(art) => {
-                        setSelectedArtifact((prev) => (prev?.id === art.id ? null : art))
+                        setSelectedArtifact(art)
+                        if (art.type === "website" && art.rawProject?._id) {
+                          router.push(`/dashboard/sites/${art.rawProject._id}/syra`)
+                        } else if (art.url) {
+                          window.open(art.url, "_blank", "noopener,noreferrer")
+                        }
                       }}
                       onOpen={(art) => {
                         if (art.type === "website" && art.rawProject?._id) {
-                          router.push(`/dashboard/sites/${art.rawProject._id}`)
+                          router.push(`/dashboard/sites/${art.rawProject._id}/syra`)
                         } else if (art.url) {
                           window.open(art.url, "_blank", "noopener,noreferrer")
                         }
@@ -438,18 +498,75 @@ function DashboardContent() {
                     />
                   ))}
 
-                  {/* Minimalist Dashed "+ New" Card from Screenshot */}
-                  <button
-                    type="button"
-                    onClick={() => router.push("/dashboard/create")}
-                    title="Create new project or artifact"
-                    aria-label="Create new project or artifact"
-                    className="flex items-center justify-center w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-dashed border-[#2f2f2f] hover:border-[#404040] bg-[#141414]/50 hover:bg-[#181818] transition-all cursor-pointer select-none group shrink-0 active:scale-[0.98]"
-                  >
-                    <div className="size-7 rounded-full bg-[#1e1e1e] group-hover:bg-[#252525] flex items-center justify-center transition-colors">
-                      <Plus className="size-3.5 text-[#9e9e9e] group-hover:text-white transition-colors" strokeWidth={2.5} />
-                    </div>
-                  </button>
+                  {/* Hidden inputs for file and folder uploads */}
+                  <input
+                    type="file"
+                    ref={fileUploadInputRef}
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <input
+                    type="file"
+                    ref={folderUploadInputRef}
+                    // @ts-ignore
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                    onChange={handleFolderUpload}
+                  />
+
+                  {/* Minimalist Dashed "+ New" Card with Action Options */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        title="Create or upload"
+                        aria-label="Create or upload options"
+                        className="flex items-center justify-center w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-dashed border-[#2f2f2f] hover:border-[#404040] bg-[#141414]/50 hover:bg-[#181818] transition-all cursor-pointer select-none group shrink-0 active:scale-[0.98] outline-none"
+                      >
+                        <div className="size-7 rounded-full bg-[#1e1e1e] group-hover:bg-[#252525] flex items-center justify-center transition-colors">
+                          <Plus className="size-3.5 text-[#9e9e9e] group-hover:text-white transition-colors" strokeWidth={2.5} />
+                        </div>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      side="top"
+                      className="w-48 bg-[#181818] border border-[#2a2a2a] text-[#EDEDED] rounded-[18px] p-1.5 shadow-2xl z-50"
+                    >
+                      <DropdownMenuItem
+                        onClick={handleCreateFile}
+                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                      >
+                        <FilePlus className="size-3.5 text-zinc-400" />
+                        <span>Create file</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleCreateFolder}
+                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                      >
+                        <FolderPlus className="size-3.5 text-zinc-400" />
+                        <span>Create folder</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-white/[0.08]" />
+                      <DropdownMenuItem
+                        onClick={() => fileUploadInputRef.current?.click()}
+                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                      >
+                        <Upload className="size-3.5 text-zinc-400" />
+                        <span>Upload file</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => folderUploadInputRef.current?.click()}
+                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                      >
+                        <FolderUp className="size-3.5 text-zinc-400" />
+                        <span>Upload folder</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               )}
             </div>

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ModelEffortSelector, type EffortLevel } from "@/components/agents/model-effort-selector"
 import { SycordOmniRouterModal } from "@/components/sycord-omni-router-modal"
+import { fetchAvailableModelChoices, getProviderIconUrl, type ModelChoice } from "@/glovix/lib/ai"
 import type { DashboardArtifact } from "./dashboard-artifact-card"
 
 export interface ChatMessage {
@@ -52,12 +53,32 @@ export function AiComposer({
   const [showSlashMenu, setShowSlashMenu] = useState(false)
   const [effortLevel, setEffortLevel] = useState<EffortLevel>("extra_high")
   const [selectedModel, setSelectedModel] = useState<string>("syra-base")
+  const [availableModelChoices, setAvailableModelChoices] = useState<ModelChoice[] | null>(null)
   const [isOmniModalOpen, setIsOmniModalOpen] = useState(false)
   const [isListening, setIsListening] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch project-based AI chat model choices
+  useEffect(() => {
+    let active = true
+    fetchAvailableModelChoices()
+      .then((choices) => {
+        if (!active) return
+        setAvailableModelChoices(choices)
+        const saved = typeof window !== "undefined" ? localStorage.getItem("sycord_selected_model") : null
+        const match = choices.find((c) => c.modelType === saved || c.apiModel === saved)
+        if (match) {
+          setSelectedModel(match.modelType)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Auto-scroll messages into view
   useEffect(() => {
@@ -471,9 +492,30 @@ export function AiComposer({
               effort={effortLevel}
               onEffortChange={setEffortLevel}
               selectedModel={selectedModel}
+              modelChoices={(availableModelChoices || []).map((c) => {
+                const isSelected = c.modelType === selectedModel || c.apiModel === selectedModel
+                return {
+                  id: c.modelType,
+                  label: c.label || c.apiModel,
+                  apiModel: c.apiModel,
+                  subtitle: c.subtitle,
+                  iconUrl: getProviderIconUrl(c.apiModel, true) || c.icon,
+                  active: isSelected || c.active,
+                  isAiTabActive: isSelected || c.isAiTabActive,
+                }
+              })}
               isDark={true}
               onModelSelect={(modelId) => {
-                setSelectedModel(modelId)
+                const choice = availableModelChoices?.find(
+                  (c) => c.modelType === modelId || c.apiModel === modelId
+                )
+                const targetModel = choice ? choice.modelType : modelId
+                setSelectedModel(targetModel)
+                try {
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("sycord_selected_model", String(targetModel))
+                  }
+                } catch {}
               }}
               onAddModelsClick={() => {
                 setIsOmniModalOpen(true)
