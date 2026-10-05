@@ -16,6 +16,8 @@ import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { ProjectDashboardCard } from "@/components/project-dashboard-card"
 import { DashboardModeToggle, type DashboardMode } from "@/components/dashboard-mode-toggle"
 import { AstroDashboard } from "@/components/astro-dashboard"
+import { DashboardArtifactCard, type DashboardArtifact } from "@/components/dashboard-artifact-card"
+import { AiComposer } from "@/components/ai-composer"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
@@ -61,11 +63,107 @@ function DashboardContent() {
   const [activeMode, setActiveMode] = useState<DashboardMode>("projects")
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedArtifact, setSelectedArtifact] = useState<DashboardArtifact | null>(null)
+  const [isExecutingAi, setIsExecutingAi] = useState(false)
+
+  // Map user projects to unified workspace artifacts
+  const projectArtifacts: DashboardArtifact[] = projects.map((p: any) => {
+    const liveUrl = getValidProjectUrl(p)
+    const domain = liveUrl
+      ? liveUrl.replace(/^https?:\/\//, "")
+      : p.domain || `${(p.businessName || "project").toLowerCase().replace(/\s+/g, "-")}.sycord.site`
+    const dateStr = p.createdAt
+      ? new Date(p.createdAt).toISOString().slice(0, 10).replace(/-/g, ".")
+      : "2026.9.92"
+    return {
+      id: p._id,
+      name: domain,
+      type: "website" as const,
+      meta: dateStr,
+      url: liveUrl || (p.cloudflareUrl ? `https://${p.cloudflareUrl}` : undefined),
+      profileImage: p.profileImage,
+      rawProject: p,
+    }
+  })
+
+  // Connected files / sample artifacts (from reference design)
+  const sampleArtifacts: DashboardArtifact[] = [
+    {
+      id: "sample-xls",
+      name: "Testfile.xsl",
+      type: "spreadsheet",
+      meta: "2026.9.92",
+    },
+  ]
+
+  const allArtifacts: DashboardArtifact[] =
+    projectArtifacts.length > 0
+      ? [...projectArtifacts, ...(projectArtifacts.length < 3 ? sampleArtifacts : [])]
+      : [
+          {
+            id: "default-site",
+            name: "test.sycord.site",
+            type: "website",
+            meta: "2026.9.92",
+            url: "https://sycord.site",
+          },
+          ...sampleArtifacts,
+        ]
 
   const q = searchQuery.trim().toLowerCase()
-  const filtered: any[] = q
-    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
-    : projects
+  const filteredArtifacts = q
+    ? allArtifacts.filter(
+        (a) =>
+          a.name.toLowerCase().includes(q) ||
+          (a.meta && a.meta.toLowerCase().includes(q))
+      )
+    : allArtifacts
+
+  const handleAiSubmit = async (
+    promptText: string,
+    artifact: DashboardArtifact | null,
+    modelId: string
+  ) => {
+    if (artifact && artifact.type === "website" && artifact.rawProject?._id) {
+      router.push(
+        `/dashboard/sites/${artifact.rawProject._id}/syra?prompt=${encodeURIComponent(
+          promptText
+        )}&model=${encodeURIComponent(modelId)}`
+      )
+      return
+    }
+
+    setIsExecutingAi(true)
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: promptText.slice(0, 30).trim() || "New AI Workspace",
+          businessDescription: promptText,
+          websiteType: "service",
+          status: "pending",
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const newId = data.projectId || data._id || data.id
+        if (newId) {
+          router.push(
+            `/dashboard/sites/${newId}/syra?prompt=${encodeURIComponent(
+              promptText
+            )}&model=${encodeURIComponent(modelId)}`
+          )
+          return
+        }
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsExecutingAi(false)
+    }
+    setActiveMode("astro")
+  }
   const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
   const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
@@ -178,30 +276,33 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        <header className="sticky top-0 bg-background/80 backdrop-blur-md z-50">
-          <div className="max-w-[430px] sm:max-w-2xl mx-auto px-5 py-4 flex items-center justify-between">
-            <Link href="/" className="flex items-center focus:outline-none">
+        <header className="sticky top-0 bg-background/80 backdrop-blur-md z-50 border-b border-[#222222]/40">
+          <div className="max-w-4xl mx-auto px-5 sm:px-8 py-3.5 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-3 focus:outline-none">
               <Image
                 src="/brand-logo.png"
                 alt="Sycord"
-                width={42}
-                height={20}
+                width={38}
+                height={18}
                 priority
                 className="object-contain shrink-0"
               />
+              <span className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
+                Sycord
+              </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-9 rounded-[10px] bg-[#553f35] border border-[#6d4c41]/50 flex items-center justify-center text-[#f5f5f5] font-semibold text-sm transition-transform active:scale-[0.97] outline-none cursor-pointer shadow-sm hover:brightness-110"
+                  className="relative size-9 rounded-[10px] bg-[#553f35] border border-[#6d4c41]/50 flex items-center justify-center text-[#f5f5f5] font-semibold text-sm transition-transform active:scale-[0.97] outline-none cursor-pointer shadow-sm hover:brightness-110 overflow-hidden"
                 >
                   {session?.user?.image ? (
                     <img
                       src={session.user.image}
                       alt={session.user.name || "User"}
-                      className="size-full rounded-[10px] object-cover"
+                      className="size-full object-cover"
                     />
                   ) : (
                     "M"
@@ -237,231 +338,166 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-[430px] sm:max-w-2xl mx-auto px-5 pt-2 pb-20 md:pb-12 space-y-4">
-          {announcements.length > 0 && (
-            <div className="space-y-2">
-              {announcements.map((ann) => (
-                <div
-                  key={ann.id || ann._id}
-                  className={cn(
-                    "flex items-start gap-3 p-4 rounded-[18px] border text-xs leading-relaxed",
-                    ann.type === "warning" || ann.type === "maintenance"
-                      ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
-                      : ann.type === "important"
-                      ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
-                      : "bg-surface border-border text-text-secondary"
-                  )}
-                >
-                  <Megaphone className="size-4 shrink-0 mt-0.5 text-text-secondary" strokeWidth={1.75} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs text-foreground">{ann.title}</p>
-                    <p className="text-xs text-text-muted mt-0.5">{ann.message}</p>
+        <main className="max-w-4xl mx-auto px-5 sm:px-8 pt-6 sm:pt-10 pb-16 flex-1 flex flex-col justify-between min-h-[calc(100vh-65px)]">
+          <div className="space-y-6">
+            {announcements.length > 0 && (
+              <div className="space-y-2">
+                {announcements.map((ann) => (
+                  <div
+                    key={ann.id || ann._id}
+                    className={cn(
+                      "flex items-start gap-3 p-4 rounded-[18px] border text-xs leading-relaxed",
+                      ann.type === "warning" || ann.type === "maintenance"
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
+                        : ann.type === "important"
+                        ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
+                        : "bg-surface border-border text-text-secondary"
+                    )}
+                  >
+                    <Megaphone className="size-4 shrink-0 mt-0.5 text-text-secondary" strokeWidth={1.75} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-xs text-foreground">{ann.title}</p>
+                      <p className="text-xs text-text-muted mt-0.5">{ann.message}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            )}
+
+            {/* 1. Artifact Search & Action Row */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+              <div className="relative flex items-center flex-1 h-[48px] bg-[#181818] border border-[#282828] focus-within:border-[#3d3d3d] rounded-[14px] px-3.5 transition-colors shadow-sm">
+                <Search className="size-4 text-zinc-400 shrink-0 mr-3" strokeWidth={2} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="search for file or artifact"
+                  aria-label="Search for file or artifact"
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-zinc-500 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="text-xs text-zinc-400 hover:text-white px-1.5 py-0.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/create")}
+                aria-label="Create new project or artifact"
+                title="Create new project or artifact"
+                className="h-[48px] w-full sm:w-[104px] rounded-[14px] bg-[#464646] hover:bg-[#525252] text-white text-sm font-medium transition-all active:scale-[0.97] cursor-pointer shrink-0 flex items-center justify-center shadow-sm"
+              >
+                <span>New</span>
+              </button>
             </div>
-          )}
 
-          {/* Welcome Section with Ambient Blue Glow bleeding from the left edge */}
-          <div
-            className="relative pt-4 pb-4 -mx-5 px-5 transition-colors"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(40, 52, 76, 0.95) 0%, rgba(32, 42, 62, 0.5) 45%, rgba(24, 24, 24, 0) 85%)",
-            }}
-          >
-            <h1 className="text-2xl sm:text-[26px] font-bold text-white tracking-tight leading-tight">
-              Welcome back {session?.user?.name?.split(" ")[0] || "David"}!
-            </h1>
-            {/* Project status line */}
-            {(() => {
-              const latest: any = projects[0]
-              const liveUrl = latest ? getValidProjectUrl(latest) : null
-              const isLive = Boolean(liveUrl)
-              const projectName = latest?.businessName || "testapp"
-              return (
-                <div className="flex items-center gap-2 mt-2">
-                  <svg className="size-[17px] text-zinc-300 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z" />
-                  </svg>
-                  <span className="text-sm text-zinc-200 font-medium truncate max-w-[180px]">
-                    {projectName}
-                  </span>
-                  <span className="size-[8px] rounded-full bg-[#5b8bf7] shrink-0 shadow-[0_0_8px_rgba(91,139,247,0.7)]" />
-                  <span className="text-xs text-zinc-400">
-                    {latest ? (isLive ? "succesful" : "deployed") : "succesful"}
-                  </span>
-                </div>
-              )
-            })()}
-          </div>
-
-          {/* Search Bar + New Button row */}
-          <div className="flex items-center gap-3 pt-1">
-            <div className="relative flex items-center flex-1 h-[46px] bg-[#1a1a1a] border border-[#2d2d2d] focus-within:border-[#444] rounded-[16px] px-3.5 transition-colors">
-              <Search className="size-4 text-zinc-400 shrink-0 mr-2.5" strokeWidth={2} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder=""
-                aria-label="Search projects"
-                className="w-full bg-transparent text-sm text-foreground placeholder:text-zinc-500 outline-none"
+            {/* 2. Access / Tool Bar */}
+            <div className="flex items-center pt-1">
+              <DashboardModeToggle
+                activeMode={activeMode}
+                onChange={(mode) => {
+                  setActiveMode(mode)
+                  const u = new URL(window.location.href)
+                  if (mode === "projects") {
+                    u.searchParams.delete("mode")
+                  } else {
+                    u.searchParams.set("mode", mode)
+                  }
+                  window.history.replaceState({}, "", u.toString())
+                }}
+                onAction={(actionId) => {
+                  if (actionId === "copy-add") {
+                    router.push("/dashboard/create")
+                  } else if (actionId === "link") {
+                    const target = selectedArtifact?.url || (projects[0] ? getValidProjectUrl(projects[0]) : null)
+                    if (target) {
+                      navigator.clipboard.writeText(target)
+                      alert(`Copied link to clipboard: ${target}`)
+                    } else {
+                      alert("No active artifact link available to copy.")
+                    }
+                  }
+                }}
               />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="text-xs text-zinc-400 hover:text-white px-1.5 py-0.5"
-                >
-                  ✕
-                </button>
+            </div>
+
+            {/* 3. Artifacts Section (Websites, Files, Resources) */}
+            <div className="pt-2 space-y-2.5">
+              <div className="flex items-center justify-between text-xs text-text-muted px-0.5">
+                <span className="font-medium tracking-wide">Available Artifacts</span>
+                <span className="text-[11px] font-mono">
+                  {selectedArtifact ? `1 selected` : `${filteredArtifacts.length} ready`}
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="flex items-center gap-3 overflow-hidden py-1">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="min-w-[210px] h-[64px] rounded-[18px] border border-[#252525] bg-[#181818] animate-pulse" />
+                  ))}
+                </div>
+              ) : filteredArtifacts.length === 0 ? (
+                <div className="rounded-[18px] border border-dashed border-[#282828] bg-[#161616]/40 p-6 text-center">
+                  <p className="text-xs text-text-muted">
+                    No artifacts found matching &quot;{searchQuery}&quot;.
+                  </p>
+                </div>
+              ) : (
+                /* Artifacts rail: horizontal scrollable on mobile, flex-wrap on desktop */
+                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
+                  {filteredArtifacts.map((artifact) => (
+                    <DashboardArtifactCard
+                      key={artifact.id}
+                      artifact={artifact}
+                      isSelected={selectedArtifact?.id === artifact.id}
+                      onSelect={(art) => {
+                        setSelectedArtifact((prev) => (prev?.id === art.id ? null : art))
+                      }}
+                      onOpen={(art) => {
+                        if (art.type === "website" && art.rawProject?._id) {
+                          router.push(`/dashboard/sites/${art.rawProject._id}`)
+                        } else if (art.url) {
+                          window.open(art.url, "_blank", "noopener,noreferrer")
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/create")}
-              aria-label="Create new project"
-              title="Create new project"
-              className="h-[46px] w-[96px] sm:w-[104px] rounded-[16px] bg-[#464646] hover:bg-[#525252] text-white text-sm font-medium transition-all active:scale-[0.97] cursor-pointer shrink-0 flex items-center justify-center shadow-sm"
-            >
-              <span>+ New</span>
-            </button>
-          </div>
 
-          {/* Floating Pill Toolbar */}
-          <div className="flex items-center pt-1">
-            <DashboardModeToggle
-              activeMode={activeMode}
-              onChange={(mode) => {
-                setActiveMode(mode)
-                const u = new URL(window.location.href)
-                if (mode === "projects") {
-                  u.searchParams.delete("mode")
-                } else {
-                  u.searchParams.set("mode", mode)
-                }
-                window.history.replaceState({}, "", u.toString())
-              }}
-              onAction={(actionId) => {
-                if (actionId === "copy-add") {
-                  router.push("/dashboard/create")
-                } else if (actionId === "link") {
-                  const latest: any = projects[0]
-                  const url = latest ? getValidProjectUrl(latest) : null
-                  if (url) {
-                    navigator.clipboard.writeText(url)
-                    alert(`Project URL copied to clipboard: ${url}`)
-                  } else {
-                    alert("No deployed project URL available to copy yet.")
-                  }
-                }
-              }}
-            />
-          </div>
-
-          {/* Main Card Container */}
-          <div className="rounded-[26px] border border-[#282828] bg-[#151515]/20 min-h-[460px] p-4 sm:p-5 flex flex-col transition-all">
-            {activeMode === "astro" ? (
-              /* ASTRO MODE: Global Agentic AI Workspace */
-              <div className="space-y-4 animate-in fade-in duration-200">
-                <div className="flex items-center justify-between border-b border-[#282828] pb-3 mb-2">
-                  <span className="text-xs font-medium text-text-muted">Astro AI Workspace</span>
+            {/* If in Astro mode, show full Astro Dashboard tools */}
+            {activeMode === "astro" && (
+              <div className="rounded-[22px] border border-[#282828] bg-[#151515]/30 p-4 sm:p-5 mt-4">
+                <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#282828]">
+                  <span className="text-xs font-medium text-text-muted">Astro AI Workspace Active</span>
                   <button
                     type="button"
                     onClick={() => setActiveMode("projects")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    className="text-xs text-indigo-400 hover:text-indigo-300"
                   >
-                    ← Back to Projects
+                    ← Back to Artifacts View
                   </button>
                 </div>
                 <AstroDashboard />
               </div>
-            ) : (
-              /* PROJECTS MODE */
-              <div className="space-y-4 flex-1 flex flex-col animate-in fade-in duration-200">
-                {isLoading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[1, 2].map((i) => (
-                      <CardSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : projects.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
-                    <div className="space-y-3 max-w-xs mx-auto">
-                      <div className="size-12 rounded-2xl bg-white/[0.04] border border-[#282828] flex items-center justify-center mx-auto text-zinc-400">
-                        <Folder className="size-6" strokeWidth={1.5} />
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-semibold text-foreground">No projects yet</h3>
-                        <p className="text-xs text-text-muted leading-relaxed">
-                          Create your first project to deploy and start building with Syra AI.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        onClick={() => router.push("/dashboard/create")}
-                        aria-label="Create new project"
-                        className="rounded-xl px-5 h-9 text-xs font-medium"
-                      >
-                        <Plus className="size-3.5 mr-1" strokeWidth={2} />
-                        <span>Create Project</span>
-                      </Button>
-                    </div>
-                  </div>
-                ) : q && filtered.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
-                    <div className="space-y-2">
-                      <Search className="size-6 text-text-muted mx-auto opacity-40" strokeWidth={1.75} />
-                      <h3 className="text-sm font-medium text-foreground">No matching projects</h3>
-                      <p className="text-xs text-text-muted">
-                        No projects found matching &quot;{searchQuery}&quot;.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="text-xs text-indigo-400 hover:underline pt-1"
-                      >
-                        Clear search
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {filtered.map((project: any) => {
-                      const liveUrl = getValidProjectUrl(project)
-                      const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
-                      const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
-                      const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
-                      const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
-                      return (
-                        <ProjectDashboardCard
-                          key={project._id}
-                          domain={projectDomain}
-                          isLive={isLive}
-                          deploymentId={deploymentKey}
-                          projectId={project._id}
-                          businessName={project.businessName}
-                          createdAt={project.createdAt}
-                          chatSession={project.chatSession}
-                          style={project.style || "default"}
-                          framework={project.framework}
-                          fallbackHtml={fallbackHtml}
-                          githubOwner={project.githubOwner}
-                          githubRepo={project.githubRepo}
-                          githubBranch={project.githubBranch}
-                          githubUrl={project.githubUrl}
-                          githubSavedAt={project.githubSavedAt}
-                          githubCommitMessage={project.githubCommitMessage}
-                          profileImage={project.profileImage}
-                          onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
-                        />
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
             )}
+          </div>
+
+          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (MOST IMPORTANT ELEMENT) */}
+          <div className="pt-10 sm:pt-16 pb-4">
+            <AiComposer
+              selectedArtifact={selectedArtifact}
+              onClearArtifact={() => setSelectedArtifact(null)}
+              onSubmit={handleAiSubmit}
+              isSubmitting={isExecutingAi}
+            />
           </div>
         </main>
       </div>

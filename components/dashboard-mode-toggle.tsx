@@ -37,9 +37,9 @@ export function DashboardModeToggle({
   return (
     <div
       role="toolbar"
-      aria-label="Floating Action Bar"
+      aria-label="Access / Resource Tool Bar"
       className={cn(
-        "relative inline-flex items-center rounded-[50px] bg-[#171717] border border-[#292929] shadow-lg shadow-black/30 px-1.5 py-1.5 select-none",
+        "relative inline-flex items-center rounded-[14px] bg-[#181818] border border-[#282828] shadow-sm px-1 py-1 select-none",
         className
       )}
     >
@@ -49,7 +49,7 @@ export function DashboardModeToggle({
         title="Copy active project link"
         aria-label="Copy active project link"
         onClick={() => handleAction("link")}
-        className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <svg
           viewBox="0 0 24 24"
@@ -66,7 +66,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 1 */}
-      <div className="h-[28px] w-[1px] bg-[#303030] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
 
       {/* Section 2: Copy / Add */}
       <button
@@ -74,7 +74,7 @@ export function DashboardModeToggle({
         title="Create or duplicate project"
         aria-label="Create or duplicate project"
         onClick={() => handleAction("copy-add")}
-        className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <svg
           viewBox="0 0 24 24"
@@ -83,7 +83,7 @@ export function DashboardModeToggle({
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="size-[20px] shrink-0"
+          className="size-[18px] shrink-0"
         >
           <rect width="13" height="13" x="8" y="8" rx="2.5" ry="2.5" />
           <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
@@ -93,7 +93,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 2 */}
-      <div className="h-[28px] w-[1px] bg-[#303030] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
 
       {/* Section 3: Astro AI Orb (blue/purple gradient circle) */}
       <button
@@ -101,11 +101,11 @@ export function DashboardModeToggle({
         title={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
         aria-label={activeMode === "astro" ? "Switch to Projects" : "Open Astro AI Chat"}
         onClick={() => handleAction(activeMode === "astro" ? "projects" : "astro")}
-        className="flex items-center justify-center w-[44px] h-[40px] rounded-full hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+        className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
       >
         <div
           className={cn(
-            "size-[22px] rounded-full shrink-0 transition-all duration-200",
+            "size-[20px] rounded-full shrink-0 transition-all duration-200",
             activeMode === "astro" && "ring-2 ring-indigo-400/90 ring-offset-2 ring-offset-[#171717] scale-105"
           )}
           style={{
@@ -116,7 +116,7 @@ export function DashboardModeToggle({
       </button>
 
       {/* Divider 3 */}
-      <div className="h-[28px] w-[1px] bg-[#303030] shrink-0" />
+      <div className="h-[20px] w-[1px] bg-[#2e2e2e] shrink-0" />
 
       {/* Section 4: ChevronDown with DropdownMenu */}
       <DropdownMenu>
@@ -125,7 +125,7 @@ export function DashboardModeToggle({
             type="button"
             title="Dashboard options"
             aria-label="Dashboard options"
-            className="flex items-center justify-center w-[44px] h-[40px] rounded-full text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
+            className="flex items-center justify-center w-[38px] sm:w-[42px] h-[34px] sm:h-[36px] rounded-[10px] text-[#F0F0F0] hover:text-white hover:bg-white/[0.06] transition-all duration-150 active:scale-95 outline-none cursor-pointer"
           >
             <svg
               viewBox="0 0 24 24"
@@ -134,7 +134,7 @@ export function DashboardModeToggle({
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="size-[20px] shrink-0"
+              className="size-[18px] shrink-0"
             >
               <path d="m6 9 6 6 6-6" />
             </svg>
