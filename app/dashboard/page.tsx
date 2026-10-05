@@ -404,13 +404,13 @@ function DashboardContent() {
             </div>
 
             {/* 2. Filter Buttons and Access Bar using Shadcn */}
-            <div className="flex items-center justify-between gap-3 pt-1 flex-wrap">
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2.5 pt-1">
+              <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
                 <Button
                   variant={artifactFilter === "all" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setArtifactFilter("all")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-3"
+                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3"
                 >
                   All
                 </Button>
@@ -418,7 +418,7 @@ function DashboardContent() {
                   variant={artifactFilter === "website" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setArtifactFilter("website")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-3 gap-1.5"
+                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3 gap-1.5"
                 >
                   <Monitor className="size-3.5" />
                   <span>Websites</span>
@@ -427,39 +427,41 @@ function DashboardContent() {
                   variant={artifactFilter === "spreadsheet" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setArtifactFilter("spreadsheet")}
-                  className="rounded-[10px] h-8 text-xs font-medium px-3 gap-1.5"
+                  className="rounded-[10px] h-8 text-xs font-medium px-2.5 sm:px-3 gap-1.5"
                 >
                   <FileSpreadsheet className="size-3.5" />
                   <span>Files</span>
                 </Button>
               </div>
 
-              <DashboardModeToggle
-                activeMode={activeMode}
-                onChange={(mode) => {
-                  setActiveMode(mode)
-                  const u = new URL(window.location.href)
-                  if (mode === "projects") {
-                    u.searchParams.delete("mode")
-                  } else {
-                    u.searchParams.set("mode", mode)
-                  }
-                  window.history.replaceState({}, "", u.toString())
-                }}
-                onAction={(actionId) => {
-                  if (actionId === "copy-add") {
-                    router.push("/dashboard/create")
-                  } else if (actionId === "link") {
-                    const target = selectedArtifact?.url || (projects[0] ? getValidProjectUrl(projects[0]) : null)
-                    if (target) {
-                      navigator.clipboard.writeText(target)
-                      alert(`Copied link to clipboard: ${target}`)
+              <div className="self-end xs:self-auto">
+                <DashboardModeToggle
+                  activeMode={activeMode}
+                  onChange={(mode) => {
+                    setActiveMode(mode)
+                    const u = new URL(window.location.href)
+                    if (mode === "projects") {
+                      u.searchParams.delete("mode")
                     } else {
-                      alert("No active artifact link available to copy.")
+                      u.searchParams.set("mode", mode)
                     }
-                  }
-                }}
-              />
+                    window.history.replaceState({}, "", u.toString())
+                  }}
+                  onAction={(actionId) => {
+                    if (actionId === "copy-add") {
+                      router.push("/dashboard/create")
+                    } else if (actionId === "link") {
+                      const target = selectedArtifact?.url || (projects[0] ? getValidProjectUrl(projects[0]) : null)
+                      if (target) {
+                        navigator.clipboard.writeText(target)
+                        alert(`Copied link to clipboard: ${target}`)
+                      } else {
+                        alert("No active artifact link available to copy.")
+                      }
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             {/* 3. Artifacts Section (Websites, Files, Resources) */}
@@ -474,18 +476,18 @@ function DashboardContent() {
               {isLoading ? (
                 <div className="flex items-center gap-3 overflow-hidden py-1">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="min-w-[210px] h-[64px] rounded-[18px] border border-[#252525] bg-[#181818] animate-pulse" />
+                    <div key={i} className="min-w-[190px] sm:min-w-[210px] h-[64px] rounded-[18px] border border-[#252525] bg-[#181818] animate-pulse" />
                   ))}
                 </div>
               ) : filteredArtifacts.length === 0 ? (
-                <div className="rounded-[18px] border border-dashed border-[#282828] bg-[#161616]/40 p-6 text-center">
+                <div className="rounded-[18px] border border-dashed border-[#282828] bg-[#161616]/40 p-5 sm:p-6 text-center">
                   <p className="text-xs text-text-muted">
                     No artifacts found matching &quot;{searchQuery}&quot;.
                   </p>
                 </div>
               ) : (
                 /* Artifacts rail: horizontal scrollable on mobile, flex-wrap on desktop */
-                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
+                <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar pb-2.5 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
                   {filteredArtifacts.map((artifact) => (
                     <DashboardArtifactCard
                       key={artifact.id}
@@ -525,8 +527,8 @@ function DashboardContent() {
             )}
           </div>
 
-          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (Exact Astro chat style & logic) */}
-          <div className="pt-8 sm:pt-12 pb-4">
+          {/* 4. Large Flexible Workspace Spacing + AI Input / Chat Composer (Syra chat style & logic) */}
+          <div className="pt-6 sm:pt-10 pb-4 sm:pb-6">
             <AiComposer
               selectedArtifact={selectedArtifact}
               onClearArtifact={() => setSelectedArtifact(null)}
