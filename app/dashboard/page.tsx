@@ -34,15 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[26px] p-5 sm:p-6 flex items-center justify-between bg-[#171717] border border-[#292929]">
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <Skeleton className="size-14 rounded-[16px] shrink-0 bg-[#1D1D1D]" />
-        <div className="space-y-2 flex-1 min-w-0">
-          <Skeleton className="h-5 w-32 bg-[#1D1D1D] rounded-[8px]" />
-          <Skeleton className="h-3.5 w-44 bg-[#202020] rounded-[6px]" />
+    <div className="rounded-[22px] border border-border/80 bg-surface/90 p-4 sm:p-5 flex items-center justify-between">
+      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-surface-raised" />
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
+          <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
         </div>
       </div>
-      <Skeleton className="size-9 rounded-[12px] shrink-0 bg-[#1D1D1D] ml-2" />
+      <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0 ml-3" />
     </div>
   )
 }
@@ -177,46 +177,62 @@ function DashboardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-[#131313] md:ml-16 text-[#F5F5F5]">
-        <header className="border-b border-[#292929] sticky top-0 bg-[#131313]/90 backdrop-blur-md z-50">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+      <div className="min-h-screen bg-background md:ml-16 text-foreground">
+        <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5">
-              <Image src="/logo.png" alt="Logo" width={28} height={28} priority className="rounded-[6px] object-contain shrink-0" />
-              <span className="text-base font-medium tracking-tight text-[#F5F5F5]">
-                {userStatus.isPremium ? (userStatus.subscription === "Sycord Enterprise" ? "Sycord Enterprise" : "Sycord+") : "Sycord"}
+              <Image
+                src="/logo.png"
+                alt="Sycord"
+                width={28}
+                height={28}
+                priority
+                className="rounded-[6px] object-contain shrink-0"
+              />
+              <span className="text-base font-semibold tracking-tight text-foreground lowercase">
+                sycord
               </span>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" aria-label="User account menu" className="relative size-11 rounded-full p-0 transition-transform active:scale-[0.97]">
-                  <Avatar className="size-10">
-                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">{userInitials}</AvatarFallback>
-                  </Avatar>
-                </Button>
+                <button
+                  type="button"
+                  aria-label="User account menu"
+                  className="relative size-8 rounded-full bg-amber-900/40 border border-amber-700/50 flex items-center justify-center text-amber-200 font-medium text-xs transition-transform active:scale-[0.97] outline-none cursor-pointer"
+                >
+                  {session?.user?.image ? (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name || "User"}
+                      className="size-full rounded-full object-cover"
+                    />
+                  ) : (
+                    userInitials
+                  )}
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-[#171717] border border-[#292929] text-[#F5F5F5] rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal px-2.5 py-2">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-[#F5F5F5]">{session?.user?.name}</p>
-                    <p className="text-xs leading-none text-[#737373]">{session?.user?.email}</p>
+                    <p className="text-sm font-medium leading-none text-foreground">{session?.user?.name}</p>
+                    <p className="text-xs leading-none text-text-muted">{session?.user?.email}</p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-[#292929]" />
-                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
-                <DropdownMenuItem className="rounded-[10px] text-xs text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
                 {session?.user?.email === "dmarton336@gmail.com" && (
                   <>
-                    <DropdownMenuSeparator className="bg-[#292929]" />
+                    <DropdownMenuSeparator className="bg-border" />
                     <DropdownMenuItem onClick={() => router.push("/admin")} className="rounded-[10px] text-xs">
                       <Shield className="mr-2 size-4 text-emerald-400" strokeWidth={1.75} />
                       <span className="text-emerald-400 font-medium">Moderator View</span>
                     </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator className="bg-[#292929]" />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30">
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-destructive hover:text-destructive hover:bg-destructive/10">
                   <LogOut className="mr-2 size-4" strokeWidth={1.75} /><span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -224,7 +240,7 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-8 space-y-6">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-7 pb-20 md:pb-12 space-y-6">
           {announcements.length > 0 && (
             <div className="space-y-2">
               {announcements.map((ann) => (
@@ -236,36 +252,37 @@ function DashboardContent() {
                       ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
                       : ann.type === "important"
                       ? "bg-rose-500/10 border-rose-500/20 text-rose-200"
-                      : "bg-[#171717] border-[#292929] text-[#A3A3A3]"
+                      : "bg-surface border-border text-text-secondary"
                   )}
                 >
-                  <Megaphone className="size-4 shrink-0 mt-0.5 text-[#A3A3A3]" strokeWidth={1.75} />
+                  <Megaphone className="size-4 shrink-0 mt-0.5 text-text-secondary" strokeWidth={1.75} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-xs text-[#F5F5F5]">{ann.title}</p>
-                    <p className="text-xs text-[#737373] mt-0.5">{ann.message}</p>
+                    <p className="font-medium text-xs text-foreground">{ann.title}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{ann.message}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Page Title Area & New Project Button */}
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">Projects</h1>
+          {/* Page Title Area & Rounded Pill Action Button */}
+          <div className="flex items-center justify-between gap-4 pt-3 pb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground lowercase">
+              projects
+            </h1>
             <button
               type="button"
               onClick={() => router.push("/dashboard/create")}
               aria-label="Create new project"
-              className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
+              className="h-9 px-5 rounded-[14px] bg-surface-raised hover:bg-surface-muted border border-border/80 text-xs sm:text-sm font-medium text-foreground transition-all active:scale-[0.97] cursor-pointer"
             >
-              <Plus className="size-4" strokeWidth={2} />
-              <span>New Project</span>
+              <span>+ New Project</span>
             </button>
           </div>
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="space-y-6 pt-2 animate-in fade-in duration-200">
               <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
@@ -285,26 +302,24 @@ function DashboardContent() {
             </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Search Bar & Counter */}
-              <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1 flex items-center min-h-[44px] bg-[#171717] border border-[#292929] focus-within:border-[#383838] rounded-[18px] px-3.5 transition-colors">
-                  <Search className="size-4 text-[#737373] shrink-0 mr-2.5" strokeWidth={1.75} />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search projects..."
-                    className="w-full bg-transparent text-xs sm:text-sm text-[#F5F5F5] placeholder:text-[#737373] outline-none"
-                  />
-                </div>
-                <div className="min-h-[44px] px-4 border border-[#292929] rounded-[18px] bg-[#171717] text-xs font-mono font-medium text-[#A3A3A3] flex items-center justify-center shrink-0 tabular-nums">
-                  {ownedCount}/{MAX_FREE_PROJECTS}
-                </div>
+            <div className="space-y-5 pt-2 animate-in fade-in duration-200">
+              {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
+              <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
+                <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-text-muted outline-none"
+                />
+                <span className="text-xs text-text-muted shrink-0 pl-3 select-none">
+                  {filtered.length} {filtered.length === 1 ? "result" : "results"}
+                </span>
               </div>
 
-              {/* Segmented Projects / Astro Switch */}
-              <div className="flex items-center">
+              {/* Segmented Projects / Solar Switch */}
+              <div className="flex items-center pt-1 pb-1">
                 <DashboardModeToggle
                   activeMode={activeMode}
                   onChange={(mode) => {
@@ -321,66 +336,42 @@ function DashboardContent() {
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2].map((i) => (
                     <CardSkeleton key={i} />
                   ))}
                 </div>
               ) : projects.length === 0 ? (
-                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
                   <div className="max-w-sm mx-auto space-y-4">
                     <div className="space-y-1">
-                      <h3 className="text-base font-medium text-[#F5F5F5]">No projects yet</h3>
-                      <p className="text-xs sm:text-sm text-[#737373]">
+                      <h3 className="text-base font-medium text-foreground">No projects yet</h3>
+                      <p className="text-xs sm:text-sm text-text-muted">
                         Create your first project to get started.
                       </p>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
                       aria-label="Create new project"
-                      className="inline-flex items-center justify-center min-h-[44px] px-4 rounded-[18px] gap-2 text-xs sm:text-sm font-medium bg-[#F5F5F5] text-[#131313] hover:bg-white transition-all active:scale-[0.97]"
                     >
                       <Plus className="size-4" strokeWidth={2} />
                       <span>New Project</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-[#292929] rounded-[26px] p-12 text-center bg-[#171717]/40">
+                <div className="border border-dashed border-border rounded-[26px] p-12 text-center bg-surface/40">
                   <div className="max-w-sm mx-auto space-y-2">
-                    <Search className="size-5 text-[#737373] mx-auto opacity-60" strokeWidth={1.75} />
-                    <h3 className="text-sm font-medium text-[#F5F5F5]">No results</h3>
-                    <p className="text-xs text-[#737373]">
+                    <Search className="size-5 text-text-muted mx-auto opacity-60" strokeWidth={1.75} />
+                    <h3 className="text-sm font-medium text-foreground">No results</h3>
+                    <p className="text-xs text-text-muted">
                       No project matches &quot;{searchQuery}&quot;.
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {/* Arc-style New Project Card */}
-                  {canCreateMore && !q && (
-                    <button
-                      type="button"
-                      onClick={() => router.push("/dashboard/create")}
-                      aria-label="Create new project"
-                      className="group relative flex flex-col items-center justify-center min-h-[116px] p-5 rounded-[26px] border border-dashed border-[#292929] hover:border-[#383838] bg-[#171717]/40 hover:bg-[#171717] transition-all duration-200 text-center cursor-pointer select-none active:scale-[0.99]"
-                    >
-                      <div className="size-10 rounded-[14px] bg-[#1D1D1D] border border-[#222222] flex items-center justify-center mb-2 group-hover:border-[#292929] transition-all">
-                        <Plus className="size-4 text-[#737373] group-hover:text-[#F5F5F5] transition-colors" strokeWidth={2} />
-                      </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-[#F5F5F5] transition-colors">
-                        New Project
-                      </h3>
-                      <p className="text-[11px] text-[#737373] mt-0.5">
-                        Create a new site in a few clicks
-                      </p>
-                      <span className="mt-1.5 text-[10.5px] text-[#737373] font-mono">
-                        {ownedCount}/{MAX_FREE_PROJECTS} used
-                      </span>
-                    </button>
-                  )}
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                   {filtered.map((project: any) => {
                     const liveUrl = getValidProjectUrl(project)
                     const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
