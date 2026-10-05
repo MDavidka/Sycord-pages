@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Folder } from "lucide-react"
+import { Folder, BarChart2, ChevronDown } from "lucide-react"
 import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 
@@ -25,11 +25,11 @@ export function DashboardModeToggle({
       role="tablist"
       aria-label="Dashboard mode selection"
       className={cn(
-        "relative inline-flex items-center rounded-[14px] bg-surface p-1 border border-border/80 select-none",
+        "relative inline-flex items-center rounded-full bg-surface border border-border/80 px-2 py-1.5 shadow-sm select-none",
         className
       )}
     >
-      {/* Projects Segment */}
+      {/* 1. Projects (Lucide Icon) */}
       <button
         type="button"
         role="tab"
@@ -37,25 +37,28 @@ export function DashboardModeToggle({
         aria-selected={activeMode === "projects"}
         aria-controls="dashboard-panel-projects"
         onClick={() => onChange("projects")}
+        title="Projects"
         className={cn(
-          "relative z-10 inline-flex items-center justify-center gap-2 h-8 px-3.5 rounded-[10px] text-xs font-medium transition-colors outline-none cursor-pointer",
+          "relative z-10 inline-flex items-center justify-center size-9 rounded-full transition-colors outline-none cursor-pointer",
           activeMode === "projects"
             ? "text-foreground"
-            : "text-text-muted hover:text-text-secondary"
+            : "text-text-muted hover:text-foreground"
         )}
       >
         {activeMode === "projects" && (
           <motion.div
-            layoutId={shouldReduceMotion ? undefined : "active-segmented-pill"}
+            layoutId={shouldReduceMotion ? undefined : "active-dock-pill"}
             transition={{ type: "spring", stiffness: 450, damping: 35 }}
-            className="absolute inset-0 rounded-[10px] bg-surface-raised border border-border-strong shadow-xs -z-10"
+            className="absolute inset-0 rounded-full bg-surface-raised border border-border-strong shadow-xs -z-10"
           />
         )}
-        <Folder className="size-3.5 shrink-0" strokeWidth={1.75} />
-        <span>your projects</span>
+        <Folder className="size-4 shrink-0" strokeWidth={1.75} />
       </button>
 
-      {/* Solar / Astro Segment */}
+      {/* Divider */}
+      <div className="h-4 w-[1px] bg-border/60 mx-1 shrink-0" />
+
+      {/* 2. Astro (PNG Icon) */}
       <button
         type="button"
         role="tab"
@@ -63,22 +66,60 @@ export function DashboardModeToggle({
         aria-selected={activeMode === "astro"}
         aria-controls="dashboard-panel-astro"
         onClick={() => onChange("astro")}
+        title="Astro AI"
         className={cn(
-          "relative z-10 inline-flex items-center justify-center gap-2 h-8 px-3.5 rounded-[10px] text-xs font-medium transition-colors outline-none cursor-pointer",
+          "relative z-10 inline-flex items-center justify-center size-9 rounded-full transition-colors outline-none cursor-pointer",
           activeMode === "astro"
             ? "text-foreground"
-            : "text-text-muted hover:text-text-secondary"
+            : "text-text-muted hover:text-foreground"
         )}
       >
         {activeMode === "astro" && (
           <motion.div
-            layoutId={shouldReduceMotion ? undefined : "active-segmented-pill"}
+            layoutId={shouldReduceMotion ? undefined : "active-dock-pill"}
             transition={{ type: "spring", stiffness: 450, damping: 35 }}
-            className="absolute inset-0 rounded-[10px] bg-surface-raised border border-border-strong shadow-xs -z-10"
+            className="absolute inset-0 rounded-full bg-surface-raised border border-border-strong shadow-xs -z-10"
           />
         )}
-        <div className="size-3.5 rounded-full bg-gradient-to-tr from-indigo-400 via-purple-300 to-sky-200 shrink-0 shadow-[0_0_8px_rgba(165,180,252,0.4)]" />
-        <span>solar</span>
+        <img
+          src="/astro-icon.png"
+          alt="Astro"
+          className={cn(
+            "size-4 rounded-full object-contain shrink-0 transition-opacity",
+            activeMode === "astro" ? "opacity-100" : "opacity-60 hover:opacity-100"
+          )}
+        />
+      </button>
+
+      {/* Divider */}
+      <div className="h-4 w-[1px] bg-border/60 mx-1 shrink-0" />
+
+      {/* 3. Stats / Analytics */}
+      <button
+        type="button"
+        title="Analytics & Stats"
+        className="inline-flex items-center justify-center size-9 rounded-full text-text-muted hover:text-foreground transition-colors outline-none cursor-pointer"
+        onClick={() => {
+          // Keep mode active or trigger stats
+          onChange("projects")
+        }}
+      >
+        <BarChart2 className="size-4 shrink-0" strokeWidth={1.75} />
+      </button>
+
+      {/* Divider */}
+      <div className="h-4 w-[1px] bg-border/60 mx-1 shrink-0" />
+
+      {/* 4. Down Bar / Dropdown Trigger */}
+      <button
+        type="button"
+        title="More options"
+        className="inline-flex items-center justify-center size-9 rounded-full text-text-muted hover:text-foreground transition-colors outline-none cursor-pointer"
+        onClick={() => {
+          // toggle or switch
+        }}
+      >
+        <ChevronDown className="size-4 shrink-0" strokeWidth={1.75} />
       </button>
     </div>
   )

@@ -34,18 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[26px] border border-border/80 bg-surface/80 overflow-hidden">
-      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border/60">
-        <div className="flex items-center gap-3.5 flex-1 min-w-0">
-          <Skeleton className="size-10 sm:size-11 rounded-[12px] shrink-0 bg-surface-raised" />
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
-            <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
-          </div>
+    <div className="rounded-[22px] border border-border/80 bg-surface/90 p-4 sm:p-5 flex items-center justify-between">
+      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-surface-raised" />
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
+          <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
         </div>
-        <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0" />
       </div>
-      <Skeleton className="w-full h-[260px] sm:h-[320px] bg-surface-raised/40" />
+      <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0 ml-3" />
     </div>
   )
 }
@@ -184,11 +181,14 @@ function DashboardContent() {
         <header className="border-b border-border/40 sticky top-0 bg-background/95 backdrop-blur-md z-50">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="size-7 rounded-[8px] bg-foreground/10 flex items-center justify-center overflow-hidden">
-                <svg className="size-4 text-foreground/80" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M4 18h4v-7.5l4 4.5 4-4.5V18h4V6h-4l-4 4.5L8 6H4v12z" />
-                </svg>
-              </div>
+              <Image
+                src="/logo.png"
+                alt="Sycord"
+                width={28}
+                height={28}
+                priority
+                className="rounded-[6px] object-contain shrink-0"
+              />
               <span className="text-base font-semibold tracking-tight text-foreground lowercase">
                 sycord
               </span>
@@ -266,7 +266,7 @@ function DashboardContent() {
           )}
 
           {/* Page Title Area & Rounded Pill Action Button */}
-          <div className="flex items-center justify-between gap-4 pt-1">
+          <div className="flex items-center justify-between gap-4 pt-3 pb-2">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground lowercase">
               projects
             </h1>
@@ -282,7 +282,7 @@ function DashboardContent() {
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="space-y-6 pt-2 animate-in fade-in duration-200">
               <div className="flex items-center">
                 <DashboardModeToggle
                   activeMode={activeMode}
@@ -302,7 +302,7 @@ function DashboardContent() {
             </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
-            <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="space-y-5 pt-2 animate-in fade-in duration-200">
               {/* Search Bar matching reference UI: icon, Search... placeholder, results count on the right */}
               <div className="relative flex items-center h-12 bg-surface/90 border border-border/80 focus-within:border-border-strong rounded-[18px] px-4 transition-colors">
                 <Search className="size-4 text-text-muted shrink-0 mr-3" strokeWidth={1.75} />
@@ -319,7 +319,7 @@ function DashboardContent() {
               </div>
 
               {/* Segmented Projects / Solar Switch */}
-              <div className="flex items-center pt-1">
+              <div className="flex items-center pt-1 pb-1">
                 <DashboardModeToggle
                   activeMode={activeMode}
                   onChange={(mode) => {
@@ -336,7 +336,7 @@ function DashboardContent() {
               </div>
 
               {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[1, 2].map((i) => (
                     <CardSkeleton key={i} />
                   ))}
