@@ -58,6 +58,7 @@ import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
 import { LivePlanCard } from '@/components/agents/live-plan-card';
 import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
+import { ContextSanitizer, TieredRouter } from '@/lib/agent';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
 import {
@@ -2453,22 +2454,35 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         const chatId = chatIdOverride || currentChatId;
 
+        // Extract and sanitize active user message prompt
+        const rawUserContent = typeof userMessage.content === 'string'
+            ? userMessage.content
+            : (Array.isArray(userMessage.content) ? (userMessage.content.find(c => c.type === 'text') as { type: 'text', text: string } | undefined)?.text || '' : '');
+        const sanitizedInput = ContextSanitizer.sanitizeInput(rawUserContent);
+        const classifiedTier = TieredRouter.classify(sanitizedInput.active_goal);
+
+        // Zero stale ephemeral ghost tasks if starting a new conversational or discrete turn
+        if (classifiedTier.tier <= 2 || !rawUserContent.includes('continue')) {
+            setGenerationPlan(null);
+            ContextSanitizer.zeroEphemeralMemory(useStore.getState());
+        }
+
         // Get current project files for context
         const currentFiles = useStore.getState().files;
         const fileList = Object.keys(currentFiles).filter(f => f !== 'glovix-picker.js').sort().join('\n') ||
             'package.json, next.config.mjs, tsconfig.json, tailwind.config.ts, postcss.config.mjs, app/layout.tsx, app/page.tsx, app/globals.css';
 
-        // Build system prompt — always get fresh from getSystemPrompt
+        // Build system prompt — with tiered context isolation
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
-        const projectContextBlock = buildInjectedProjectContext(currentFiles);
-        const modelLearnBlock = buildModelLearnContext(useStore.getState().modelLearnLog);
+        const projectContextBlock = buildInjectedProjectContext(currentFiles, { tier: classifiedTier.tier });
+        const modelLearnBlock = classifiedTier.tier >= 3 ? buildModelLearnContext(useStore.getState().modelLearnLog) : '';
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt
                 .replace('{{FILE_LIST}}', fileList)
                 .replace('{{PRESET}}', presetDescription)
                 .replace('{{PROJECT_CONTEXT}}', projectContextBlock + (modelLearnBlock ? `\n\n${modelLearnBlock}` : ''))
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}.\n${presetDescription}\n\n${projectContextBlock}`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',
@@ -2833,9 +2847,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const pendingSteps = currentPlan?.steps?.filter(s => s.status === 'in_progress' || s.status === 'pending') || [];
                     const hasPendingSteps = pendingSteps.length > 0;
 
-                    if ((continuationMatch || hasPendingSteps || turns === 0) && turns < MAX_TURNS - 1) {
+                    // Only allow autonomous continuation for Tier >= 4 multi-turn tasks where continuation was explicitly signaled
+                    const isAutonomousTask = classifiedTier.tier >= 4;
+
+                    if (isAutonomousTask && (continuationMatch || hasPendingSteps) && turns > 0 && turns < MAX_TURNS - 1) {
                         const nextStepDesc = pendingSteps[0]?.title ? `'${pendingSteps[0].title}'` : 'the next planned task';
-                        console.log(`[Chat] Continuation intent (${continuationMatch}), pending steps (${hasPendingSteps}) or initial turn (${turns === 0}) without tools on turn ${turns + 1}. Continuing loop for ${nextStepDesc}.`);
+                        console.log(`[Chat] Continuation intent (${continuationMatch}) with pending steps for Tier ${classifiedTier.tier}. Continuing loop for ${nextStepDesc}.`);
                         currentMessages.push({
                             role: 'user',
                             content: `[Autonomous Execution Directive]: Incomplete plan steps remain for ${nextStepDesc}. Proceed immediately by invoking the required tool calls (createFile, editFile, runCommand, planning). Do not output text promises without tool calls.`,
@@ -2843,7 +2860,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         continue;
                     }
 
-                    // No tool calls and no continuation required — agent has finished
+                    // No tool calls and no continuation required — agent has finished cleanly
                     console.log('[Chat] AI response (no tool calls):', cleanContent?.slice(0, 200));
                     console.log('[Chat] Done - no tool calls received, ending loop');
                     break;

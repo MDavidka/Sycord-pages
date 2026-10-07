@@ -10,6 +10,7 @@ import {
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid, ensureSyteWorkspaceForProject } from "@/lib/deploy/syte-workspace"
 import { checkRateLimit } from "@/lib/security/rate-limit"
+import { ContextSanitizer, TieredRouter } from "@/lib/agent"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -134,7 +135,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     executionSpeed?: unknown
     credentials?: unknown
   }
-  const message = typeof body?.message === "string" ? body.message.trim() : ""
+  const rawMessage = typeof body?.message === "string" ? body.message.trim() : ""
+  const sanitized = ContextSanitizer.sanitizeInput(rawMessage)
+  const message = sanitized.sanitized_prompt
+  const classification = TieredRouter.classify(message)
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
   const modelProfile = MODEL_PROFILES.has(requestedProfile) || DYNAMIC_MODEL_PROFILE.test(requestedProfile)
     ? requestedProfile
@@ -145,9 +149,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? body.planMode
     : agentMode === "plan"
       ? "always"
-      : "auto"
+      : classification.tier <= 2
+        ? "off"
+        : "auto"
   const thinkingLevel = typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined
-  const executionSpeed = typeof body?.executionSpeed === "string" ? body.executionSpeed : undefined
+  const executionSpeed = typeof body?.executionSpeed === "string" ? body.executionSpeed : classification.tier === 1 ? "ultra_fast" : undefined
 
   if (!projectId || !message) {
     return Response.json({ message: "Project ID and message are required." }, { status: 400 })
@@ -280,6 +286,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     status: change.data?.status ?? "accepted",
     turso_session_id: tursoSessionId,
     session_number: sessionNumber,
+    tier: classification.tier,
+    tier_name: classification.tier_name,
     session_url: `/api/workspace/sycord/agent-session?sessionId=${encodeURIComponent(tursoSessionId)}&projectId=${encodeURIComponent(projectId)}`,
     sessions_url: `/api/projects/${encodeURIComponent(projectId)}/agent?resume=1`,
   })

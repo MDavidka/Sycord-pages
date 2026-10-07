@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "agent:test": "node --experimental-strip-types scripts/run-agent-tests.mjs",
+    "agent:run": "node --experimental-strip-types scripts/agent-runner.mjs"
   },
   "dependencies": {
     "@auth/core": "latest",

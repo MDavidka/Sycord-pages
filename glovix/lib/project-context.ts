@@ -2,8 +2,8 @@
  * Build a compact project-context block injected into Syra's system prompt so the
  * model starts each turn with ground-truth state instead of guessing.
  *
- * Vite + React SPA baseline (no shadcn) — this stays framework-agnostic and just
- * summarizes the current files plus any persisted notes/knowledge.
+ * Supports tiered execution: Tier 1 conversational turns use a zero-overhead compact context,
+ * while deeper tiers load relevant snapshots without cross-session pollution.
  */
 
 type ProjectFiles = Record<string, { file: { contents: string } }>
@@ -22,8 +22,25 @@ function truncate(text: string, max = MAX_FILE_CHARS): string {
   return `${text.slice(0, max)}\n\n… [truncated ${text.length - max} chars]`
 }
 
-/** Build markdown context block for the system prompt. */
-export function buildInjectedProjectContext(files: ProjectFiles): string {
+export interface InjectedProjectContextOptions {
+  tier?: number
+  compact?: boolean
+}
+
+/** Build markdown context block for the system prompt with tiered filtering. */
+export function buildInjectedProjectContext(
+  files: ProjectFiles,
+  options?: InjectedProjectContextOptions
+): string {
+  const tier = options?.tier ?? 4
+  const isCompact = options?.compact || tier === 1
+
+  // Fast-path / Tier 1: Zero memory bloat
+  if (isCompact) {
+    const paths = Object.keys(files).filter(f => !f.startsWith('.glovix/'))
+    return `## 📌 Project Overview: ${paths.length} files available in workspace.`
+  }
+
   const sections: string[] = ["## 📌 AUTO-INJECTED PROJECT CONTEXT (ground truth — do not ignore)"]
 
   const paths = Object.keys(files)
@@ -46,19 +63,22 @@ export function buildInjectedProjectContext(files: ProjectFiles): string {
     sections.push("### Components", componentPaths.map((p) => `- ${p}`).join("\n"))
   }
 
-  for (const path of CONTEXT_FILES) {
-    const content = files[path]?.file?.contents?.trim()
-    if (content) {
-      sections.push(`### ${path}`, truncate(content))
+  // Only inject deep memory for Tier >= 3
+  if (tier >= 3) {
+    for (const path of CONTEXT_FILES) {
+      const content = files[path]?.file?.contents?.trim()
+      if (content) {
+        sections.push(`### ${path}`, truncate(content))
+      }
     }
-  }
 
-  const knowledgePaths = paths
-    .filter((p) => p.startsWith(".glovix/knowledge/") && p.endsWith(".md"))
-    .sort()
+    const knowledgePaths = paths
+      .filter((p) => p.startsWith(".glovix/knowledge/") && p.endsWith(".md"))
+      .sort()
 
-  if (knowledgePaths.length > 0) {
-    sections.push("### Knowledge blocks", knowledgePaths.map((p) => `- ${p}`).join("\n"))
+    if (knowledgePaths.length > 0) {
+      sections.push("### Knowledge blocks", knowledgePaths.map((p) => `- ${p}`).join("\n"))
+    }
   }
 
   let block = sections.join("\n\n")
