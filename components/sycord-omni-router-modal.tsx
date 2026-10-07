@@ -22,6 +22,18 @@ import {
   Layers,
   ChevronRight,
   Info,
+  Plus,
+  Trash2,
+  Globe,
+  Key,
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Server,
 } from "lucide-react"
 
 // Model Interface strictly matching Vercel AI Gateway & Sycord Omni Router
@@ -48,8 +60,21 @@ export interface OmniModelItem {
   supports_audio?: boolean
   description?: string
   is_active?: boolean
+  is_custom?: boolean
   rank?: number
   tags?: string[]
+}
+
+export interface CustomProviderRecord {
+  id?: string
+  name: string
+  provider: string
+  provider_type?: string
+  base_url: string
+  api_key?: string
+  api_key_masked?: string
+  models: string[]
+  created_at?: string
 }
 
 // LobeHub icons catalog map provided by specification
@@ -114,6 +139,10 @@ const LOBEHUB_MAP: Record<string, string> = {
   "xiaomi-mimo": "xiaomi-mimo",
   xuanyuan: "xuanyuan",
   yi: "yi",
+  ollama: "ollama",
+  groq: "groq",
+  together: "together",
+  openrouter: "openrouter",
 }
 
 export function getLobeHubIconKey(brandOrModel: string): string | null {
@@ -151,21 +180,13 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
   if (k.includes("voyage")) return "voyage"
   if (k.includes("wenxin") || k.includes("baidu")) return "wenxin"
   if (k.includes("hunyuan")) return "hunyuan"
+  if (k.includes("ollama")) return "ollama"
+  if (k.includes("groq")) return "groq"
+  if (k.includes("together")) return "together"
+  if (k.includes("openrouter")) return "openrouter"
 
   return null
 }
-
-// Arc UI Tokens
-// --background: #131313
-// --surface: #171717
-// --surface-raised: #1D1D1D
-// --surface-muted: #202020
-// --foreground: #F5F5F5
-// --text-secondary: #A3A3A3
-// --text-muted: #737373
-// --border: #292929
-// --border-subtle: #222222
-// --border-strong: #383838
 
 // Provider icon abstraction complying with Section 5
 export function ModelIcon({
@@ -256,14 +277,98 @@ export function ModelBrowserView({
   const [searchQuery, setSearchQuery] = useState("")
   const [inspectingModel, setInspectingModel] = useState<OmniModelItem | null>(null)
 
+  // Custom Provider Settings State
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<"add" | "saved">("add")
+  const [savedProviders, setSavedProviders] = useState<CustomProviderRecord[]>([])
+  const [cpName, setCpName] = useState("")
+  const [cpBaseUrl, setCpBaseUrl] = useState("")
+  const [cpApiKey, setCpApiKey] = useState("")
+  const [cpShowKey, setCpShowKey] = useState(false)
+  const [isDiscovering, setIsDiscovering] = useState(false)
+  const [discoveryStatus, setDiscoveryStatus] = useState<{
+    type: "idle" | "loading" | "success" | "error"
+    message?: string
+  }>({ type: "idle" })
+  const [discoveredModels, setDiscoveredModels] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedDiscoveredModels, setSelectedDiscoveredModels] = useState<Set<string>>(new Set())
+  const [manualModelInput, setManualModelInput] = useState("")
+  const [manualModels, setManualModels] = useState<string[]>([])
+  const [isSavingProvider, setIsSavingProvider] = useState(false)
+
+  // Load custom providers from backend / local storage
+  const loadCustomProviders = () => {
+    fetch("/api/ai/custom-providers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.ok && Array.isArray(data.providers)) {
+          setSavedProviders(data.providers)
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("sycord_custom_providers", JSON.stringify(data.providers))
+            } catch {}
+          }
+        }
+      })
+      .catch(() => {
+        if (typeof window !== "undefined") {
+          try {
+            const cached = localStorage.getItem("sycord_custom_providers")
+            if (cached) setSavedProviders(JSON.parse(cached))
+          } catch {}
+        }
+      })
+  }
+
   const loadModels = (forceRefresh = false) => {
     setLoading(true)
     fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}${forceRefresh ? "&refresh=true" : ""}`)
       .then((r) => r.json())
       .then((data) => {
+        let loadedModels: OmniModelItem[] = []
         if (data?.models && Array.isArray(data.models)) {
-          setModels(data.models)
+          loadedModels = data.models
         }
+
+        // Merge any locally saved custom providers that may not be in MongoDB yet
+        if (typeof window !== "undefined") {
+          try {
+            const cached = localStorage.getItem("sycord_custom_providers")
+            if (cached) {
+              const providers: CustomProviderRecord[] = JSON.parse(cached)
+              const existingIds = new Set(loadedModels.map((m) => m.id))
+              for (const p of providers) {
+                const slug = p.provider || p.name.toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+                for (const mId of p.models || []) {
+                  const fullId = mId.includes("/") ? mId : `${slug}/${mId}`
+                  if (!existingIds.has(fullId)) {
+                    existingIds.add(fullId)
+                    loadedModels.unshift({
+                      id: fullId,
+                      name: mId.includes("/") ? mId.split("/").pop() || mId : mId,
+                      provider: slug,
+                      providerDisplay: p.name,
+                      provider_display: p.name,
+                      swe_score: 50,
+                      input_cost: 0.0,
+                      output_cost: 0.0,
+                      context_window: 128000,
+                      supports_vision: true,
+                      supports_tools: true,
+                      supports_reasoning: true,
+                      description: `Custom model hosted on ${p.name} (${p.base_url || "Custom Endpoint"})`,
+                      is_active: false,
+                      is_custom: true,
+                      tags: ["custom", slug],
+                    })
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+
+        setModels(loadedModels)
         if (data?.active_model && !selectedModel) {
           setActiveModelId(data.active_model)
         }
@@ -278,6 +383,7 @@ export function ModelBrowserView({
 
   useEffect(() => {
     loadModels()
+    loadCustomProviders()
   }, [projectId, selectedModel])
 
   // Save starred models to localStorage
@@ -350,17 +456,28 @@ export function ModelBrowserView({
     })
   }, [topSweModels, maxSweScore])
 
+  // Check if we have any custom models in library
+  const hasCustomModels = useMemo(() => {
+    return models.some((m) => m.is_custom || (m.tags && m.tags.includes("custom")))
+  }, [models])
+
   // Filter tabs
-  const filterTabs = [
-    "All",
-    "Starred",
-    "Anthropic",
-    "OpenAI",
-    "Google",
-    "Open Source",
-    "Reasoning",
-    "Vision",
-  ]
+  const filterTabs = useMemo(() => {
+    const base = [
+      "All",
+      "Starred",
+      "Anthropic",
+      "OpenAI",
+      "Google",
+      "Open Source",
+      "Reasoning",
+      "Vision",
+    ]
+    if (hasCustomModels) {
+      base.push("Custom")
+    }
+    return base
+  }, [hasCustomModels])
 
   const filteredModels = useMemo(() => {
     let list = models
@@ -383,6 +500,8 @@ export function ModelBrowserView({
       list = list.filter((m) => m.supports_reasoning || m.id.toLowerCase().includes("r1") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3") || (m.swe_score ?? 0) > 40)
     } else if (activeTab === "Vision") {
       list = list.filter((m) => m.supports_vision || m.supports_image || m.id.toLowerCase().includes("vision") || m.id.toLowerCase().includes("flux"))
+    } else if (activeTab === "Custom") {
+      list = list.filter((m) => m.is_custom || (m.tags && m.tags.includes("custom")))
     }
 
     const q = searchQuery.toLowerCase().trim()
@@ -393,6 +512,7 @@ export function ModelBrowserView({
         m.name.toLowerCase().includes(q) ||
         m.id.toLowerCase().includes(q) ||
         (m.provider && m.provider.toLowerCase().includes(q)) ||
+        (m.providerDisplay && m.providerDisplay.toLowerCase().includes(q)) ||
         (m.description && m.description.toLowerCase().includes(q))
       )
     })
@@ -418,14 +538,16 @@ export function ModelBrowserView({
     }).catch(() => {})
   }
 
-  // Format pricing string like "$0.50 / 1M in • $1.50 / 1M out"
+  // Format pricing string
   const formatPricing = (model: OmniModelItem) => {
+    if (model.is_custom) return "Custom Endpoint"
     const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
     const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
     return `${inCost} in • ${outCost} out`
   }
 
   const getModelSubtitle = (model: OmniModelItem) => {
+    if (model.is_custom) return `Custom • ${model.providerDisplay || model.provider}`
     if (model.id.toLowerCase().includes("claude")) return "Anthropic • Sonnet 3.7"
     if (model.id.toLowerCase().includes("gpt-4o")) return "OpenAI • Multimodal"
     if (model.id.toLowerCase().includes("o3")) return "OpenAI • Reasoning"
@@ -436,7 +558,7 @@ export function ModelBrowserView({
     return "Foundation Model"
   }
 
-  // Modal modality indicator badges helper (OpenRouter-style Text, Image, Audio, Video)
+  // Modal modality indicator badges
   const getModalities = (model: OmniModelItem) => {
     const list: Array<{ label: string; icon: any; color: string }> = [
       { label: "Text", icon: FileText, color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
@@ -454,6 +576,240 @@ export function ModelBrowserView({
       list.push({ label: "Reasoning", icon: Brain, color: "text-pink-400 bg-pink-500/10 border-pink-500/20" })
     }
     return list
+  }
+
+  // --- SMART MODEL AUTO-DISCOVERY ACTION ---
+  const handleDiscoverModels = async () => {
+    if (!cpBaseUrl.trim()) {
+      toast.error("Please enter a Base URL or Chat Completion URL")
+      return
+    }
+
+    setIsDiscovering(true)
+    setDiscoveryStatus({
+      type: "loading",
+      message: "Connecting to provider endpoint and searching for available models...",
+    })
+
+    try {
+      const res = await fetch("/api/ai/custom-providers/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url: cpBaseUrl.trim(),
+          api_key: cpApiKey.trim(),
+        }),
+      })
+
+      const data = await res.json().catch(() => null)
+
+      if (res.ok && data?.ok && Array.isArray(data?.models) && data.models.length > 0) {
+        setDiscoveredModels(data.models)
+        setSelectedDiscoveredModels(new Set(data.models.map((m: any) => m.id)))
+        setDiscoveryStatus({
+          type: "success",
+          message: `Found ${data.models.length} available models from provider!`,
+        })
+        toast.success(`Discovered ${data.models.length} models!`)
+      } else {
+        setDiscoveredModels([])
+        setSelectedDiscoveredModels(new Set())
+        setDiscoveryStatus({
+          type: "error",
+          message: data?.error || "Auto-discovery could not detect models. Please use the manual model adder below.",
+        })
+        toast.warning("Could not auto-discover models. Enter model names manually.")
+      }
+    } catch (err: any) {
+      setDiscoveredModels([])
+      setSelectedDiscoveredModels(new Set())
+      setDiscoveryStatus({
+        type: "error",
+        message: err?.message || "Network error. Please use manual model adder below.",
+      })
+      toast.error("Discovery failed. Please add models manually.")
+    } finally {
+      setIsDiscovering(false)
+    }
+  }
+
+  // --- MANUAL MODEL ADDER ACTIONS ---
+  const handleAddManualModel = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const trimmed = manualModelInput.trim()
+    if (!trimmed) return
+    if (!manualModels.includes(trimmed)) {
+      setManualModels((prev) => [...prev, trimmed])
+      setManualModelInput("")
+      toast.success(`Added "${trimmed}" to provider models`)
+    } else {
+      toast.info(`Model "${trimmed}" is already added`)
+    }
+  }
+
+  const handleRemoveManualModel = (modelToRemove: string) => {
+    setManualModels((prev) => prev.filter((m) => m !== modelToRemove))
+  }
+
+  const handleToggleDiscoveredModel = (id: string) => {
+    setSelectedDiscoveredModels((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllDiscovered = () => {
+    setSelectedDiscoveredModels(new Set(discoveredModels.map((m) => m.id)))
+  }
+
+  const handleDeselectAllDiscovered = () => {
+    setSelectedDiscoveredModels(new Set())
+  }
+
+  // Combined staged models ready for saving
+  const stagedModelsList = useMemo(() => {
+    const fromDiscovery = Array.from(selectedDiscoveredModels)
+    const combined = [...fromDiscovery, ...manualModels]
+    return Array.from(new Set(combined))
+  }, [selectedDiscoveredModels, manualModels])
+
+  // --- SAVE CUSTOM PROVIDER ACTION ---
+  const handleSaveCustomProvider = async () => {
+    const trimmedName = cpName.trim()
+    const trimmedUrl = cpBaseUrl.trim()
+
+    if (!trimmedName) {
+      toast.error("Please provide a Provider Name")
+      return
+    }
+    if (!trimmedUrl) {
+      toast.error("Please provide a Base URL")
+      return
+    }
+    if (stagedModelsList.length === 0) {
+      toast.error("Please add at least one model (via auto-discovery or manual entry)")
+      return
+    }
+
+    setIsSavingProvider(true)
+    const providerSlug = trimmedName.toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+
+    try {
+      const res = await fetch("/api/ai/custom-providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          provider: providerSlug,
+          base_url: trimmedUrl,
+          api_key: cpApiKey.trim(),
+          models: stagedModelsList,
+        }),
+      })
+
+      const data = await res.json().catch(() => null)
+
+      // Create new OmniModelItem instances for immediate library injection
+      const newModelItems: OmniModelItem[] = stagedModelsList.map((mId) => {
+        const fullId = mId.includes("/") ? mId : `${providerSlug}/${mId}`
+        const displayName = mId.includes("/") ? mId.split("/").pop() || mId : mId
+        return {
+          id: fullId,
+          name: displayName,
+          provider: providerSlug,
+          providerDisplay: trimmedName,
+          provider_display: trimmedName,
+          swe_score: 50,
+          input_cost: 0.0,
+          output_cost: 0.0,
+          context_window: 128000,
+          supports_vision: true,
+          supports_tools: true,
+          supports_reasoning: true,
+          description: `Custom model hosted on ${trimmedName} (${trimmedUrl})`,
+          is_active: false,
+          is_custom: true,
+          tags: ["custom", providerSlug],
+        }
+      })
+
+      // Add models to active state immediately
+      setModels((prev) => {
+        const newIds = new Set(newModelItems.map((m) => m.id))
+        const remaining = prev.filter((m) => !newIds.has(m.id))
+        return [...newModelItems, ...remaining]
+      })
+
+      // Update saved providers list & localStorage
+      const newProviderRecord: CustomProviderRecord = {
+        id: data?.provider?.id || `cp_${Date.now()}`,
+        name: trimmedName,
+        provider: providerSlug,
+        base_url: trimmedUrl,
+        api_key_masked: cpApiKey ? `${cpApiKey.slice(0, 4)}...${cpApiKey.slice(-4)}` : "",
+        models: stagedModelsList,
+        created_at: new Date().toISOString(),
+      }
+
+      const updatedProviders = [newProviderRecord, ...savedProviders.filter((p) => p.provider !== providerSlug)]
+      setSavedProviders(updatedProviders)
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("sycord_custom_providers", JSON.stringify(updatedProviders))
+        } catch {}
+      }
+
+      toast.success(`Provider "${trimmedName}" with ${stagedModelsList.length} models added to library!`)
+
+      // Reset form
+      setCpName("")
+      setCpBaseUrl("")
+      setCpApiKey("")
+      setDiscoveredModels([])
+      setSelectedDiscoveredModels(new Set())
+      setManualModels([])
+      setDiscoveryStatus({ type: "idle" })
+      setShowSettingsModal(false)
+      setActiveTab("Custom")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to save provider")
+    } finally {
+      setIsSavingProvider(false)
+    }
+  }
+
+  // --- DELETE CUSTOM PROVIDER ACTION ---
+  const handleDeleteProvider = async (providerRecord: CustomProviderRecord) => {
+    try {
+      const slug = providerRecord.provider || providerRecord.name.toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+      await fetch(`/api/ai/custom-providers?id=${encodeURIComponent(providerRecord.id || slug)}`, {
+        method: "DELETE",
+      }).catch(() => {})
+
+      // Remove from state
+      setSavedProviders((prev) => prev.filter((p) => (p.id || p.provider) !== (providerRecord.id || slug)))
+      setModels((prev) => prev.filter((m) => m.provider !== slug))
+
+      if (typeof window !== "undefined") {
+        try {
+          const cached = localStorage.getItem("sycord_custom_providers")
+          if (cached) {
+            const list: CustomProviderRecord[] = JSON.parse(cached)
+            const nextList = list.filter((p) => (p.id || p.provider) !== (providerRecord.id || slug))
+            localStorage.setItem("sycord_custom_providers", JSON.stringify(nextList))
+          }
+        } catch {}
+      }
+
+      toast.success(`Provider "${providerRecord.name}" removed`)
+    } catch {
+      toast.error("Failed to delete provider")
+    }
   }
 
   return (
@@ -498,10 +854,17 @@ export function ModelBrowserView({
           </div>
           <button
             type="button"
-            aria-label="Settings"
-            className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
+            onClick={() => setShowSettingsModal(true)}
+            aria-label="Provider Settings"
+            title="Add Custom Provider & Manage Endpoints"
+            className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0 group relative"
           >
-            <Settings className="size-4" strokeWidth={1.75} />
+            <Settings className="size-4 group-hover:rotate-45 transition-transform duration-200" strokeWidth={1.75} />
+            {savedProviders.length > 0 && (
+              <span className="absolute -top-1 -right-1 size-4 rounded-full bg-emerald-500 text-[9px] font-bold text-black flex items-center justify-center">
+                {savedProviders.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -571,13 +934,19 @@ export function ModelBrowserView({
               </span>
             </div>
 
-            {/* Filter Button */}
+            {/* Quick Add Custom Provider Button */}
             <button
               type="button"
-              aria-label="Filter"
-              className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
+              onClick={() => {
+                setSettingsTab("add")
+                setShowSettingsModal(true)
+              }}
+              aria-label="Add Custom Provider"
+              title="Add Custom Provider"
+              className="flex items-center gap-1.5 px-3 min-h-[44px] rounded-[18px] bg-[#171717] border border-[#292929] text-xs font-medium text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
             >
-              <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+              <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
+              <span className="hidden sm:inline">Add Provider</span>
             </button>
           </div>
 
@@ -601,6 +970,9 @@ export function ModelBrowserView({
                       className={`size-3.5 ${isSelected ? "fill-[#131313] text-[#131313]" : "fill-[#A3A3A3] text-[#A3A3A3]"}`}
                     />
                   )}
+                  {tab === "Custom" && (
+                    <Sparkles className={`size-3.5 ${isSelected ? "text-[#131313]" : "text-emerald-400"}`} />
+                  )}
                   <span>{tab}</span>
                 </button>
               )
@@ -612,7 +984,7 @@ export function ModelBrowserView({
         <div className="space-y-3">
           <div className="flex items-baseline justify-between px-0.5">
             <span className="text-xs font-medium text-[#F5F5F5]">Available AI Models</span>
-            <span className="text-[11px] text-[#737373]">Click card for OpenRouter specifications</span>
+            <span className="text-[11px] text-[#737373]">Click card for model specifications</span>
           </div>
 
           {loading && models.length === 0 ? (
@@ -622,8 +994,19 @@ export function ModelBrowserView({
               ))}
             </div>
           ) : filteredModels.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[#737373]">
-              No models found matching your search query.
+            <div className="py-12 text-center text-xs text-[#737373] space-y-3">
+              <p>No models found matching your search query.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsTab("add")
+                  setShowSettingsModal(true)
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#1D1D1D] border border-[#292929] text-xs font-medium text-[#F5F5F5] hover:border-[#383838]"
+              >
+                <Plus className="size-3.5 text-emerald-400" />
+                <span>Add Custom Provider & Model</span>
+              </button>
             </div>
           ) : (
             filteredModels.map((model) => {
@@ -650,6 +1033,11 @@ export function ModelBrowserView({
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2 group-hover:text-white transition-colors">
                         <span className="truncate">{model.name}</span>
+                        {model.is_custom && (
+                          <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                            Custom
+                          </span>
+                        )}
                         {isActive && (
                           <span className="text-[9.5px] font-medium text-[#F5F5F5] bg-[#202020] border border-[#383838] px-1.5 py-0.5 rounded-[8px]">
                             Active
@@ -692,6 +1080,384 @@ export function ModelBrowserView({
         </div>
       </main>
 
+      {/* --- CUSTOM PROVIDER SETTINGS MODAL --- */}
+      <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
+        <DialogContent className="bg-[#171717] border border-[#292929] text-[#F5F5F5] max-w-xl max-h-[85vh] overflow-y-auto rounded-[26px] p-6 shadow-2xl space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4 border-b border-[#292929] pb-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-[#F5F5F5] flex items-center gap-2">
+                <Settings className="size-5 text-emerald-400" />
+                Custom AI Providers
+              </h2>
+              <p className="text-xs text-[#737373]">
+                Connect self-hosted or third-party OpenAI-compatible endpoints and add custom models to your library.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(false)}
+              aria-label="Close"
+              className="flex size-9 items-center justify-center rounded-[10px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] transition-colors"
+            >
+              <X className="size-4" strokeWidth={1.75} />
+            </button>
+          </div>
+
+          {/* Navigation Tabs (Add New vs Saved Providers) */}
+          <div className="flex items-center gap-2 border-b border-[#222222] pb-3">
+            <button
+              type="button"
+              onClick={() => setSettingsTab("add")}
+              className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all ${
+                settingsTab === "add"
+                  ? "bg-[#F5F5F5] text-[#131313] font-semibold"
+                  : "bg-[#1D1D1D] text-[#A3A3A3] hover:text-white border border-[#292929]"
+              }`}
+            >
+              Add Custom Provider
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsTab("saved")}
+              className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all flex items-center gap-1.5 ${
+                settingsTab === "saved"
+                  ? "bg-[#F5F5F5] text-[#131313] font-semibold"
+                  : "bg-[#1D1D1D] text-[#A3A3A3] hover:text-white border border-[#292929]"
+              }`}
+            >
+              <span>Configured Providers</span>
+              <span className="text-[10px] bg-[#292929] px-1.5 py-0.5 rounded-full text-[#A3A3A3]">
+                {savedProviders.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Tab 1: ADD CUSTOM PROVIDER FORM */}
+          {settingsTab === "add" && (
+            <div className="space-y-5">
+              {/* Provider Name Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-[#A3A3A3]">
+                  Provider Name <span className="text-red-400">*</span>
+                </label>
+                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
+                  <Server className="size-4 text-[#737373] mr-2 shrink-0" />
+                  <input
+                    type="text"
+                    value={cpName}
+                    onChange={(e) => setCpName(e.target.value)}
+                    placeholder="e.g. Ollama Local, Groq Custom, DeepInfra, Together"
+                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Base URL Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-[#A3A3A3]">
+                  Base URL / Chat Completion URL <span className="text-red-400">*</span>
+                </label>
+                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
+                  <Globe className="size-4 text-[#737373] mr-2 shrink-0" />
+                  <input
+                    type="text"
+                    value={cpBaseUrl}
+                    onChange={(e) => setCpBaseUrl(e.target.value)}
+                    placeholder="http://localhost:11434/v1 or https://api.groq.com/openai/v1"
+                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-[#737373]">
+                  Accepts standard OpenAI-compatible endpoints or chat completion endpoints.
+                </p>
+              </div>
+
+              {/* API Key Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-[#A3A3A3]">
+                  API Key <span className="text-[11px] text-[#737373]">(Optional for local endpoints)</span>
+                </label>
+                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
+                  <Key className="size-4 text-[#737373] mr-2 shrink-0" />
+                  <input
+                    type={cpShowKey ? "text" : "password"}
+                    value={cpApiKey}
+                    onChange={(e) => setCpApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCpShowKey(!cpShowKey)}
+                    className="text-[#737373] hover:text-[#F5F5F5] ml-2 shrink-0"
+                  >
+                    {cpShowKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Smart Auto-Discovery Section */}
+              <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-medium text-[#F5F5F5] flex items-center gap-1.5">
+                      <Sparkles className="size-3.5 text-emerald-400" />
+                      Smart Model Auto-Discovery
+                    </span>
+                    <p className="text-[11px] text-[#737373]">
+                      Scan the base URL to discover available models automatically.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isDiscovering || !cpBaseUrl.trim()}
+                    onClick={handleDiscoverModels}
+                    className="px-3 py-1.5 rounded-[12px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#383838] text-xs font-medium text-[#F5F5F5] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all shrink-0 active:scale-[0.97]"
+                  >
+                    {isDiscovering ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin text-emerald-400" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="size-3.5 text-emerald-400" />
+                        <span>Search Models</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Discovery Status Banner */}
+                {discoveryStatus.type === "loading" && (
+                  <div className="p-2.5 rounded-[12px] bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin shrink-0" />
+                    <span>{discoveryStatus.message}</span>
+                  </div>
+                )}
+
+                {discoveryStatus.type === "success" && (
+                  <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="size-4 shrink-0" />
+                    <span>{discoveryStatus.message}</span>
+                  </div>
+                )}
+
+                {discoveryStatus.type === "error" && (
+                  <div className="p-2.5 rounded-[12px] bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="size-4 shrink-0" />
+                    <span>{discoveryStatus.message}</span>
+                  </div>
+                )}
+
+                {/* Discovered Models Checkbox Selector */}
+                {discoveredModels.length > 0 && (
+                  <div className="space-y-2 pt-1 border-t border-[#222222]">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#A3A3A3]">
+                        Select models to add ({selectedDiscoveredModels.size}/{discoveredModels.length}):
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllDiscovered}
+                          className="text-emerald-400 hover:underline"
+                        >
+                          Select all
+                        </button>
+                        <span className="text-[#383838]">•</span>
+                        <button
+                          type="button"
+                          onClick={handleDeselectAllDiscovered}
+                          className="text-[#737373] hover:text-[#A3A3A3]"
+                        >
+                          Deselect all
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                      {discoveredModels.map((m) => {
+                        const isSelected = selectedDiscoveredModels.has(m.id)
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => handleToggleDiscoveredModel(m.id)}
+                            className={`p-2 rounded-[10px] text-xs flex items-center justify-between cursor-pointer border transition-colors ${
+                              isSelected
+                                ? "bg-[#1D1D1D] border-emerald-500/30 text-emerald-300"
+                                : "bg-[#171717] border-[#292929] text-[#737373] hover:text-[#A3A3A3]"
+                            }`}
+                          >
+                            <span className="font-mono truncate">{m.id}</span>
+                            <div
+                              className={`size-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
+                                isSelected
+                                  ? "bg-emerald-500 border-emerald-500 text-black"
+                                  : "border-[#383838]"
+                              }`}
+                            >
+                              {isSelected && <Check className="size-3" strokeWidth={3} />}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Model Adder Fallback */}
+              <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-medium text-[#F5F5F5] flex items-center gap-1.5">
+                    <Plus className="size-3.5 text-blue-400" />
+                    Manual Model Adder
+                  </span>
+                  <p className="text-[11px] text-[#737373]">
+                    Add specific model IDs if auto-discovery is unavailable or to include custom fine-tunes.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={manualModelInput}
+                    onChange={(e) => setManualModelInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleAddManualModel()
+                      }
+                    }}
+                    placeholder="e.g. llama3:8b, mistral-large, qwen2.5-coder-32b"
+                    className="flex-1 bg-[#171717] border border-[#292929] focus:border-[#383838] rounded-[12px] px-3 py-2 text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddManualModel}
+                    className="px-3.5 py-2 rounded-[12px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#383838] text-xs font-medium text-[#F5F5F5] hover:text-white transition-all shrink-0 active:scale-[0.97]"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {/* Manually added chips */}
+                {manualModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {manualModels.map((m) => (
+                      <span
+                        key={m}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#1D1D1D] border border-blue-500/30 text-blue-300 text-xs font-mono"
+                      >
+                        <span>{m}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveManualModel(m)}
+                          className="hover:text-white"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Staged Models Summary & Save Button */}
+              <div className="pt-2 flex items-center justify-between border-t border-[#292929]">
+                <div className="text-xs text-[#A3A3A3]">
+                  Total Models Ready:{" "}
+                  <span className="font-semibold text-[#F5F5F5]">{stagedModelsList.length}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSavingProvider || !cpName.trim() || !cpBaseUrl.trim() || stagedModelsList.length === 0}
+                  onClick={handleSaveCustomProvider}
+                  className="px-5 py-2.5 rounded-[14px] bg-[#F5F5F5] hover:bg-white text-[#131313] font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
+                >
+                  {isSavingProvider ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="size-3.5" strokeWidth={2.5} />
+                      <span>Save Provider & Add Models</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: CONFIGURED SAVED PROVIDERS LIST */}
+          {settingsTab === "saved" && (
+            <div className="space-y-4">
+              {savedProviders.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[#737373] space-y-2">
+                  <p>No custom providers configured yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("add")}
+                    className="text-emerald-400 hover:underline"
+                  >
+                    Add your first custom provider
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savedProviders.map((provider) => (
+                    <div
+                      key={provider.id || provider.provider}
+                      className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2">
+                            <span>{provider.name}</span>
+                            <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                              Active
+                            </span>
+                          </h4>
+                          <p className="text-xs text-[#737373] font-mono truncate">{provider.base_url}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProvider(provider)}
+                          title="Remove Provider"
+                          className="flex size-8 items-center justify-center rounded-[8px] text-[#737373] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] text-[#737373]">
+                          Models ({provider.models?.length || 0}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(provider.models || []).map((m) => (
+                            <span
+                              key={m}
+                              className="px-2 py-0.5 rounded-[6px] bg-[#1D1D1D] border border-[#292929] text-[11px] font-mono text-[#A3A3A3]"
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* OPENROUTER-STYLE MODEL DETAILS INSPECTOR MODAL */}
       {inspectingModel && (
         <Dialog open={!!inspectingModel} onOpenChange={() => setInspectingModel(null)}>
@@ -703,7 +1469,14 @@ export function ModelBrowserView({
                   <ModelIcon provider={inspectingModel.provider} modelName={inspectingModel.name} size={24} />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold text-[#F5F5F5] truncate">{inspectingModel.name}</h3>
+                  <h3 className="text-base font-semibold text-[#F5F5F5] truncate flex items-center gap-2">
+                    <span className="truncate">{inspectingModel.name}</span>
+                    {inspectingModel.is_custom && (
+                      <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                        Custom
+                      </span>
+                    )}
+                  </h3>
                   <p className="text-xs text-[#737373] font-mono truncate">{inspectingModel.id}</p>
                 </div>
               </div>
@@ -760,14 +1533,14 @@ export function ModelBrowserView({
               <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
                 <span className="text-[11px] text-[#737373] font-normal">Input pricing / 1M</span>
                 <p className="text-xs font-medium text-[#F5F5F5] font-mono">
-                  ${inspectingModel.input_cost !== undefined ? inspectingModel.input_cost.toFixed(2) : "0.50"}
+                  {inspectingModel.is_custom ? "Custom" : `$${inspectingModel.input_cost !== undefined ? inspectingModel.input_cost.toFixed(2) : "0.50"}`}
                 </p>
               </div>
 
               <div className="p-3 rounded-[16px] bg-[#1D1D1D] border border-[#292929] space-y-1">
                 <span className="text-[11px] text-[#737373] font-normal">Output pricing / 1M</span>
                 <p className="text-xs font-medium text-[#F5F5F5] font-mono">
-                  ${inspectingModel.output_cost !== undefined ? inspectingModel.output_cost.toFixed(2) : "1.50"}
+                  {inspectingModel.is_custom ? "Custom" : `$${inspectingModel.output_cost !== undefined ? inspectingModel.output_cost.toFixed(2) : "1.50"}`}
                 </p>
               </div>
             </div>

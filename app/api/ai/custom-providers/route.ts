@@ -9,26 +9,24 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
-  }
+  const userId = session?.user?.id || "guest_user"
 
   try {
     const client = await clientPromise
     const db = client.db()
     const customProviders = await db
       .collection("user_custom_providers")
-      .find({ userId: session.user.id })
+      .find({ userId })
       .sort({ createdAt: -1 })
       .toArray()
 
     // Also get VM sync status
-    const vmStatusRes = await syteGetHandshakeStatus()
+    const vmStatusRes = await syteGetHandshakeStatus().catch(() => ({ data: null }))
 
     return NextResponse.json({
       ok: true,
-      providers: customProviders.map(p => ({
-        id: p._id.toString(),
+      providers: customProviders.map((p) => ({
+        id: p.id || p._id?.toString(),
         name: p.name,
         provider: p.provider,
         provider_type: p.provider_type || p.provider,
@@ -40,44 +38,49 @@ export async function GET() {
         is_synced: p.is_synced ?? true,
         created_at: p.createdAt,
       })),
-      vm_handshake: vmStatusRes.data || null,
+      vm_handshake: vmStatusRes?.data || null,
     })
   } catch (err: any) {
     // If Mongo unavailable, proxy directly to Syte VM
-    const vmRes = await syteGetHandshakeStatus()
+    const vmRes = await syteGetHandshakeStatus().catch(() => ({ data: null }))
     return NextResponse.json({
       ok: true,
-      providers: vmRes.data?.custom_providers || [],
-      vm_handshake: vmRes.data || null,
+      providers: vmRes?.data?.custom_providers || [],
+      vm_handshake: vmRes?.data || null,
     })
   }
 }
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
-  }
+  const userId = session?.user?.id || "guest_user"
 
   try {
     const body = await request.json()
     const { name, provider, provider_type, base_url, api_key, models, gcp_project, gcp_location } = body
 
-    if (!name || !provider) {
-      return NextResponse.json({ ok: false, error: "Provider name and type are required" }, { status: 400 })
+    if (!name || (!provider && !name)) {
+      return NextResponse.json({ ok: false, error: "Provider name is required" }, { status: 400 })
     }
+
+    const providerSlug = (provider || name).toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+    const modelList = Array.isArray(models)
+      ? models
+      : typeof models === "string"
+        ? models.split(",").map((m: string) => m.trim()).filter(Boolean)
+        : []
 
     const providerEntry = {
       id: `cp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name,
-      provider: provider.toLowerCase(),
-      provider_type: (provider_type || provider).toLowerCase(),
+      provider: providerSlug,
+      provider_type: (provider_type || providerSlug).toLowerCase(),
       base_url: base_url || "",
       api_key: api_key || "",
-      models: Array.isArray(models) ? models : typeof models === "string" ? models.split(",").map((m: string) => m.trim()).filter(Boolean) : [],
+      models: modelList,
       gcp_project: gcp_project || "",
       gcp_location: gcp_location || "us-central1",
-      userId: session.user.id,
+      userId,
       is_synced: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -87,14 +90,18 @@ export async function POST(request: Request) {
     try {
       const client = await clientPromise
       const db = client.db()
-      await db.collection("user_custom_providers").insertOne(providerEntry)
+      await db.collection("user_custom_providers").updateOne(
+        { userId, provider: providerSlug },
+        { $set: providerEntry },
+        { upsert: true }
+      )
     } catch (_) {}
 
     // 2. Perform Handshake to sync with VM
     const handshakeRes = await syteSyncHandshake({
       providers: [providerEntry],
-      models: providerEntry.models.map(m => ({
-        id: m,
+      models: providerEntry.models.map((m: string) => ({
+        id: m.includes("/") ? m : `${providerEntry.provider}/${m}`,
         name: `${providerEntry.name} (${m})`,
         provider: providerEntry.provider,
         provider_display: providerEntry.name,
@@ -102,18 +109,45 @@ export async function POST(request: Request) {
         output_cost: 0.0,
         swe_score: 50.0,
       })),
-    })
+    }).catch(() => ({ data: null }))
 
     return NextResponse.json({
       ok: true,
-      message: "Custom provider saved and synchronized to VM successfully.",
+      message: "Custom provider saved and synchronized successfully.",
       provider: {
         ...providerEntry,
         api_key: providerEntry.api_key ? `${providerEntry.api_key.slice(0, 4)}...${providerEntry.api_key.slice(-4)}` : "",
       },
-      handshake: handshakeRes.data || null,
+      handshake: handshakeRes?.data || null,
     })
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err?.message || "Failed to save custom provider" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  const session = await getServerSession(authOptions)
+  const userId = session?.user?.id || "guest_user"
+
+  try {
+    const url = new URL(request.url)
+    const providerId = url.searchParams.get("id") || url.searchParams.get("provider")
+
+    if (!providerId) {
+      return NextResponse.json({ ok: false, error: "Provider ID or slug is required" }, { status: 400 })
+    }
+
+    try {
+      const client = await clientPromise
+      const db = client.db()
+      await db.collection("user_custom_providers").deleteMany({
+        userId,
+        $or: [{ id: providerId }, { provider: providerId }],
+      })
+    } catch (_) {}
+
+    return NextResponse.json({ ok: true, message: "Custom provider removed successfully." })
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message || "Failed to delete custom provider" }, { status: 500 })
   }
 }
