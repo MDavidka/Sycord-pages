@@ -58,30 +58,63 @@ export class AutonomousAgentEngine {
    * Execute an autonomous task from prompt to completion with tiered governance.
    */
   public async executeTask(input: AgentTaskInput): Promise<AgentTaskResult> {
-    const taskId = input.task_id || randomUUID();
     const startTime = Date.now();
 
     // 1. Context Sanitization & Goal Extraction
-    const sanitized = ContextSanitizer.sanitizeInput(input.prompt);
-    const activeGoal = sanitized.active_goal;
+    const sanitized = ContextSanitizer.sanitizeInput(input.prompt || '');
+    let activeGoal = sanitized.active_goal;
 
-    // 2. Tier Classification
+    // 2. Check for Resumption from Checkpoint
+    let isResumed = false;
+    let existingCp: SessionCheckpoint | null = null;
+
+    if (input.resume_from_checkpoint) {
+      existingCp = await this.checkpointManager.loadLatestCheckpoint(input.task_id);
+      if (existingCp) {
+        isResumed = true;
+        if (!activeGoal) {
+          activeGoal = existingCp.goal;
+        }
+      }
+    }
+
+    const taskId = existingCp ? existingCp.task_id : (input.task_id || randomUUID());
+
+    // 3. Tier Classification
     const classification = TieredRouter.classify(activeGoal, {
-      tier_override: input.tier_override,
+      tier_override: input.tier_override || existingCp?.tier,
     });
     const tier = classification.tier;
 
-    // 3. Telemetry Initialization
-    const telemetry = new TelemetryCollector(taskId, tier);
+    // 4. Telemetry Initialization
+    const initialTokens = existingCp ? { ...existingCp.tokens_consumed } : undefined;
+    const telemetry = new TelemetryCollector(taskId, tier, initialTokens);
 
-    // 4. Session Context Lifecycle: Initialize
-    const session = SessionContext.initialize(taskId, activeGoal, {
-      tier,
-      budget: { ...classification.budget, ...input.budget_override },
-      onCheckpoint: async (cp) => {
-        await this.checkpointManager.saveCheckpoint(cp);
-      },
-    });
+    // If resumed, record any already invoked tools from prior completed steps
+    if (existingCp?.completed_steps) {
+      for (const step of existingCp.completed_steps) {
+        if (step.tool) telemetry.recordToolInvocation(step.tool);
+      }
+    }
+
+    // 5. Session Context Lifecycle: Initialize or Restore from Checkpoint
+    let session: SessionContext;
+    if (existingCp) {
+      session = SessionContext.fromCheckpoint(existingCp, {
+        budget: { ...classification.budget, ...input.budget_override },
+        onCheckpoint: async (cp) => {
+          await this.checkpointManager.saveCheckpoint(cp);
+        },
+      });
+    } else {
+      session = SessionContext.initialize(taskId, activeGoal, {
+        tier,
+        budget: { ...classification.budget, ...input.budget_override },
+        onCheckpoint: async (cp) => {
+          await this.checkpointManager.saveCheckpoint(cp);
+        },
+      });
+    }
 
     // Check for state leakage from prior tasks
     const leakageCheck = ContextSanitizer.detectStateLeakage(
@@ -91,20 +124,6 @@ export class AutonomousAgentEngine {
     );
     if (leakageCheck.leakage_detected) {
       telemetry.markStateLeakage(true);
-    }
-
-    // 5. Check for Resumption
-    let isResumed = false;
-    if (input.resume_from_checkpoint) {
-      const existingCp = await this.checkpointManager.loadLatestCheckpoint(taskId);
-      if (existingCp) {
-        // Load state from checkpoint
-        session.setSubtasks(existingCp.subtasks);
-        for (const step of existingCp.completed_steps) {
-          session.recordCompletedStep(step);
-        }
-        isResumed = true;
-      }
     }
 
     const circuitBreaker = new CircuitBreaker(session.getCircuitBreakerState());
@@ -120,15 +139,18 @@ export class AutonomousAgentEngine {
           finalResponse = await this.executeTier2SingleTool(session, telemetry, circuitBreaker);
           break;
         case 3:
-          finalResponse = await this.executeTier3LinearWorkflow(session, telemetry, circuitBreaker);
+          finalResponse = await this.executeTier3LinearWorkflow(session, telemetry, circuitBreaker, startTime);
           break;
         case 4:
-          finalResponse = await this.executeTier4MultiArtifact(session, telemetry, circuitBreaker);
+          finalResponse = await this.executeTier4MultiArtifact(session, telemetry, circuitBreaker, startTime);
           break;
         case 5:
-          finalResponse = await this.executeTier5DeepSystem(session, telemetry, circuitBreaker, isResumed);
+          finalResponse = await this.executeTier5DeepSystem(session, telemetry, circuitBreaker, startTime, isResumed);
           break;
       }
+
+      // Sync circuit breaker state to session
+      session.updateCircuitBreaker(circuitBreaker.getState());
 
       // Checkpoint and flush ephemeral state
       await session.checkpoint('success');
@@ -151,6 +173,9 @@ export class AutonomousAgentEngine {
         tools_invoked: finalizedTelemetry.tools_invoked,
       };
     } catch (err: any) {
+      // Sync circuit breaker state
+      session.updateCircuitBreaker(circuitBreaker.getState());
+
       const isTimeout = err?.message?.toLowerCase().includes('timeout') ||
         (Date.now() - startTime) > session.budget.max_execution_time_ms;
 
@@ -173,6 +198,26 @@ export class AutonomousAgentEngine {
         steps_executed: session.getCompletedSteps().length,
         tools_invoked: finalizedTelemetry.tools_invoked,
       };
+    }
+  }
+
+  /**
+   * Helper to check budget guards before/after each subtask step.
+   */
+  private checkBudgetGuards(session: SessionContext, startTime: number): void {
+    const elapsed = Date.now() - startTime;
+    if (elapsed > session.budget.max_execution_time_ms) {
+      throw new Error(`Execution timeout: exceeded budget limit of ${session.budget.max_execution_time_ms}ms (elapsed ${elapsed}ms)`);
+    }
+
+    const tokens = session.getTokensConsumed();
+    if (tokens.total > session.budget.max_tokens) {
+      throw new Error(`Token budget exceeded: consumed ${tokens.total} tokens (limit ${session.budget.max_tokens})`);
+    }
+
+    const maxSteps = session.budget.max_steps || 30;
+    if (session.getCompletedSteps().length >= maxSteps) {
+      throw new Error(`Maximum step budget exceeded: ${session.getCompletedSteps().length}/${maxSteps} steps completed`);
     }
   }
 
@@ -220,7 +265,7 @@ export class AutonomousAgentEngine {
     let toolArgs: Record<string, any> = { path: 'package.json' };
 
     // Infer tool from query
-    if (/list|ls|files/i.test(prompt)) {
+    if (/list|ls|files|directory|workspace/i.test(prompt)) {
       toolName = 'listFiles';
       toolArgs = {};
     } else {
@@ -230,12 +275,22 @@ export class AutonomousAgentEngine {
       }
     }
 
+    circuitBreaker.recordIteration();
     circuitBreaker.recordToolCall(toolName, toolArgs);
+    if (circuitBreaker.isTripped()) {
+      throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+    }
+
     telemetry.recordToolInvocation(toolName);
 
     let output = '';
     if (this.toolExecutor) {
       const res = await this.toolExecutor(toolName, toolArgs);
+      if (!res.success) {
+        circuitBreaker.recordError(res.error || 'Tool execution failed');
+        throw new Error(`Tier 2 tool execution failed: ${res.error || 'Unknown error'}`);
+      }
+      circuitBreaker.recordSuccess();
       output = typeof res.output === 'string' ? res.output : JSON.stringify(res.output);
     } else {
       output = `[Mock Tool Result for ${toolName} ${JSON.stringify(toolArgs)}]`;
@@ -264,7 +319,8 @@ export class AutonomousAgentEngine {
   private async executeTier3LinearWorkflow(
     session: SessionContext,
     telemetry: TelemetryCollector,
-    circuitBreaker: CircuitBreaker
+    circuitBreaker: CircuitBreaker,
+    startTime: number
   ): Promise<string> {
     const steps: Array<{ tool: string; args: Record<string, any>; title: string }> = [
       { tool: 'readFile', args: { path: 'package.json' }, title: 'Inspect target file' },
@@ -273,9 +329,15 @@ export class AutonomousAgentEngine {
 
     let results = '';
     for (let i = 0; i < steps.length; i++) {
+      this.checkBudgetGuards(session, startTime);
+
       const step = steps[i];
       circuitBreaker.recordIteration();
       circuitBreaker.recordToolCall(step.tool, step.args);
+      if (circuitBreaker.isTripped()) {
+        throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+      }
+
       telemetry.recordToolInvocation(step.tool);
 
       let stepResult: ToolExecutionResult = {
@@ -294,10 +356,19 @@ export class AutonomousAgentEngine {
           try {
             stepResult = await this.toolExecutor(step.tool, step.args);
             success = stepResult.success;
-            if (success) circuitBreaker.recordSuccess();
-            else circuitBreaker.recordError(stepResult.error);
+            if (success) {
+              circuitBreaker.recordSuccess();
+            } else {
+              circuitBreaker.recordError(stepResult.error);
+              if (circuitBreaker.isTripped()) {
+                throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+              }
+            }
           } catch (err: any) {
             circuitBreaker.recordError(err?.message);
+            if (circuitBreaker.isTripped()) {
+              throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+            }
             if (attempts >= 3) throw err;
           }
         }
@@ -313,13 +384,16 @@ export class AutonomousAgentEngine {
         success: stepResult.success,
       });
 
+      const stepTokens = { prompt: 150, completion: 75 };
+      session.recordTokens(stepTokens.prompt, stepTokens.completion);
+      telemetry.recordTokens(stepTokens.prompt, stepTokens.completion);
+
+      this.checkBudgetGuards(session, startTime);
+
       results += `\n- ${step.title}: Done`;
+      session.updateCircuitBreaker(circuitBreaker.getState());
       await session.checkpoint();
     }
-
-    const tokens = { prompt: 350, completion: 150 };
-    session.recordTokens(tokens.prompt, tokens.completion);
-    telemetry.recordTokens(tokens.prompt, tokens.completion);
 
     return `Linear workflow completed successfully:${results}`;
   }
@@ -330,7 +404,8 @@ export class AutonomousAgentEngine {
   private async executeTier4MultiArtifact(
     session: SessionContext,
     telemetry: TelemetryCollector,
-    circuitBreaker: CircuitBreaker
+    circuitBreaker: CircuitBreaker,
+    startTime: number
   ): Promise<string> {
     const subtasks: SubTaskPlan[] = [
       { step_id: 'st_1', title: 'Prepare component file', tool: 'createFile', status: 'pending', retry_count: 0, max_retries: 2 },
@@ -340,6 +415,8 @@ export class AutonomousAgentEngine {
     session.setSubtasks(subtasks);
 
     for (const subtask of subtasks) {
+      this.checkBudgetGuards(session, startTime);
+
       circuitBreaker.recordIteration();
       if (circuitBreaker.isTripped()) {
         throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
@@ -348,6 +425,10 @@ export class AutonomousAgentEngine {
       subtask.status = 'in_progress';
       const args = { step: subtask.step_id, title: subtask.title };
       circuitBreaker.recordToolCall(subtask.tool, args);
+      if (circuitBreaker.isTripped()) {
+        throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+      }
+
       telemetry.recordToolInvocation(subtask.tool);
 
       let success = true;
@@ -360,10 +441,14 @@ export class AutonomousAgentEngine {
       }
 
       if (!success) {
+        circuitBreaker.recordError(`Subtask failed: ${subtask.title}`);
+        session.updateCircuitBreaker(circuitBreaker.getState());
         // Rollback on verification failure
         await this.checkpointManager.rollbackArtifacts(await session.checkpoint('failed'));
         throw new Error(`Subtask '${subtask.title}' failed. Rolled back artifacts to prevent corruption.`);
       }
+
+      circuitBreaker.recordSuccess();
 
       session.recordCompletedStep({
         step_id: subtask.step_id,
@@ -375,12 +460,15 @@ export class AutonomousAgentEngine {
         success: true,
       });
 
+      const stepTokens = { prompt: 250, completion: 120 };
+      session.recordTokens(stepTokens.prompt, stepTokens.completion);
+      telemetry.recordTokens(stepTokens.prompt, stepTokens.completion);
+
+      this.checkBudgetGuards(session, startTime);
+
+      session.updateCircuitBreaker(circuitBreaker.getState());
       await session.checkpoint();
     }
-
-    const tokens = { prompt: 800, completion: 400 };
-    session.recordTokens(tokens.prompt, tokens.completion);
-    telemetry.recordTokens(tokens.prompt, tokens.completion);
 
     return 'Multi-artifact task completed and verified with zero build regressions.';
   }
@@ -392,6 +480,7 @@ export class AutonomousAgentEngine {
     session: SessionContext,
     telemetry: TelemetryCollector,
     circuitBreaker: CircuitBreaker,
+    startTime: number,
     isResumed = false
   ): Promise<string> {
     let subtasks = session.getSubtasks();
@@ -406,6 +495,7 @@ export class AutonomousAgentEngine {
         { step_id: 'deep_5', title: 'End-to-end stress verification & validation', tool: 'runCommand', status: 'pending', retry_count: 0, max_retries: 3 },
       ];
       session.setSubtasks(subtasks);
+      session.updateCircuitBreaker(circuitBreaker.getState());
       await session.checkpoint('running');
     }
 
@@ -413,6 +503,8 @@ export class AutonomousAgentEngine {
       if (subtask.status === 'completed') {
         continue; // Skip already completed subtasks during resume
       }
+
+      this.checkBudgetGuards(session, startTime);
 
       circuitBreaker.recordIteration();
       if (circuitBreaker.isTripped()) {
@@ -422,6 +514,10 @@ export class AutonomousAgentEngine {
       subtask.status = 'in_progress';
       const args = { step: subtask.step_id, title: subtask.title };
       circuitBreaker.recordToolCall(subtask.tool, args);
+      if (circuitBreaker.isTripped()) {
+        throw new Error(`Circuit breaker tripped: ${circuitBreaker.getTripReason()}`);
+      }
+
       telemetry.recordToolInvocation(subtask.tool);
 
       let output = `Completed deep system subtask: ${subtask.title}`;
@@ -436,6 +532,7 @@ export class AutonomousAgentEngine {
       if (!success) {
         circuitBreaker.recordError(`Failed step: ${subtask.title}`);
         subtask.status = 'failed';
+        session.updateCircuitBreaker(circuitBreaker.getState());
         await session.checkpoint('failed');
         throw new Error(`Tier 5 step '${subtask.title}' failed.`);
       }
@@ -451,13 +548,16 @@ export class AutonomousAgentEngine {
         success: true,
       });
 
-      // Durable disk checkpoint after every single subtask
+      const stepTokens = { prompt: 500, completion: 240 };
+      session.recordTokens(stepTokens.prompt, stepTokens.completion);
+      telemetry.recordTokens(stepTokens.prompt, stepTokens.completion);
+
+      this.checkBudgetGuards(session, startTime);
+
+      // Durable disk checkpoint after every single subtask with updated circuit breaker
+      session.updateCircuitBreaker(circuitBreaker.getState());
       await session.checkpoint('running');
     }
-
-    const tokens = { prompt: 2500, completion: 1200 };
-    session.recordTokens(tokens.prompt, tokens.completion);
-    telemetry.recordTokens(tokens.prompt, tokens.completion);
 
     return 'Deep system workflow successfully executed across all hierarchical subtasks with durable checkpointing.';
   }

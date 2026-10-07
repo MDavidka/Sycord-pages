@@ -13,6 +13,18 @@ export interface CircuitBreakerOptions {
   maxRedundantArgsThreshold?: number;
 }
 
+function normalizeArgs(args: any): string {
+  if (args === null || args === undefined) return '';
+  if (typeof args !== 'object') return String(args);
+  if (Array.isArray(args)) return JSON.stringify(args.map(normalizeArgs));
+  const sortedKeys = Object.keys(args).sort();
+  const sortedObj: Record<string, any> = {};
+  for (const k of sortedKeys) {
+    sortedObj[k] = args[k];
+  }
+  return JSON.stringify(sortedObj);
+}
+
 export class CircuitBreaker {
   private state: CircuitBreakerState;
   private readonly maxConsecutiveErrors: number;
@@ -48,7 +60,7 @@ export class CircuitBreaker {
    * Record a tool invocation and inspect for duplicate signatures.
    */
   public recordToolCall(toolName: string, args: Record<string, any> | string): void {
-    const rawArgs = typeof args === 'string' ? args : JSON.stringify(args);
+    const rawArgs = typeof args === 'string' ? args : normalizeArgs(args);
     const signature = `${toolName}:${rawArgs}`;
 
     const count = (this.recentToolSignatures.get(signature) || 0) + 1;

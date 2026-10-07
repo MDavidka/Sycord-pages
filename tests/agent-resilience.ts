@@ -6,9 +6,13 @@
  * 3. Tier 3 Linear Workflow (sequential calls, retry logic)
  * 4. Tier 4 Multi-Artifact Task (rollback on verification failure)
  * 5. Tier 5 Long-Running Simulation (crash simulation and deterministic resume from disk checkpoint)
- * 6. Context Pollution & Ghost Task Elimination (cross-talk prevention after task failure)
- * 7. Circuit Breaker Protection (infinite loop and repeated error tripping)
- * 8. Telemetry JSON Schema Conformance
+ * 6. Headless / Parameterless Resume (recovering state, tokens, and circuit breaker without task ID)
+ * 7. Context Pollution & Ghost Task Elimination (single-line & multi-line stripping with prompt preservation)
+ * 8. ContextSanitizer Stateful RegExp Safety (consecutive verification calls)
+ * 9. Circuit Breaker Protection (infinite loop, normalized duplicate arguments, repeated errors)
+ * 10. TieredRouter Spectrum Classification (explanations with extensions, multi-file keywords)
+ * 11. Budget Limits & Timeout Guard Enforcement
+ * 12. Structured Telemetry JSON Schema Conformance
  */
 
 import * as fs from 'fs';
@@ -115,9 +119,9 @@ export async function runAllTests(): Promise<{ passed: boolean; results: TestRes
   });
 
   // --------------------------------------------------------------------------
-  // TEST 3: Context Pollution & Ghost Task Elimination
+  // TEST 3: Context Pollution & Ghost Task Elimination with Prompt Preservation
   // --------------------------------------------------------------------------
-  await runTest('Test 3: Context Pollution & Ghost Task Elimination', async () => {
+  await runTest('Test 3: Context Pollution & Ghost Task Elimination with Prompt Preservation', async () => {
     const priorFailingTaskId = 'prior-failed-task-999';
     const checkpointMgr = new CheckpointManager({ storageFile: stateFile, backupDir: testDir });
 
@@ -161,23 +165,58 @@ export async function runAllTests(): Promise<{ passed: boolean; results: TestRes
       throw new Error(`Ghost task bleed detected in response: ${result.response}`);
     }
 
-    // Step C: Verify explicit ghost directive stripping
-    const contaminatedPrompt = `[Autonomous Execution Directive]: Incomplete plan steps remain for step 2.\n\nTell me a joke.`;
-    const stripped = ContextSanitizer.sanitizeInput(contaminatedPrompt);
-    if (!stripped.ghost_task_detected) {
+    // Step C: Verify single-newline ghost directive stripping preserves the following user prompt
+    const singleNewlinePrompt = `[Autonomous Execution Directive]: Incomplete plan steps remain for step 2.\nTell me a joke.`;
+    const strippedSingle = ContextSanitizer.sanitizeInput(singleNewlinePrompt);
+    if (!strippedSingle.ghost_task_detected) {
       throw new Error('ContextSanitizer failed to detect ghost task directive');
     }
-    if (stripped.sanitized_prompt !== 'Tell me a joke.') {
-      throw new Error(`ContextSanitizer did not correctly strip directive: '${stripped.sanitized_prompt}'`);
+    if (strippedSingle.sanitized_prompt !== 'Tell me a joke.') {
+      throw new Error(`ContextSanitizer destroyed prompt on single newline: got '${strippedSingle.sanitized_prompt}'`);
     }
 
-    return { ghost_task_stripped: true, state_leakage_detected: false };
+    // Step D: Verify double-newline ghost directive stripping
+    const doubleNewlinePrompt = `[Autonomous Execution Directive]: Incomplete plan steps remain for step 2.\n\nTell me a joke.`;
+    const strippedDouble = ContextSanitizer.sanitizeInput(doubleNewlinePrompt);
+    if (strippedDouble.sanitized_prompt !== 'Tell me a joke.') {
+      throw new Error(`ContextSanitizer did not correctly strip directive: '${strippedDouble.sanitized_prompt}'`);
+    }
+
+    return { ghost_task_stripped: true, single_newline_preserved: true, state_leakage_detected: false };
   });
 
   // --------------------------------------------------------------------------
-  // TEST 4: Tier 4 Multi-Artifact Task & Rollback on Verification Failure
+  // TEST 4: ContextSanitizer Stateful RegExp Safety (consecutive calls)
   // --------------------------------------------------------------------------
-  await runTest('Test 4: Tier 4 Multi-Artifact Verification & Rollback', async () => {
+  await runTest('Test 4: ContextSanitizer Stateful RegExp Safety (Consecutive Checks)', async () => {
+    const directive1 = '[Autonomous Execution Directive]: Incomplete plan steps remain for step 2.\n\nQuery A';
+    const directive2 = '[Autonomous Execution Directive]: Incomplete plan steps remain for step 2.\n\nQuery B';
+
+    const check1 = ContextSanitizer.verifyPromptGoalAlignment(directive1, 'Query A');
+    const check2 = ContextSanitizer.verifyPromptGoalAlignment(directive2, 'Query B');
+
+    if (check1.aligned !== false) throw new Error('Check 1 should have failed alignment due to ghost directive');
+    if (check2.aligned !== false) throw new Error('Check 2 should have failed alignment due to ghost directive (RegExp state bug)');
+
+    const msgLeakCheck = ContextSanitizer.detectStateLeakage(
+      [
+        { role: 'assistant', content: directive1 },
+        { role: 'assistant', content: directive2 },
+      ],
+      'task-current'
+    );
+
+    if (!msgLeakCheck.leakage_detected || msgLeakCheck.leaked_items.length !== 2) {
+      throw new Error(`Expected 2 leaked items detected, got ${msgLeakCheck.leaked_items.length}`);
+    }
+
+    return { consecutive_regex_checks_passed: true };
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 5: Tier 4 Multi-Artifact Task & Rollback on Verification Failure
+  // --------------------------------------------------------------------------
+  await runTest('Test 5: Tier 4 Multi-Artifact Verification & Rollback', async () => {
     const tempFile = path.resolve(process.cwd(), 'temp_test_artifact.ts');
     fs.writeFileSync(tempFile, 'const original = true;\n', 'utf-8');
 
@@ -218,9 +257,9 @@ export async function runAllTests(): Promise<{ passed: boolean; results: TestRes
   });
 
   // --------------------------------------------------------------------------
-  // TEST 5: Tier 5 Long-Running Simulation & Crash-Resume Recovery
+  // TEST 6: Tier 5 Long-Running Simulation & Crash-Resume Recovery
   // --------------------------------------------------------------------------
-  await runTest('Test 5: Tier 5 Long-Running Simulation with Simulated Crash and Deterministic Resume', async () => {
+  await runTest('Test 6: Tier 5 Long-Running Simulation with Simulated Crash and Deterministic Resume', async () => {
     const taskId = 'long-running-tier5-task-001';
     const checkpointMgr = new CheckpointManager({ storageFile: stateFile, backupDir: testDir });
 
@@ -298,18 +337,84 @@ export async function runAllTests(): Promise<{ passed: boolean; results: TestRes
   });
 
   // --------------------------------------------------------------------------
-  // TEST 6: Circuit Breaker Infinite Loop & Failure Tripping
+  // TEST 7: Headless / Parameterless Resume (Restoring State Without TaskId)
   // --------------------------------------------------------------------------
-  await runTest('Test 6: Circuit Breaker Protection against Infinite Loops', async () => {
+  await runTest('Test 7: Headless / Parameterless Resume from state.json', async () => {
+    const checkpointMgr = new CheckpointManager({ storageFile: stateFile, backupDir: testDir });
+
+    // Create an interrupted checkpoint in state.json
+    const interruptedCp = {
+      task_id: 'headless-resume-task-777',
+      tier: 5 as const,
+      goal: 'Autonomous deep system migration',
+      current_step_index: 2,
+      total_steps: 4,
+      status: 'interrupted' as const,
+      subtasks: [
+        { step_id: 's1', title: 'Step 1', tool: 'createFile', status: 'completed' as const, retry_count: 0, max_retries: 2 },
+        { step_id: 's2', title: 'Step 2', tool: 'editFile', status: 'completed' as const, retry_count: 0, max_retries: 2 },
+        { step_id: 's3', title: 'Step 3', tool: 'runCommand', status: 'pending' as const, retry_count: 0, max_retries: 2 },
+        { step_id: 's4', title: 'Step 4', tool: 'typeCheck', status: 'pending' as const, retry_count: 0, max_retries: 2 },
+      ],
+      completed_steps: [
+        { step_id: 's1', title: 'Step 1', tool: 'createFile', args: {}, output: 'ok', timestamp: Date.now(), success: true },
+        { step_id: 's2', title: 'Step 2', tool: 'editFile', args: {}, output: 'ok', timestamp: Date.now(), success: true },
+      ],
+      artifacts_modified: {},
+      tokens_consumed: { prompt: 1000, completion: 500 },
+      circuit_breaker_state: { repeated_tool_count: { createFile: 1, editFile: 1 }, consecutive_errors: 0, loop_iterations: 2, is_tripped: false },
+      budget: { max_tokens: 50000, max_execution_time_ms: 100000, max_steps: 10 },
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    };
+    await checkpointMgr.saveCheckpoint(interruptedCp);
+
+    // Resume without passing task_id or prompt
+    let remainingExecuted: string[] = [];
+    const mockExecutor = async (tool: string, args: Record<string, any>) => {
+      remainingExecuted.push(args.title);
+      return { tool, arguments: args, output: 'ok', success: true };
+    };
+
+    const engine = new AutonomousAgentEngine({
+      checkpointManager: checkpointMgr,
+      toolExecutor: mockExecutor,
+    });
+
+    const result = await engine.executeTask({
+      prompt: '',
+      resume_from_checkpoint: true,
+    });
+
+    if (result.task_id !== 'headless-resume-task-777') {
+      throw new Error(`Expected resumed task ID 'headless-resume-task-777', got '${result.task_id}'`);
+    }
+    if (result.status !== 'success') {
+      throw new Error(`Expected success on headless resume, got ${result.status}`);
+    }
+    if (remainingExecuted.length !== 2 || remainingExecuted[0] !== 'Step 3') {
+      throw new Error(`Expected Steps 3 and 4 to execute, got: ${remainingExecuted.join(', ')}`);
+    }
+    if (result.telemetry.tokens_consumed.prompt < 1000) {
+      throw new Error(`Prior prompt tokens were not preserved on resume: ${result.telemetry.tokens_consumed.prompt}`);
+    }
+
+    return { headless_resume_passed: true, executed_steps: remainingExecuted };
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 8: Circuit Breaker Infinite Loop & Failure Tripping
+  // --------------------------------------------------------------------------
+  await runTest('Test 8: Circuit Breaker Protection against Infinite Loops & Redundant Args', async () => {
     const cb = new CircuitBreaker(undefined, { maxRepeatedToolCalls: 3, maxConsecutiveErrors: 3 });
 
-    // Repeated identical calls with same argument
+    // Repeated identical calls with varied key ordering (e.g. { a: 1, b: 2 } vs { b: 2, a: 1 })
     cb.recordToolCall('editFile', { path: 'App.tsx', content: 'buggy' });
-    cb.recordToolCall('editFile', { path: 'App.tsx', content: 'buggy' });
+    cb.recordToolCall('editFile', { content: 'buggy', path: 'App.tsx' });
     cb.recordToolCall('editFile', { path: 'App.tsx', content: 'buggy' });
 
     if (!cb.isTripped()) {
-      throw new Error('Circuit breaker failed to trip on 3x identical tool calls');
+      throw new Error('Circuit breaker failed to trip on 3x identical tool calls with varied key order');
     }
     if (!cb.getTripReason()?.includes('Repeated identical tool invocation')) {
       throw new Error(`Unexpected trip reason: ${cb.getTripReason()}`);
@@ -328,9 +433,69 @@ export async function runAllTests(): Promise<{ passed: boolean; results: TestRes
   });
 
   // --------------------------------------------------------------------------
-  // TEST 7: Structured JSON Telemetry Schema Validation
+  // TEST 9: TieredRouter Spectrum Classification
   // --------------------------------------------------------------------------
-  await runTest('Test 7: Telemetry Schema Conformance Validation', async () => {
+  await runTest('Test 9: TieredRouter Spectrum Classification', async () => {
+    const checks: Array<{ prompt: string; expectedTier: number }> = [
+      { prompt: 'Hello there!', expectedTier: 1 },
+      { prompt: 'Explain how Next.js works', expectedTier: 1 },
+      { prompt: 'What is React.js?', expectedTier: 1 },
+      { prompt: 'Format this text as markdown', expectedTier: 1 },
+      { prompt: 'read package.json', expectedTier: 2 },
+      { prompt: 'list workspace files', expectedTier: 2 },
+      { prompt: 'find "useState" in files', expectedTier: 2 },
+      { prompt: 'edit App.tsx to add dark mode', expectedTier: 3 },
+      { prompt: 'run npm test', expectedTier: 3 },
+      { prompt: 'create 2 components and update router with rollback verification', expectedTier: 4 },
+      { prompt: 'refactor entire codebase to support multi-tenant authentication with checkpointing and resilience', expectedTier: 5 },
+    ];
+
+    for (const item of checks) {
+      const classification = TieredRouter.classify(item.prompt);
+      if (classification.tier !== item.expectedTier) {
+        throw new Error(
+          `Classification mismatch for "${item.prompt}": expected Tier ${item.expectedTier}, got Tier ${classification.tier} (${classification.tier_name})`
+        );
+      }
+    }
+
+    return { all_spectrum_tiers_correct: true };
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 10: Budget Limits & Timeout Guard Enforcement
+  // --------------------------------------------------------------------------
+  await runTest('Test 10: Budget Limits & Timeout Guard Enforcement', async () => {
+    const checkpointMgr = new CheckpointManager({ storageFile: stateFile, backupDir: testDir });
+
+    // Test token budget limit guard
+    const slowExecutor = async (tool: string, args: Record<string, any>) => {
+      return { tool, arguments: args, output: 'x'.repeat(1000), success: true };
+    };
+
+    const engine = new AutonomousAgentEngine({
+      checkpointManager: checkpointMgr,
+      toolExecutor: slowExecutor,
+    });
+
+    // Run with very low token budget limit (10 tokens)
+    const result = await engine.executeTask({
+      prompt: 'refactor components and update index',
+      tier_override: 3,
+      budget_override: { max_tokens: 10 },
+    });
+
+    if (result.status !== 'failed' || !result.telemetry.failure_reason?.includes('budget')) {
+      throw new Error(`Expected task to fail on token budget guard, got ${result.status}: ${result.telemetry.failure_reason}`);
+    }
+
+    return { budget_guard_enforced: true };
+  });
+
+  // --------------------------------------------------------------------------
+  // TEST 11: Structured JSON Telemetry Schema Validation
+  // --------------------------------------------------------------------------
+  await runTest('Test 11: Telemetry Schema Conformance Validation', async () => {
     const collector = new TelemetryCollector('test-task-123', 1);
     collector.recordTokens(150, 45);
     collector.recordToolInvocation('readFile');

@@ -17,10 +17,14 @@ export class TelemetryCollector {
   private stateLeakageDetected = false;
   private failureReason: string | null = null;
 
-  constructor(taskId: string, tier: AgentTier) {
+  constructor(taskId: string, tier: AgentTier, initialTokens?: { prompt: number; completion: number }) {
     this.taskId = taskId;
     this.tier = tier;
     this.startTime = Date.now();
+    if (initialTokens) {
+      this.promptTokens = initialTokens.prompt || 0;
+      this.completionTokens = initialTokens.completion || 0;
+    }
   }
 
   public recordTokens(prompt: number, completion: number): void {
@@ -70,7 +74,7 @@ export class TelemetryCollector {
       },
       tools_invoked: Array.from(this.toolsInvoked),
       state_leakage_detected: this.stateLeakageDetected,
-      failure_reason: this.failureReason,
+      failure_reason: this.failureReason ?? null,
     };
   }
 

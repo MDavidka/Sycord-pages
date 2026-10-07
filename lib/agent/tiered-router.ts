@@ -11,27 +11,29 @@
 import type { AgentTier, TaskBudget, TierClassification } from './types.ts';
 
 export class TieredRouter {
-  // Regex patterns for fast-path classification
+  // Regex patterns for Tier 1 fast-path conversational / informational classification
   private static readonly TIER_1_PATTERNS = [
-    /^(hi|hello|hey|greetings|howdy|good\s+(morning|afternoon|evening|day))[\s!.]*$/i,
-    /^(what\s+is\s+your\s+name|who\s+are\s+you|what\s+can\s+you\s+do)[\s?]*$/i,
-    /^(thank\s*you|thanks|thx|great|cool|awesome|looks\s+good)[\s!.]*$/i,
-    /^(explain|what\s+is|define|how\s+does)\s+[a-zA-Z0-9_\s]{2,40}\??$/i,
-    /^(format\s+(this|the\s+following)|convert\s+to\s+markdown)[\s:]*$/i,
+    /^(hi|hello|hey|greetings|howdy|good\s+(morning|afternoon|evening|day))(\s+there|\s+all)?[\s!.]*$/i,
+    /^(what\s+is\s+your\s+name|who\s+are\s+you|what\s+can\s+you\s+do|help(\s+me)?)[\s?]*$/i,
+    /^(thank\s*you|thanks|thx|great|cool|awesome|looks\s+good|ok|okay|got\s+it)[\s!.]*$/i,
+    /^(explain|what\s+is|what\s+are|define|how\s+does|how\s+do|why\s+does|why\s+is|tell\s+me\s+about|describe|summarize)\s+[a-zA-Z0-9_./-\s]{2,80}\??$/i,
+    /^(format\s+(this|the\s+following)|convert\s+to\s+markdown|prettify\s+json)[\s:]*$/i,
   ];
 
+  // Regex patterns for Tier 2 single-tool inspection
   private static readonly TIER_2_PATTERNS = [
-    /^(show|view|read|cat|display|inspect)\s+(the\s+)?(file|contents\s+of\s+)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)$/i,
-    /^(list|show|ls|find)\s+(the\s+)?(files|directory|workspace|folder)$/i,
-    /^(search|grep|find)\s+(for\s+)?["']?([^"']+)["']?\s+in\s+files?$/i,
+    /^(show|view|read|cat|display|inspect|get)\s+((the|all)\s+)?((file|contents\s+of)\s+)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)$/i,
+    /^(list|show|ls|find)\s+((the|all)\s+)?(files|directory|workspace|folder|project(\s+files)?|workspace\s+files)$/i,
+    /^(search|grep|find)\s+(for\s+)?["']?([^"']+)["']?\s+(in|across)\s+files?$/i,
     /^(get|show|check)\s+(docs|documentation)\s+for\s+([a-zA-Z0-9_-]+)$/i,
   ];
 
+  // Regex patterns for Tier 3 deterministic single linear modification
   private static readonly TIER_3_PATTERNS = [
-    /^(edit|modify|update|change|fix)\s+([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(\s+to\s+.+)?$/i,
+    /^(edit|modify|update|change|fix|patch)\s+([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(\s+to\s+.+)?$/i,
     /^(create|add|write)\s+(a\s+)?(new\s+)?(file|component)\s+([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)$/i,
-    /^(run|execute)\s+(command\s+)?(npm\s+[a-zA-Z0-9_-]+|tsc|eslint|git\s+[a-zA-Z0-9_-]+)$/i,
-    /^(typecheck|lint|check\s+types|check\s+lint)$/i,
+    /^(run|execute)\s+(command\s+)?(npm\s+[a-zA-Z0-9_-]+|tsc|eslint|git\s+[a-zA-Z0-9_-]+|vitest|jest)$/i,
+    /^(typecheck|lint|check\s+types|check\s+lint|run\s+tests?)$/i,
   ];
 
   private static readonly TIER_5_KEYWORDS = [
@@ -47,6 +49,7 @@ export class TieredRouter {
     'deep refactor',
     'crash resiliency',
     'stability tiering',
+    'agent_refactor_task',
   ];
 
   /**
@@ -76,7 +79,7 @@ export class TieredRouter {
     const isComplexArchitecturePrompt =
       (lower.includes('refactor') && lower.includes('agent')) ||
       (lower.includes('checkpoint') && lower.includes('resilience')) ||
-      (lower.includes('autonomous') && lower.length > 300);
+      (lower.includes('autonomous') && lower.length > 250);
 
     if (isTier5KeywordMatch || isComplexArchitecturePrompt) {
       return this.buildClassification(
@@ -85,18 +88,24 @@ export class TieredRouter {
       );
     }
 
-    // 3. Check Tier 1 (Instant / Conversational explicit patterns)
+    // 3. Check Tier 1 explicit patterns (greetings, explanations, formatting)
     for (const pattern of this.TIER_1_PATTERNS) {
+      pattern.lastIndex = 0;
       if (pattern.test(raw)) {
-        return this.buildClassification(
-          1,
-          'Instant conversational query. Zero tools and zero planning overhead required.'
-        );
+        // Ensure it's not actually an action directive to modify files
+        const isActionDirective = /\b(create|edit|delete|modify|write|update|remove)\b/i.test(raw);
+        if (!isActionDirective) {
+          return this.buildClassification(
+            1,
+            'Instant conversational or informational query. Zero tools and zero planning overhead required.'
+          );
+        }
       }
     }
 
     // 4. Check Tier 2 (Single-Tool Utility)
     for (const pattern of this.TIER_2_PATTERNS) {
+      pattern.lastIndex = 0;
       if (pattern.test(raw)) {
         return this.buildClassification(
           2,
@@ -107,6 +116,7 @@ export class TieredRouter {
 
     // 5. Check Tier 3 (Linear Workflow)
     for (const pattern of this.TIER_3_PATTERNS) {
+      pattern.lastIndex = 0;
       if (pattern.test(raw)) {
         return this.buildClassification(
           3,
@@ -115,18 +125,18 @@ export class TieredRouter {
       }
     }
 
-    // 6. Generic Tier 1 check for purely conversational short non-coding questions
-    const hasCodeOrFile = /\b([a-zA-Z0-9_-]+\.[a-zA-Z0-9]+|code|file|folder|dir|edit|create|build|run|test|fix|component|page|npm|git|tsc|grep)\b/i.test(raw);
-    if (raw.length < 50 && !raw.includes('\n') && !hasCodeOrFile) {
+    // 6. Generic Tier 1 check for short non-coding questions without tool keywords
+    const hasToolKeywords = /\b(create|edit|update|delete|modify|build|run|test|fix|git|npm|tsc|grep|read|cat|ls|list|show|view|write|component|page)\b/i.test(raw);
+    if (raw.length < 60 && !raw.includes('\n') && !hasToolKeywords) {
       return this.buildClassification(
         1,
         'Short conversational query without coding or tool requirements.'
       );
     }
 
-    // 6. Check Tier 4 vs Tier 5 by complexity
-    const estimatedFiles = (raw.match(/\b[a-zA-Z0-9_-]+\.(tsx|ts|jsx|js|css|json|html|py)\b/g) || []).length;
-    const actionWords = (raw.match(/\b(create|edit|update|delete|build|integrate|connect|wire|route)\b/gi) || []).length;
+    // 7. Check Tier 4 vs Tier 5 by complexity
+    const estimatedFiles = (raw.match(/\b[a-zA-Z0-9_-]+\.(tsx|ts|jsx|js|css|json|html|py|mjs|sql)\b/g) || []).length;
+    const actionWords = (raw.match(/\b(create|edit|update|delete|build|integrate|connect|wire|route|refactor|migrate)\b/gi) || []).length;
 
     if (estimatedFiles > 3 || actionWords > 4 || raw.length > 500) {
       return this.buildClassification(

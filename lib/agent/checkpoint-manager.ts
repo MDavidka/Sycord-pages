@@ -22,12 +22,21 @@ export class CheckpointManager {
     this.backupDir = options?.backupDir || path.resolve(process.cwd(), '.agent_checkpoints');
   }
 
+  public getStorageFilePath(): string {
+    return this.storageFile;
+  }
+
   /**
    * Save checkpoint atomically to disk.
    */
   public async saveCheckpoint(checkpoint: SessionCheckpoint): Promise<void> {
     try {
       const serialized = JSON.stringify(checkpoint, null, 2);
+
+      const storageDir = path.dirname(this.storageFile);
+      if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true });
+      }
 
       // 1. Write atomic temp file then rename
       const tempPath = `${this.storageFile}.tmp.${Date.now()}`;
@@ -74,7 +83,7 @@ export class CheckpointManager {
   /**
    * Check if a task is eligible for deterministic resumption.
    */
-  public async canResume(taskId: string): Promise<boolean> {
+  public async canResume(taskId?: string): Promise<boolean> {
     const cp = await this.loadLatestCheckpoint(taskId);
     if (!cp) return false;
     // Resumable if running, interrupted, or timeout with uncompleted subtasks
@@ -101,6 +110,10 @@ export class CheckpointManager {
           }
         } else {
           // Revert to original content
+          const fileDir = path.dirname(fullPath);
+          if (!fs.existsSync(fileDir)) {
+            fs.mkdirSync(fileDir, { recursive: true });
+          }
           fs.writeFileSync(fullPath, diff.before, 'utf-8');
           rolledBack.push(filePath);
         }

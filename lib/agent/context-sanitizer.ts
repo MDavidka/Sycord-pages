@@ -21,17 +21,17 @@ export interface StateLeakageCheckResult {
 }
 
 export class ContextSanitizer {
-  private static readonly GHOST_TASK_PATTERNS = [
-    /\[Autonomous Execution Directive\]: Incomplete plan steps remain[\s\S]*?(?=\n\n|$)/gi,
-    /Previous failed subtask:\s*[\s\S]*?(?=\n\n|$)/gi,
-    /Resume prior session\s*[\s\S]*?(?=\n\n|$)/gi,
-    /Continuing step \d+ from abandoned task[\s\S]*?(?=\n\n|$)/gi,
+  private static readonly GHOST_TASK_LINE_PATTERNS = [
+    /\[Autonomous Execution Directive\]:[^\n]*(?:\r?\n|$)/gi,
+    /Previous failed subtask:[^\n]*(?:\r?\n|$)/gi,
+    /Resume prior session[^\n]*(?:\r?\n|$)/gi,
+    /Continuing step \d+ from abandoned task[^\n]*(?:\r?\n|$)/gi,
+    /__PREVIOUS_TASK_ERROR__:[^\n]*(?:\r?\n|$)/gi,
   ];
 
   private static readonly SYSTEM_POLLUTION_PATTERNS = [
     /<\|tool_calls_section_begin\|>[\s\S]*?<\|tool_calls_section_end\|>/gi,
     /<\|im_start\|>[\s\S]*?<\|im_end\|>/gi,
-    /__PREVIOUS_TASK_ERROR__:[\s\S]*?(?=\n\n|$)/gi,
   ];
 
   /**
@@ -41,23 +41,27 @@ export class ContextSanitizer {
     let cleanPrompt = (rawPrompt || '').trim();
     const strippedPatterns: string[] = [];
     let ghostTaskDetected = false;
-    let ghostTaskDetails: string | undefined;
+    const detailsList: string[] = [];
 
-    // Check and strip ghost task directives
-    for (const pattern of this.GHOST_TASK_PATTERNS) {
+    // 1. Check and strip ghost task directives line-by-line / pattern-by-pattern
+    for (const pattern of this.GHOST_TASK_LINE_PATTERNS) {
+      pattern.lastIndex = 0;
       if (pattern.test(cleanPrompt)) {
         ghostTaskDetected = true;
-        ghostTaskDetails = `Detected ghost task pattern matching: ${pattern.toString()}`;
+        detailsList.push(`Matched pattern: ${pattern.source}`);
+        pattern.lastIndex = 0;
         cleanPrompt = cleanPrompt.replace(pattern, '').trim();
-        strippedPatterns.push(pattern.toString());
+        strippedPatterns.push(pattern.source);
       }
     }
 
-    // Check and strip low-level markup pollution
+    // 2. Check and strip low-level markup pollution
     for (const pattern of this.SYSTEM_POLLUTION_PATTERNS) {
+      pattern.lastIndex = 0;
       if (pattern.test(cleanPrompt)) {
+        pattern.lastIndex = 0;
         cleanPrompt = cleanPrompt.replace(pattern, '').trim();
-        strippedPatterns.push(pattern.toString());
+        strippedPatterns.push(pattern.source);
       }
     }
 
@@ -68,7 +72,7 @@ export class ContextSanitizer {
       sanitized_prompt: cleanPrompt,
       active_goal: activeGoal,
       ghost_task_detected: ghostTaskDetected,
-      ghost_task_details: ghostTaskDetails,
+      ghost_task_details: detailsList.length > 0 ? detailsList.join('; ') : undefined,
       stripped_patterns: strippedPatterns,
     };
   }
@@ -81,16 +85,16 @@ export class ContextSanitizer {
     currentPrompt: string,
     expectedGoal: string
   ): { aligned: boolean; driftReason?: string } {
-    const cleanPrompt = currentPrompt.trim().toLowerCase();
-    const cleanGoal = expectedGoal.trim().toLowerCase();
+    const cleanPrompt = (currentPrompt || '').trim();
 
     if (!cleanPrompt) {
       return { aligned: false, driftReason: 'Prompt is empty.' };
     }
 
     // If ghost task directives are present, alignment fails
-    for (const pattern of this.GHOST_TASK_PATTERNS) {
-      if (pattern.test(currentPrompt)) {
+    for (const pattern of this.GHOST_TASK_LINE_PATTERNS) {
+      pattern.lastIndex = 0;
+      if (pattern.test(cleanPrompt)) {
         return {
           aligned: false,
           driftReason: 'Prompt contains leaked ghost task directive from previous session.',
@@ -110,7 +114,7 @@ export class ContextSanitizer {
     priorKnownTaskIds: string[] = []
   ): StateLeakageCheckResult {
     const leakedItems: string[] = [];
-    const priorSet = new Set(priorKnownTaskIds.filter(id => id !== currentTaskId));
+    const priorSet = new Set(priorKnownTaskIds.filter(id => id && id !== currentTaskId));
 
     for (const msg of messages) {
       if (msg.taskId && priorSet.has(msg.taskId)) {
@@ -118,7 +122,8 @@ export class ContextSanitizer {
       }
 
       if (typeof msg.content === 'string') {
-        for (const pattern of this.GHOST_TASK_PATTERNS) {
+        for (const pattern of this.GHOST_TASK_LINE_PATTERNS) {
+          pattern.lastIndex = 0;
           if (pattern.test(msg.content)) {
             leakedItems.push(`Ghost task directive leaked in message role=${msg.role}`);
           }

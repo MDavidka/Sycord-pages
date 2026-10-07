@@ -4,32 +4,16 @@
  * Usage:
  *   node scripts/agent-runner.mjs --task-file AGENT_REFACTOR_TASK.md
  *   node scripts/agent-runner.mjs --prompt "Hello, who are you?"
+ *   node scripts/agent-runner.mjs --resume
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
-// Load agent modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
-
-async function loadAgentEngine() {
-  // Try importing compiled or direct TypeScript/ESM module
-  try {
-    const agentModule = await import('../lib/agent/index.js').catch(async () => {
-      // If .js not compiled, load dynamically
-      const tsNode = await import('typescript');
-      // For runtime runner without build step, we can load through ts loader or run compiled engine
-      return null;
-    });
-    if (agentModule) return agentModule;
-  } catch {}
-
-  // Fallback to inline engine execution if ts transpilation not active
-  return null;
-}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -65,19 +49,29 @@ async function main() {
     }
   }
 
+  // Load agent modules
+  const agentModule = await import('../lib/agent/index.ts').catch(async () => {
+    return import('../lib/agent/engine.ts');
+  });
+
+  const { AutonomousAgentEngine, CheckpointManager } = agentModule;
+  const checkpointManager = new CheckpointManager();
+
+  // If --resume is requested without explicit prompt, attempt to load latest checkpoint from disk
+  if (resume && !prompt) {
+    const cp = await checkpointManager.loadLatestCheckpoint();
+    if (!cp) {
+      console.error(`[AgentRunner] Error: --resume requested but no active checkpoint found in ${checkpointManager.getStorageFilePath()}`);
+      process.exit(1);
+    }
+    console.log(`[AgentRunner] Resuming previous task '${cp.task_id}' (Goal: "${cp.goal.slice(0, 60)}...", Status: ${cp.status})`);
+    prompt = cp.goal;
+  }
+
   if (!prompt) {
     console.log(`Usage: node scripts/agent-runner.mjs --task-file <file> | --prompt <prompt> [--tier 1..5] [--resume]`);
     process.exit(0);
   }
-
-  // Import directly from lib/agent
-  const { AutonomousAgentEngine, TieredRouter, ContextSanitizer, CheckpointManager } = await import('../lib/agent/index.ts').catch(async () => {
-    // If ts extension import requires ts loader or transpilation, run with node loader
-    return import('../lib/agent/engine.js');
-  }).catch(() => {
-    // Direct dynamic evaluation
-    return null;
-  }) || {};
 
   console.log(`\n======================================================`);
   console.log(`🚀 ANTIGRAVITY AUTONOMOUS AGENT RUNNER`);
@@ -100,25 +94,20 @@ async function main() {
 
   console.log(`[Task Dispatch] Initializing autonomous execution for prompt (${prompt.length} chars)...`);
   
-  // Create engine instance
-  // When running in node environment with tsx / node --loader
-  const engineModule = await import('../lib/agent/index.ts').catch(() => null);
-  if (engineModule) {
-    const engine = new engineModule.AutonomousAgentEngine();
-    const result = await engine.executeTask({
-      prompt,
-      tier_override: tierOverride,
-      resume_from_checkpoint: resume,
-    });
+  const engine = new AutonomousAgentEngine({ checkpointManager });
+  const result = await engine.executeTask({
+    prompt,
+    tier_override: tierOverride,
+    resume_from_checkpoint: resume,
+  });
 
-    console.log(`\n--- EXECUTION RESPONSE ---`);
-    console.log(result.response);
+  console.log(`\n--- EXECUTION RESPONSE ---`);
+  console.log(result.response);
 
-    console.log(`\n--- TELEMETRY DIAGNOSTIC REPORT ---`);
-    console.log(JSON.stringify(result.telemetry, null, 2));
-    console.log(`\n======================================================\n`);
-    process.exit(result.status === 'success' ? 0 : 1);
-  }
+  console.log(`\n--- TELEMETRY DIAGNOSTIC REPORT ---`);
+  console.log(JSON.stringify(result.telemetry, null, 2));
+  console.log(`\n======================================================\n`);
+  process.exit(result.status === 'success' ? 0 : 1);
 }
 
 main().catch(err => {

@@ -101,11 +101,17 @@ export class SessionContext {
       onCheckpoint: options?.onCheckpoint,
     });
 
-    ctx.status = checkpoint.status === 'interrupted' || checkpoint.status === 'timeout' ? 'running' : checkpoint.status;
-    ctx.subtasks = [...checkpoint.subtasks];
-    ctx.completedSteps = [...checkpoint.completed_steps];
-    ctx.tokensConsumed = { ...checkpoint.tokens_consumed };
-    ctx.circuitBreakerState = { ...checkpoint.circuit_breaker_state };
+    ctx.status = checkpoint.status === 'interrupted' || checkpoint.status === 'timeout' || checkpoint.status === 'failed' ? 'running' : checkpoint.status;
+    ctx.subtasks = checkpoint.subtasks ? checkpoint.subtasks.map(s => ({ ...s })) : [];
+    ctx.completedSteps = checkpoint.completed_steps ? checkpoint.completed_steps.map(s => ({ ...s })) : [];
+    ctx.tokensConsumed = { ...(checkpoint.tokens_consumed || { prompt: 0, completion: 0 }) };
+    ctx.circuitBreakerState = {
+      repeated_tool_count: { ...(checkpoint.circuit_breaker_state?.repeated_tool_count || {}) },
+      consecutive_errors: checkpoint.circuit_breaker_state?.consecutive_errors ?? 0,
+      loop_iterations: checkpoint.circuit_breaker_state?.loop_iterations ?? 0,
+      is_tripped: checkpoint.circuit_breaker_state?.is_tripped ?? false,
+      trip_reason: checkpoint.circuit_breaker_state?.trip_reason,
+    };
     ctx.updatedAt = Date.now();
 
     for (const [path, diff] of Object.entries(checkpoint.artifacts_modified || {})) {
@@ -188,12 +194,12 @@ export class SessionContext {
    * Register subtasks for Tier 4/5 hierarchical planning.
    */
   public setSubtasks(subtasks: SubTaskPlan[]): void {
-    this.subtasks = [...subtasks];
+    this.subtasks = subtasks.map(s => ({ ...s }));
     this.updatedAt = Date.now();
   }
 
   public getSubtasks(): SubTaskPlan[] {
-    return [...this.subtasks];
+    return this.subtasks.map(s => ({ ...s }));
   }
 
   public getNextPendingSubtask(): SubTaskPlan | null {
@@ -204,7 +210,7 @@ export class SessionContext {
    * Record a completed discrete subtask step.
    */
   public recordCompletedStep(step: CompletedStep): void {
-    this.completedSteps.push(step);
+    this.completedSteps.push({ ...step });
     const subtask = this.subtasks.find(s => s.step_id === step.step_id);
     if (subtask) {
       subtask.status = step.success ? 'completed' : 'failed';
@@ -213,14 +219,24 @@ export class SessionContext {
   }
 
   public getCompletedSteps(): CompletedStep[] {
-    return [...this.completedSteps];
+    return this.completedSteps.map(s => ({ ...s }));
   }
 
   /**
    * Update circuit breaker tracking state.
    */
-  public updateCircuitBreaker(updater: (state: CircuitBreakerState) => void): void {
-    updater(this.circuitBreakerState);
+  public updateCircuitBreaker(stateOrUpdater: CircuitBreakerState | ((state: CircuitBreakerState) => void)): void {
+    if (typeof stateOrUpdater === 'function') {
+      stateOrUpdater(this.circuitBreakerState);
+    } else {
+      this.circuitBreakerState = {
+        repeated_tool_count: { ...(stateOrUpdater.repeated_tool_count || {}) },
+        consecutive_errors: stateOrUpdater.consecutive_errors ?? 0,
+        loop_iterations: stateOrUpdater.loop_iterations ?? 0,
+        is_tripped: stateOrUpdater.is_tripped ?? false,
+        trip_reason: stateOrUpdater.trip_reason,
+      };
+    }
     this.updatedAt = Date.now();
   }
 
@@ -248,8 +264,8 @@ export class SessionContext {
       current_step_index: this.completedSteps.length,
       total_steps: this.subtasks.length || this.completedSteps.length,
       status: this.status,
-      subtasks: [...this.subtasks],
-      completed_steps: [...this.completedSteps],
+      subtasks: this.subtasks.map(s => ({ ...s })),
+      completed_steps: this.completedSteps.map(s => ({ ...s })),
       artifacts_modified: this.getArtifactModifications(),
       tokens_consumed: { ...this.tokensConsumed },
       circuit_breaker_state: this.getCircuitBreakerState(),
