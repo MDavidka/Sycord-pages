@@ -58,7 +58,8 @@ import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
 import { LivePlanCard } from '@/components/agents/live-plan-card';
 import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
-import { ContextSanitizer, TieredRouter } from '@/lib/agent';
+import { ContextSanitizer } from '@/lib/agent/context-sanitizer';
+import { TieredRouter } from '@/lib/agent/tiered-router';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
 import {

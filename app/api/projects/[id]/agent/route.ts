@@ -10,7 +10,8 @@ import {
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid, ensureSyteWorkspaceForProject } from "@/lib/deploy/syte-workspace"
 import { checkRateLimit } from "@/lib/security/rate-limit"
-import { ContextSanitizer, TieredRouter } from "@/lib/agent"
+import { ContextSanitizer } from "@/lib/agent/context-sanitizer"
+import { TieredRouter } from "@/lib/agent/tiered-router"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
