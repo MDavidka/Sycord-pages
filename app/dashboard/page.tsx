@@ -6,23 +6,45 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone, Monitor, FileSpreadsheet, FilePlus, FolderPlus, Upload, FolderUp } from "lucide-react"
+import {
+  Settings,
+  Plus,
+  LogOut,
+  User,
+  TriangleAlert,
+  Search,
+  CreditCard,
+  Trash2,
+  Folder,
+  Shield,
+  Megaphone,
+  Monitor,
+  FileText,
+  FileSpreadsheet,
+  FilePlus,
+  FolderPlus,
+  Upload,
+  FolderUp,
+  ExternalLink,
+  MoreHorizontal,
+} from "lucide-react"
 import { useState, useEffect, Suspense, useCallback, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { WebsitePreviewCard } from "@/components/website-preview-card"
-import { ProjectDashboardCard } from "@/components/project-dashboard-card"
-import { DashboardModeToggle, type DashboardMode } from "@/components/dashboard-mode-toggle"
-import { AstroDashboard } from "@/components/astro-dashboard"
-import { DashboardArtifactCard, type DashboardArtifact } from "@/components/dashboard-artifact-card"
-import { AiComposer } from "@/components/ai-composer"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
 const MAX_FREE_PROJECTS = 3
+
+interface CustomFileItem {
+  id: string
+  name: string
+  type: "document" | "spreadsheet" | "folder"
+  meta?: string
+  url?: string
+}
 
 function getValidProjectUrl(project: any): string | null {
   const candidate = project?.cloudflareUrl || project?.deploymentRuntime?.url || project?.domain || project?.deployment?.domain
@@ -37,15 +59,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[22px] border border-border/80 bg-surface/90 p-4 sm:p-5 flex items-center justify-between">
+    <div className="rounded-[20px] border border-[#232326] bg-[#121214] p-4 flex items-center justify-between">
       <div className="flex items-center gap-3.5 flex-1 min-w-0">
-        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-surface-raised" />
+        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-[#1e1e24]" />
         <div className="space-y-1.5 flex-1 min-w-0">
-          <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
-          <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
+          <Skeleton className="h-4 w-32 bg-[#1e1e24] rounded-[6px]" />
+          <Skeleton className="h-3 w-24 bg-[#18181e] rounded-[4px]" />
         </div>
       </div>
-      <Skeleton className="h-8 w-16 rounded-[12px] bg-surface-raised shrink-0 ml-3" />
+      <Skeleton className="h-8 w-16 rounded-[12px] bg-[#1e1e24] shrink-0 ml-3" />
     </div>
   )
 }
@@ -54,192 +76,82 @@ function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [projects, setProjects] = useState([])
+  const [projects, setProjects] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [flaggedDeployments] = useState<Set<string>>(new Set())
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
   const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
-  const [activeMode, setActiveMode] = useState<DashboardMode>("projects")
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [selectedArtifact, setSelectedArtifact] = useState<DashboardArtifact | null>(null)
-  const [isExecutingAi, setIsExecutingAi] = useState(false)
+  const [artifactFilter, setArtifactFilter] = useState<"all" | "website" | "file">("all")
 
   const fileUploadInputRef = useRef<HTMLInputElement>(null)
   const folderUploadInputRef = useRef<HTMLInputElement>(null)
-  const [createdArtifacts, setCreatedArtifacts] = useState<DashboardArtifact[]>([])
+  const [customFiles, setCustomFiles] = useState<CustomFileItem[]>([])
 
   const handleCreateFile = () => {
     const filename = prompt("Enter new file name (e.g. index.ts, notes.md):", "newfile.txt")
     if (!filename?.trim()) return
-    const newArt: DashboardArtifact = {
+    const newFile: CustomFileItem = {
       id: `custom-file-${Date.now()}`,
       name: filename.trim(),
       type: filename.endsWith(".xls") || filename.endsWith(".xlsx") || filename.endsWith(".csv") ? "spreadsheet" : "document",
       meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
     }
-    setCreatedArtifacts((prev) => [newArt, ...prev])
+    setCustomFiles((prev) => [newFile, ...prev])
   }
 
   const handleCreateFolder = () => {
     const foldername = prompt("Enter new folder name:", "new-folder")
     if (!foldername?.trim()) return
-    const newArt: DashboardArtifact = {
+    const newFolder: CustomFileItem = {
       id: `custom-folder-${Date.now()}`,
       name: foldername.trim(),
-      type: "website",
+      type: "folder",
       meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
     }
-    setCreatedArtifacts((prev) => [newArt, ...prev])
+    setCustomFiles((prev) => [newFolder, ...prev])
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
-    const newItems: DashboardArtifact[] = Array.from(files).map((f) => ({
+    const newItems: CustomFileItem[] = Array.from(files).map((f) => ({
       id: `uploaded-${Date.now()}-${f.name}`,
       name: f.name,
       type: f.name.endsWith(".xls") || f.name.endsWith(".xlsx") || f.name.endsWith(".csv") ? "spreadsheet" : "document",
       meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
     }))
-    setCreatedArtifacts((prev) => [...newItems, ...prev])
+    setCustomFiles((prev) => [...newItems, ...prev])
   }
 
   const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
     const rootName = (files[0] as any).webkitRelativePath?.split("/")[0] || "uploaded-folder"
-    const newArt: DashboardArtifact = {
+    const newFolder: CustomFileItem = {
       id: `uploaded-folder-${Date.now()}`,
       name: rootName,
-      type: "website",
+      type: "folder",
       meta: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
     }
-    setCreatedArtifacts((prev) => [newArt, ...prev])
+    setCustomFiles((prev) => [newFolder, ...prev])
   }
-
-  // Map user projects to unified workspace artifacts
-  const projectArtifacts: DashboardArtifact[] = projects.map((p: any) => {
-    const liveUrl = getValidProjectUrl(p)
-    const domain = liveUrl
-      ? liveUrl.replace(/^https?:\/\//, "")
-      : p.domain || `${(p.businessName || "project").toLowerCase().replace(/\s+/g, "-")}.sycord.site`
-    const dateStr = p.createdAt
-      ? new Date(p.createdAt).toISOString().slice(0, 10).replace(/-/g, ".")
-      : "2026.9.92"
-    return {
-      id: p._id,
-      name: domain,
-      type: "website" as const,
-      meta: dateStr,
-      url: liveUrl || (p.cloudflareUrl ? `https://${p.cloudflareUrl}` : undefined),
-      profileImage: p.profileImage,
-      rawProject: p,
-    }
-  })
-
-  // Connected files / sample artifacts (from reference design)
-  const sampleArtifacts: DashboardArtifact[] = [
-    {
-      id: "sample-xls",
-      name: "Testfile.xsl",
-      type: "spreadsheet",
-      meta: "2026.9.92",
-    },
-  ]
-
-  const allArtifacts: DashboardArtifact[] = [
-    ...createdArtifacts,
-    ...(projectArtifacts.length > 0
-      ? [...projectArtifacts, ...(projectArtifacts.length < 3 ? sampleArtifacts : [])]
-      : [
-          {
-            id: "default-site",
-            name: "test.sycord.site",
-            type: "website" as const,
-            meta: "2026.9.92",
-            url: "https://sycord.site",
-          },
-          ...sampleArtifacts,
-        ]),
-  ]
-
-  const [artifactFilter, setArtifactFilter] = useState<"all" | "website" | "spreadsheet">("all")
-
-  const q = searchQuery.trim().toLowerCase()
-  const filteredArtifacts = allArtifacts.filter((a) => {
-    const matchesQuery =
-      !q ||
-      a.name.toLowerCase().includes(q) ||
-      (a.meta && a.meta.toLowerCase().includes(q))
-    const matchesFilter =
-      artifactFilter === "all" || a.type === artifactFilter
-    return matchesQuery && matchesFilter
-  })
-
-  const handleAiSubmit = async (
-    promptText: string,
-    artifact: DashboardArtifact | null,
-    modelId: string
-  ) => {
-    if (artifact && artifact.type === "website" && artifact.rawProject?._id) {
-      router.push(
-        `/dashboard/sites/${artifact.rawProject._id}/syra?prompt=${encodeURIComponent(
-          promptText
-        )}&model=${encodeURIComponent(modelId)}`
-      )
-      return
-    }
-
-    setIsExecutingAi(true)
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessName: promptText.slice(0, 30).trim() || "New AI Workspace",
-          businessDescription: promptText,
-          websiteType: "service",
-          status: "pending",
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const newId = data.projectId || data._id || data.id
-        if (newId) {
-          router.push(
-            `/dashboard/sites/${newId}/syra?prompt=${encodeURIComponent(
-              promptText
-            )}&model=${encodeURIComponent(modelId)}`
-          )
-          return
-        }
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setIsExecutingAi(false)
-    }
-    setActiveMode("astro")
-  }
-  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
-  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
   useEffect(() => {
     const openCreate = searchParams.get("open_create_modal")
     const error = searchParams.get("error")
-    const mode = searchParams.get("mode")
-    if (mode === "astro" || mode === "projects") {
-      setActiveMode(mode)
-    }
     if (error) {
       setDebugError(error)
-      const u = new URL(window.location.href); u.searchParams.delete("error"); window.history.replaceState({}, "", u.toString())
+      const u = new URL(window.location.href)
+      u.searchParams.delete("error")
+      window.history.replaceState({}, "", u.toString())
     }
     if (openCreate === "true") {
-      const u = new URL(window.location.href); u.searchParams.delete("open_create_modal"); window.history.replaceState({}, "", u.toString())
+      const u = new URL(window.location.href)
+      u.searchParams.delete("open_create_modal")
+      window.history.replaceState({}, "", u.toString())
       router.push("/dashboard/create")
     }
   }, [searchParams, router])
@@ -249,14 +161,17 @@ function DashboardContent() {
   useEffect(() => {
     if (status !== "authenticated") return
     Promise.all([
-      fetch("/api/projects", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
-      fetch("/api/user/status", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/announcements", { cache: "no-store" }).then(r => r.ok ? r.json() : { announcements: [] }),
-    ]).then(([projectsData, statusData, annData]) => {
-      setProjects(projectsData)
-      if (statusData) setUserStatus(statusData)
-      if (annData?.announcements) setAnnouncements(annData.announcements)
-    }).catch(console.error).finally(() => setIsLoading(false))
+      fetch("/api/projects", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/user/status", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/announcements", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { announcements: [] })),
+    ])
+      .then(([projectsData, statusData, annData]) => {
+        setProjects(projectsData)
+        if (statusData) setUserStatus(statusData)
+        if (annData?.announcements) setAnnouncements(annData.announcements)
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false))
   }, [status])
 
   const fetchInvites = useCallback(async () => {
@@ -278,11 +193,21 @@ function DashboardContent() {
     setIsDeleting(true)
     try {
       const res = await fetch(`/api/projects/${projectToDelete.id}`, { method: "DELETE" })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.message || "Failed") }
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.message || "Failed")
+      }
       setProjects((prev: any) => prev.filter((p: any) => p._id !== projectToDelete.id))
       const project: any = projects.find((p: any) => p._id === projectToDelete.id)
       if (project?.dokployApplicationId || project?.applicationId) {
-        fetch("/api/deploy/coolify", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ applicationId: project.dokployApplicationId || project.applicationId, projectId: project.dokployProjectId || project.projectId }) }).catch(console.error)
+        fetch("/api/deploy/coolify", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            applicationId: project.dokployApplicationId || project.applicationId,
+            projectId: project.dokployProjectId || project.projectId,
+          }),
+        }).catch(console.error)
       }
       setProjectToDelete(null)
     } catch (err) {
@@ -295,23 +220,28 @@ function DashboardContent() {
   if (status === "loading") {
     return (
       <div className="min-h-screen md:ml-16 px-4 pt-6 pb-20 md:pb-6">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <Skeleton className="h-6 w-28 bg-zinc-800/80" />
-            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
+            <Skeleton className="size-8 rounded-full bg-zinc-800/80" />
           </div>
-          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
+          <Skeleton className="h-11 w-full rounded-[16px] bg-zinc-800/60" />
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <CardSkeleton key={i} />
+            ))}
           </div>
         </div>
       </div>
     )
   }
 
-  if (status === "unauthenticated") { router.push("/login"); return null }
+  if (status === "unauthenticated") {
+    router.push("/login")
+    return null
+  }
 
-  const userInitials = session?.user?.name?.split(" ").map(n => n[0]).join("").toUpperCase() || "U"
+  const userInitials = session?.user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "D"
 
   if (userStatus.isBlocked) {
     return (
@@ -325,26 +255,56 @@ function DashboardContent() {
             <p className="text-muted-foreground">Sycord is currently not available. Please contact support.</p>
           </div>
           <div className="pt-4 space-y-3">
-            <a href="mailto:admin@sycord.com" className="inline-flex items-center justify-center rounded-xl bg-primary text-primary-foreground px-6 py-3 text-sm font-medium hover:bg-primary/90 transition-colors">Contact Support</a>
-            <div><button onClick={() => signOut({ callbackUrl: "/" })} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Sign Out</button></div>
+            <a
+              href="mailto:admin@sycord.com"
+              className="inline-flex items-center justify-center rounded-xl bg-primary text-primary-foreground px-6 py-3 text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Contact Support
+            </a>
+            <div>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </div>
     )
   }
 
+  // Filter projects and files by search query
+  const q = searchQuery.trim().toLowerCase()
+
+  const filteredProjects = projects.filter((p: any) => {
+    if (artifactFilter === "file") return false
+    const name = (p.businessName || "").toLowerCase()
+    const domain = (p.domain || p.cloudflareUrl || "").toLowerCase()
+    return !q || name.includes(q) || domain.includes(q)
+  })
+
+  const filteredCustomFiles = customFiles.filter((f) => {
+    if (artifactFilter === "website") return false
+    return !q || f.name.toLowerCase().includes(q)
+  })
+
+  const displayDemoProject =
+    !isLoading && projects.length === 0 && customFiles.length === 0 && artifactFilter !== "file"
+
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        {/* Minimal Header */}
+        {/* Top Header */}
         <header className="sticky top-0 bg-background/90 backdrop-blur-md z-50">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <div className="max-w-xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center focus:outline-none opacity-90 hover:opacity-100 transition-opacity">
               <Image
                 src="/brand-logo.png"
                 alt="Sycord"
-                width={26}
-                height={26}
+                width={28}
+                height={28}
                 priority
                 className="object-contain shrink-0"
               />
@@ -355,7 +315,7 @@ function DashboardContent() {
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-7.5 rounded-full bg-[#a855f7] flex items-center justify-center text-white font-semibold text-xs transition-transform active:scale-[0.95] outline-none cursor-pointer shadow-sm hover:brightness-105 overflow-hidden"
+                  className="relative size-8 rounded-full bg-[#a855f7] flex items-center justify-center text-white font-semibold text-xs transition-transform active:scale-[0.95] outline-none cursor-pointer shadow-sm hover:brightness-105 overflow-hidden"
                 >
                   {session?.user?.image ? (
                     <img
@@ -368,7 +328,11 @@ function DashboardContent() {
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl" align="end" forceMount>
+              <DropdownMenuContent
+                className="w-56 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl"
+                align="end"
+                forceMount
+              >
                 <DropdownMenuLabel className="font-normal px-2.5 py-2">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none text-foreground">{session?.user?.name}</p>
@@ -376,36 +340,56 @@ function DashboardContent() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-border" />
-                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><User className="mr-2 size-4" strokeWidth={1.75} /><span>Profile</span></DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")} className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><CreditCard className="mr-2 size-4" strokeWidth={1.75} /><span>Plans</span></DropdownMenuItem>
-                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted"><Settings className="mr-2 size-4" strokeWidth={1.75} /><span>Settings</span></DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer">
+                  <User className="mr-2 size-4" strokeWidth={1.75} />
+                  <span>Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/subscriptions")}
+                  className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer"
+                >
+                  <CreditCard className="mr-2 size-4" strokeWidth={1.75} />
+                  <span>Plans</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="rounded-[10px] text-xs text-text-secondary hover:text-foreground hover:bg-surface-muted cursor-pointer">
+                  <Settings className="mr-2 size-4" strokeWidth={1.75} />
+                  <span>Settings</span>
+                </DropdownMenuItem>
                 {session?.user?.email === "dmarton336@gmail.com" && (
                   <>
                     <DropdownMenuSeparator className="bg-border" />
-                    <DropdownMenuItem onClick={() => router.push("/admin")} className="rounded-[10px] text-xs">
+                    <DropdownMenuItem
+                      onClick={() => router.push("/admin")}
+                      className="rounded-[10px] text-xs cursor-pointer"
+                    >
                       <Shield className="mr-2 size-4 text-emerald-400" strokeWidth={1.75} />
                       <span className="text-emerald-400 font-medium">Moderator View</span>
                     </DropdownMenuItem>
                   </>
                 )}
                 <DropdownMenuSeparator className="bg-border" />
-                <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="rounded-[10px] text-xs text-destructive hover:text-destructive hover:bg-destructive/10">
-                  <LogOut className="mr-2 size-4" strokeWidth={1.75} /><span>Sign out</span>
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="rounded-[10px] text-xs text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                >
+                  <LogOut className="mr-2 size-4" strokeWidth={1.75} />
+                  <span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-3 sm:pt-4 pb-8 flex-1 flex flex-col justify-between min-h-[calc(100vh-56px)]">
-          <div className="space-y-4">
+        <main className="max-w-xl mx-auto px-4 sm:px-6 pt-4 pb-16">
+          <div className="space-y-6">
+            {/* Announcements if any */}
             {announcements.length > 0 && (
               <div className="space-y-2">
                 {announcements.map((ann) => (
                   <div
                     key={ann.id || ann._id}
                     className={cn(
-                      "flex items-start gap-3 p-4 rounded-[18px] border text-xs leading-relaxed",
+                      "flex items-start gap-3 p-3.5 rounded-[18px] border text-xs leading-relaxed",
                       ann.type === "warning" || ann.type === "maintenance"
                         ? "bg-amber-500/10 border-amber-500/20 text-amber-200"
                         : ann.type === "important"
@@ -423,16 +407,16 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Filter Pills matching exact uploaded image */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+            {/* Filter Pills matching exact reference image */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
               <button
                 type="button"
                 onClick={() => setArtifactFilter("all")}
                 className={cn(
-                  "h-8 px-4 rounded-[14px] text-xs font-medium transition-all select-none cursor-pointer",
+                  "h-8 px-4 rounded-[12px] text-xs font-medium transition-all select-none cursor-pointer",
                   artifactFilter === "all"
                     ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
+                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
                 )}
               >
                 All
@@ -441,10 +425,10 @@ function DashboardContent() {
                 type="button"
                 onClick={() => setArtifactFilter("website")}
                 className={cn(
-                  "h-8 px-3 rounded-[14px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  "h-8 px-3.5 rounded-[12px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
                   artifactFilter === "website"
                     ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
+                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
                 )}
               >
                 <Monitor className="size-3.5" strokeWidth={1.75} />
@@ -452,12 +436,12 @@ function DashboardContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setArtifactFilter("spreadsheet")}
+                onClick={() => setArtifactFilter("file")}
                 className={cn(
-                  "h-8 px-3 rounded-[14px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
-                  artifactFilter === "spreadsheet"
+                  "h-8 px-3.5 rounded-[12px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  artifactFilter === "file"
                     ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#181818] border border-[#2a2a2a] text-[#a3a3a3] hover:text-[#f5f5f5] hover:bg-[#202020]"
+                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
                 )}
               >
                 <FileSpreadsheet className="size-3.5" strokeWidth={1.75} />
@@ -465,162 +449,352 @@ function DashboardContent() {
               </button>
             </div>
 
-            {/* Artifacts grid / rail matching minimal folder card + dashed + card */}
-            <div className="pt-1">
+            {/* Inline Search Bar + Plus Button */}
+            <div className="flex items-center gap-3 pt-2">
+              <div className="relative flex-1">
+                <Input
+                  type="text"
+                  placeholder="Enter text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-11 sm:h-12 bg-[#121214] border border-[#26262a] hover:border-[#38383f] focus-visible:border-zinc-400 text-sm text-foreground rounded-[16px] px-4 placeholder:text-zinc-500 shadow-sm transition-colors"
+                />
+              </div>
+
+              {/* Hidden file upload inputs */}
+              <input
+                type="file"
+                ref={fileUploadInputRef}
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <input
+                type="file"
+                ref={folderUploadInputRef}
+                // @ts-ignore
+                webkitdirectory=""
+                directory=""
+                multiple
+                className="hidden"
+                onChange={handleFolderUpload}
+              />
+
+              {/* Inline Plus Button with Dropdown Action Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Create or upload options"
+                    className="size-11 sm:size-12 rounded-[16px] bg-white hover:bg-zinc-200 text-black flex items-center justify-center shrink-0 shadow-sm transition-all active:scale-[0.96] outline-none cursor-pointer"
+                  >
+                    <Plus className="size-5" strokeWidth={2.2} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-52 bg-[#18181a] border border-[#2a2a2e] text-[#EDEDED] rounded-[18px] p-1.5 shadow-2xl z-50"
+                >
+                  <DropdownMenuItem
+                    onClick={() => router.push("/dashboard/create")}
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                  >
+                    <Monitor className="size-4 text-sky-400" />
+                    <span>Create website</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/[0.08]" />
+                  <DropdownMenuItem
+                    onClick={handleCreateFile}
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                  >
+                    <FilePlus className="size-4 text-zinc-400" />
+                    <span>Create file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleCreateFolder}
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                  >
+                    <FolderPlus className="size-4 text-zinc-400" />
+                    <span>Create folder</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/[0.08]" />
+                  <DropdownMenuItem
+                    onClick={() => fileUploadInputRef.current?.click()}
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                  >
+                    <Upload className="size-4 text-zinc-400" />
+                    <span>Upload file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => folderUploadInputRef.current?.click()}
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                  >
+                    <FolderUp className="size-4 text-zinc-400" />
+                    <span>Upload folder</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Projects & Artifacts List (Nudged exactly like reference image) */}
+            <div className="space-y-3 pt-3">
               {isLoading ? (
-                <div className="flex items-center gap-3 overflow-hidden py-1">
+                <div className="space-y-3">
                   {[1, 2].map((i) => (
-                    <div key={i} className="w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-[#252525] bg-[#181818] animate-pulse" />
+                    <CardSkeleton key={i} />
                   ))}
                 </div>
               ) : (
-                <div className="flex items-center gap-3 overflow-x-auto no-scrollbar pb-2 pt-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scroll-smooth">
-                  {filteredArtifacts.map((artifact) => (
-                    <DashboardArtifactCard
-                      key={artifact.id}
-                      artifact={artifact}
-                      isSelected={selectedArtifact?.id === artifact.id}
-                      onSelect={(art) => {
-                        setSelectedArtifact(art)
-                        if (art.type === "website" && art.rawProject?._id) {
-                          router.push(`/dashboard/sites/${art.rawProject._id}/syra`)
-                        } else if (art.url) {
-                          window.open(art.url, "_blank", "noopener,noreferrer")
-                        }
-                      }}
-                      onOpen={(art) => {
-                        if (art.type === "website" && art.rawProject?._id) {
-                          router.push(`/dashboard/sites/${art.rawProject._id}/syra`)
-                        } else if (art.url) {
-                          window.open(art.url, "_blank", "noopener,noreferrer")
-                        }
-                      }}
-                    />
+                <>
+                  {/* Real User Projects */}
+                  {filteredProjects.map((project: any) => {
+                    const liveUrl = getValidProjectUrl(project)
+                    const displayDomain = liveUrl
+                      ? liveUrl.replace(/^https?:\/\//, "")
+                      : project.domain || `${(project.businessName || "project").toLowerCase().replace(/\s+/g, "-")}.sycord.site`
+
+                    return (
+                      <div
+                        key={project._id}
+                        className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm"
+                      >
+                        <Link
+                          href={`/dashboard/sites/${project._id}/syra`}
+                          className="flex items-center gap-3.5 min-w-0 flex-1 focus:outline-none"
+                        >
+                          {/* Octopus / Website Icon */}
+                          <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-sky-500/30 transition-colors">
+                            {project.profileImage ? (
+                              <img
+                                src={project.profileImage}
+                                alt={project.businessName || "Project"}
+                                className="size-full object-cover"
+                                onError={(e) => {
+                                  ;(e.currentTarget as HTMLElement).style.display = "none"
+                                }}
+                              />
+                            ) : (
+                              <div className="size-full flex items-center justify-center text-sky-400">
+                                <svg className="size-6 text-sky-400 fill-current" viewBox="0 0 24 24">
+                                  <path d="M12 2a6 6 0 0 0-6 6v1c0 .6.4 1 1 1h.1c.5 0 .9-.4 1-.9.4-2.3 2.1-4.1 4.5-4.1s4.1 1.8 4.5 4.1c.1.5.5.9 1 .9h.1c.6 0 1-.4 1-1V8a6 6 0 0 0-6-6zm-7 9c-.6 0-1 .4-1 1v4c0 1.7 1.3 3 3 3 .6 0 1-.4 1-1s-.4-1-1-1c-.6 0-1-.4-1-1v-4c0-.6-.4-1-1-1zm14 0c-.6 0-1 .4-1 1v4c0 .6-.4 1-1 1s-1 .4-1 1c0 .6.4 1 1 1 1.7 0 3-1.3 3-3v-4c0-.6-.4-1-1-1zm-10 1c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm6 0c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm-3 1c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1s1-.4 1-1v-4c0-.6-.4-1-1-1z" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex flex-col min-w-0">
+                            <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                              {project.businessName || "your project name"}
+                            </h3>
+                            <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                              {displayDomain}
+                            </span>
+                          </div>
+                        </Link>
+
+                        {/* Action Menu */}
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          <Link
+                            href={`/dashboard/sites/${project._id}/syra`}
+                            className="hidden sm:inline-flex items-center justify-center h-8 px-3.5 rounded-[12px] bg-[#1a1a1e] hover:bg-[#24242a] border border-[#2c2c32] text-xs font-medium text-zinc-300 hover:text-white transition-all active:scale-[0.97]"
+                          >
+                            Open AI Chat
+                          </Link>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Project options"
+                                className="size-8 rounded-[10px] text-zinc-400 hover:text-white hover:bg-[#202024]"
+                              >
+                                <MoreHorizontal className="size-4" strokeWidth={1.75} />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-40 bg-[#18181a] border border-[#2a2a2e] text-[#EDEDED] shadow-2xl rounded-[16px] p-1.5 z-50"
+                            >
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/dashboard/sites/${project._id}`}
+                                  className="cursor-pointer flex items-center gap-2 text-xs hover:bg-white/[0.08] rounded-[10px] py-2 px-2.5 text-zinc-300 hover:text-white"
+                                >
+                                  <Settings className="size-3.5 text-zinc-400" strokeWidth={1.75} />
+                                  <span>Settings</span>
+                                </Link>
+                              </DropdownMenuItem>
+                              {liveUrl && (
+                                <DropdownMenuItem asChild>
+                                  <a
+                                    href={liveUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="cursor-pointer flex items-center gap-2 text-xs hover:bg-white/[0.08] rounded-[10px] py-2 px-2.5 text-zinc-300 hover:text-white"
+                                  >
+                                    <ExternalLink className="size-3.5 text-zinc-400" strokeWidth={1.75} />
+                                    <span>Visit Live</span>
+                                  </a>
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator className="bg-white/[0.08]" />
+                              <DropdownMenuItem
+                                onClick={() => setProjectToDelete({ id: project._id, name: project.businessName || "Project" })}
+                                className="cursor-pointer flex items-center gap-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-[10px] py-2 px-2.5"
+                              >
+                                <Trash2 className="size-3.5 text-rose-400" strokeWidth={1.75} />
+                                <span>Delete</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Demo project placeholder if no projects exist */}
+                  {displayDemoProject && (
+                    <div
+                      onClick={() => router.push("/dashboard/create")}
+                      className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-sky-500/30 transition-colors">
+                          <div className="size-full flex items-center justify-center text-sky-400">
+                            <svg className="size-6 text-sky-400 fill-current" viewBox="0 0 24 24">
+                              <path d="M12 2a6 6 0 0 0-6 6v1c0 .6.4 1 1 1h.1c.5 0 .9-.4 1-.9.4-2.3 2.1-4.1 4.5-4.1s4.1 1.8 4.5 4.1c.1.5.5.9 1 .9h.1c.6 0 1-.4 1-1V8a6 6 0 0 0-6-6zm-7 9c-.6 0-1 .4-1 1v4c0 1.7 1.3 3 3 3 .6 0 1-.4 1-1s-.4-1-1-1c-.6 0-1-.4-1-1v-4c0-.6-.4-1-1-1zm14 0c-.6 0-1 .4-1 1v4c0 .6-.4 1-1 1s-1 .4-1 1c0 .6.4 1 1 1 1.7 0 3-1.3 3-3v-4c0-.6-.4-1-1-1zm-10 1c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm6 0c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm-3 1c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1s1-.4 1-1v-4c0-.6-.4-1-1-1z" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                            your project name
+                          </h3>
+                          <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                            test.sycord.site
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <span className="inline-flex items-center justify-center h-8 px-3.5 rounded-[12px] bg-[#1a1a1e] group-hover:bg-[#24242a] border border-[#2c2c32] text-xs font-medium text-zinc-300 group-hover:text-white transition-all">
+                          Create
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Custom & Uploaded Files */}
+                  {filteredCustomFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 text-zinc-300">
+                          {file.type === "spreadsheet" ? (
+                            <FileSpreadsheet className="size-5 text-emerald-400" strokeWidth={1.8} />
+                          ) : file.type === "folder" ? (
+                            <Folder className="size-5 text-amber-400" strokeWidth={1.8} />
+                          ) : (
+                            <FileText className="size-5 text-sky-400" strokeWidth={1.8} />
+                          )}
+                        </div>
+
+                        <div className="flex flex-col min-w-0">
+                          <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                            {file.name}
+                          </h3>
+                          <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                            {file.meta || "Connected File"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <button
+                          type="button"
+                          onClick={() => setCustomFiles((prev) => prev.filter((f) => f.id !== file.id))}
+                          className="size-8 rounded-[10px] text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="size-4" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    </div>
                   ))}
 
-                  {/* Hidden inputs for file and folder uploads */}
-                  <input
-                    type="file"
-                    ref={fileUploadInputRef}
-                    multiple
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <input
-                    type="file"
-                    ref={folderUploadInputRef}
-                    // @ts-ignore
-                    webkitdirectory=""
-                    directory=""
-                    multiple
-                    className="hidden"
-                    onChange={handleFolderUpload}
-                  />
-
-                  {/* Minimalist Dashed "+ New" Card with Action Options */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        title="Create or upload"
-                        aria-label="Create or upload options"
-                        className="flex items-center justify-center w-[116px] sm:w-[124px] h-[78px] sm:h-[82px] rounded-[18px] sm:rounded-[20px] border border-dashed border-[#2f2f2f] hover:border-[#404040] bg-[#141414]/50 hover:bg-[#181818] transition-all cursor-pointer select-none group shrink-0 active:scale-[0.98] outline-none"
-                      >
-                        <div className="size-7 rounded-full bg-[#1e1e1e] group-hover:bg-[#252525] flex items-center justify-center transition-colors">
-                          <Plus className="size-3.5 text-[#9e9e9e] group-hover:text-white transition-colors" strokeWidth={2.5} />
-                        </div>
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="start"
-                      side="top"
-                      className="w-48 bg-[#181818] border border-[#2a2a2a] text-[#EDEDED] rounded-[18px] p-1.5 shadow-2xl z-50"
-                    >
-                      <DropdownMenuItem
-                        onClick={handleCreateFile}
-                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
-                      >
-                        <FilePlus className="size-3.5 text-zinc-400" />
-                        <span>Create file</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={handleCreateFolder}
-                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
-                      >
-                        <FolderPlus className="size-3.5 text-zinc-400" />
-                        <span>Create folder</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-white/[0.08]" />
-                      <DropdownMenuItem
-                        onClick={() => fileUploadInputRef.current?.click()}
-                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
-                      >
-                        <Upload className="size-3.5 text-zinc-400" />
-                        <span>Upload file</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => folderUploadInputRef.current?.click()}
-                        className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
-                      >
-                        <FolderUp className="size-3.5 text-zinc-400" />
-                        <span>Upload folder</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                  {/* Empty search result */}
+                  {!displayDemoProject &&
+                    filteredProjects.length === 0 &&
+                    filteredCustomFiles.length === 0 && (
+                      <div className="text-center py-12 border border-dashed border-[#26262a] rounded-[20px] p-6 bg-[#121214]/40">
+                        <p className="text-sm text-zinc-400">No projects or files found matching &quot;{searchQuery}&quot;</p>
+                        <button
+                          type="button"
+                          onClick={() => router.push("/dashboard/create")}
+                          className="mt-3 inline-flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 font-medium cursor-pointer"
+                        >
+                          <Plus className="size-3.5" />
+                          <span>Create new website</span>
+                        </button>
+                      </div>
+                    )}
+                </>
               )}
             </div>
-
-            {/* If in Astro mode, show full Astro Dashboard tools */}
-            {activeMode === "astro" && (
-              <div className="rounded-[22px] border border-border bg-surface/40 p-4 sm:p-5 mt-4">
-                <div className="flex items-center justify-between pb-3 mb-2 border-b border-border">
-                  <span className="text-xs font-medium text-text-muted">Astro AI Workspace Active</span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveMode("projects")}
-                    className="text-xs text-indigo-400 hover:text-indigo-300"
-                  >
-                    ← Back to Artifacts View
-                  </button>
-                </div>
-                <AstroDashboard />
-              </div>
-            )}
-          </div>
-
-          {/* AI Input / Chat Composer (Bottom positioned, matching uploaded layout) */}
-          <div className="pt-6 pb-2">
-            <AiComposer
-              selectedArtifact={selectedArtifact}
-              onClearArtifact={() => setSelectedArtifact(null)}
-            />
           </div>
         </main>
       </div>
 
-      {pendingInvites.length > 0 && <CollabInvitePopup invite={pendingInvites[0]} onDismiss={() => setPendingInvites(prev => prev.slice(1))} />}
+      {pendingInvites.length > 0 && (
+        <CollabInvitePopup
+          invite={pendingInvites[0]}
+          onDismiss={() => setPendingInvites((prev) => prev.slice(1))}
+        />
+      )}
 
-      <Dialog open={!!debugError} onOpenChange={open => !open && setDebugError(null)}>
+      <Dialog open={!!debugError} onOpenChange={(open) => !open && setDebugError(null)}>
         <DialogContent className="sm:max-w-md border-red-200 bg-red-50 dark:bg-red-950/20">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400"><TriangleAlert className="h-5 w-5" />Authentication Error</DialogTitle>
-            <DialogDescription className="text-red-600/90 dark:text-red-400/90">An error occurred during authentication.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <TriangleAlert className="h-5 w-5" />
+              Authentication Error
+            </DialogTitle>
+            <DialogDescription className="text-red-600/90 dark:text-red-400/90">
+              An error occurred during authentication.
+            </DialogDescription>
           </DialogHeader>
-          <div className="p-4 bg-white dark:bg-black/20 rounded-md border border-red-100 dark:border-red-900/50 font-mono text-sm break-all">{debugError}</div>
-          <div className="flex justify-end"><Button variant="outline" onClick={() => setDebugError(null)} className="border-red-200 hover:bg-red-100">Close</Button></div>
+          <div className="p-4 bg-white dark:bg-black/20 rounded-md border border-red-100 dark:border-red-900/50 font-mono text-sm break-all">
+            {debugError}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setDebugError(null)} className="border-red-200 hover:bg-red-100">
+              Close
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!projectToDelete} onOpenChange={open => !open && setProjectToDelete(null)}>
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this project?</AlertDialogTitle>
-            <AlertDialogDescription>This will permanently delete &quot;{projectToDelete?.name}&quot; and all its data. This cannot be undone.</AlertDialogDescription>
+            <AlertDialogDescription>
+              This will permanently delete &quot;{projectToDelete?.name}&quot; and all its data. This cannot be undone.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={e => { e.preventDefault(); handleDeleteProject() }} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteProject()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {isDeleting ? "Deleting..." : "Delete Project"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -632,20 +806,24 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen md:ml-16 px-4 pt-6">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
-            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
-          </div>
-          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[1,2,3].map(i=><CardSkeleton key={i}/>)}
+    <Suspense
+      fallback={
+        <div className="min-h-screen md:ml-16 px-4 pt-6">
+          <div className="max-w-xl mx-auto space-y-6">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-6 w-28 bg-zinc-800/80" />
+              <Skeleton className="size-8 rounded-full bg-zinc-800/80" />
+            </div>
+            <Skeleton className="h-11 w-full rounded-[16px] bg-zinc-800/60" />
+            <div className="space-y-3">
+              {[1, 2].map((i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <DashboardContent />
     </Suspense>
   )
