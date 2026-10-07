@@ -403,33 +403,43 @@ export const useStore = create<AppState>((set) => ({
     setSystemPrompt: (systemPrompt) => set({ systemPrompt }),
 
     // AI Provider Settings
-    aiProvider: localStorage.getItem('aiProvider') || 'glovix',
-    aiApiKey: localStorage.getItem('aiApiKey') || '',
-    aiBaseUrl: localStorage.getItem('aiBaseUrl') || 'https://api.openai.com/v1',
-    aiModel: localStorage.getItem('aiModel') || 'deepseek-v4-flash',
+    aiProvider: (typeof window !== 'undefined' ? localStorage.getItem('aiProvider') : null) || 'glovix',
+    aiApiKey: (typeof window !== 'undefined' ? localStorage.getItem('aiApiKey') : null) || '',
+    aiBaseUrl: (typeof window !== 'undefined' ? localStorage.getItem('aiBaseUrl') : null) || 'https://api.openai.com/v1',
+    aiModel: (typeof window !== 'undefined' ? localStorage.getItem('aiModel') : null) || 'deepseek-v4-flash',
 
     // AI Provider Actions
     setAiProvider: (provider) => {
-        localStorage.setItem('aiProvider', provider);
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('aiProvider', provider);
+        } catch {}
         set({ aiProvider: provider });
     },
     setAiApiKey: (key) => {
-        localStorage.setItem('aiApiKey', key);
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('aiApiKey', key);
+        } catch {}
         set({ aiApiKey: key });
     },
     setAiBaseUrl: (url) => {
-        localStorage.setItem('aiBaseUrl', url);
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('aiBaseUrl', url);
+        } catch {}
         set({ aiBaseUrl: url });
     },
     setAiModel: (model) => {
-        localStorage.setItem('aiModel', model);
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('aiModel', model);
+        } catch {}
         set({ aiModel: model });
     },
 
     // Model Context Limit
-    modelContextLimit: parseInt(localStorage.getItem('modelContextLimit') || '200000'),
+    modelContextLimit: parseInt((typeof window !== 'undefined' ? localStorage.getItem('modelContextLimit') : null) || '200000'),
     setModelContextLimit: (modelContextLimit) => {
-        localStorage.setItem('modelContextLimit', String(modelContextLimit));
+        try {
+            if (typeof window !== 'undefined') localStorage.setItem('modelContextLimit', String(modelContextLimit));
+        } catch {}
         set({ modelContextLimit });
     },
 

@@ -16,18 +16,22 @@ const DEMO_USER: User = {
 export const getCurrentUser = async (): Promise<User | null> => {
     await new Promise(r => setTimeout(r, 100));
     
+    if (typeof window === 'undefined') {
+        return DEMO_USER;
+    }
+
     // Check if user exists in localStorage
-    const stored = localStorage.getItem('glovix_user');
-    if (stored) {
-        try {
+    try {
+        const stored = localStorage.getItem('glovix_user');
+        if (stored) {
             return JSON.parse(stored);
-        } catch {
-            // Invalid data, use demo user
         }
+        // Auto-login with demo user
+        localStorage.setItem('glovix_user', JSON.stringify(DEMO_USER));
+    } catch {
+        // Invalid data or storage error, use demo user
     }
     
-    // Auto-login with demo user
-    localStorage.setItem('glovix_user', JSON.stringify(DEMO_USER));
     return DEMO_USER;
 };
 
@@ -35,12 +39,16 @@ export const register = async (email: string, _password: string): Promise<User> 
     await new Promise(r => setTimeout(r, 200));
     
     const user: User = {
-        uid: crypto.randomUUID(),
+        uid: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `user-${Date.now()}`,
         email,
         photoURL: undefined
     };
     
-    localStorage.setItem('glovix_user', JSON.stringify(user));
+    try {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('glovix_user', JSON.stringify(user));
+        }
+    } catch {}
     return user;
 };
 
@@ -48,21 +56,28 @@ export const login = async (email: string, _password: string): Promise<User> => 
     await new Promise(r => setTimeout(r, 200));
     
     const user: User = {
-        uid: crypto.randomUUID(),
+        uid: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `user-${Date.now()}`,
         email,
         photoURL: undefined
     };
     
-    localStorage.setItem('glovix_user', JSON.stringify(user));
+    try {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('glovix_user', JSON.stringify(user));
+        }
+    } catch {}
     return user;
 };
 
 export const logout = async (): Promise<void> => {
     await new Promise(r => setTimeout(r, 100));
-    localStorage.removeItem('glovix_user');
-    
-    // Auto-login again with demo user
-    localStorage.setItem('glovix_user', JSON.stringify(DEMO_USER));
+    try {
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('glovix_user');
+            // Auto-login again with demo user
+            localStorage.setItem('glovix_user', JSON.stringify(DEMO_USER));
+        }
+    } catch {}
 };
 
 export const forgotPassword = async (_email: string): Promise<void> => {
