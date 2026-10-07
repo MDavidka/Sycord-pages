@@ -59,15 +59,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[20px] border border-[#232326] bg-[#121214] p-4 flex items-center justify-between">
+    <div className="rounded-[18px] sm:rounded-[22px] border border-border/80 bg-surface/90 p-3.5 sm:p-4.5 flex items-center justify-between">
       <div className="flex items-center gap-3.5 flex-1 min-w-0">
-        <Skeleton className="size-11 rounded-[14px] shrink-0 bg-[#1e1e24]" />
+        <Skeleton className="size-11 sm:size-12 rounded-[14px] shrink-0 bg-surface-raised" />
         <div className="space-y-1.5 flex-1 min-w-0">
-          <Skeleton className="h-4 w-32 bg-[#1e1e24] rounded-[6px]" />
-          <Skeleton className="h-3 w-24 bg-[#18181e] rounded-[4px]" />
+          <Skeleton className="h-4 w-32 bg-surface-raised rounded-[6px]" />
+          <Skeleton className="h-3 w-24 bg-surface-muted rounded-[4px]" />
         </div>
       </div>
-      <Skeleton className="h-8 w-16 rounded-[12px] bg-[#1e1e24] shrink-0 ml-3" />
+      <Skeleton className="h-8 w-16 rounded-[10px] bg-surface-raised shrink-0 ml-3" />
     </div>
   )
 }
@@ -219,13 +219,18 @@ function DashboardContent() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen md:ml-16 px-4 pt-6 pb-20 md:pb-6">
-        <div className="max-w-xl mx-auto space-y-6">
+      <div className="min-h-screen md:ml-16 px-4 pt-4 sm:pt-6 pb-24 md:pb-12">
+        <div className="max-w-2xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
-            <Skeleton className="size-8 rounded-full bg-zinc-800/80" />
+            <Skeleton className="h-7 w-28 bg-surface-raised rounded-md" />
+            <Skeleton className="size-8.5 rounded-full bg-surface-raised" />
           </div>
-          <Skeleton className="h-11 w-full rounded-[16px] bg-zinc-800/60" />
+          <div className="flex gap-2">
+            <Skeleton className="h-8.5 w-16 rounded-[12px] bg-surface-raised" />
+            <Skeleton className="h-8.5 w-24 rounded-[12px] bg-surface-raised" />
+            <Skeleton className="h-8.5 w-20 rounded-[12px] bg-surface-raised" />
+          </div>
+          <Skeleton className="h-11 sm:h-12 w-full rounded-[14px] sm:rounded-[16px] bg-surface-raised" />
           <div className="space-y-3">
             {[1, 2].map((i) => (
               <CardSkeleton key={i} />
@@ -247,12 +252,12 @@ function DashboardContent() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center space-y-6">
-          <div className="h-20 w-20 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
-            <TriangleAlert className="h-10 w-10 text-red-500" />
+          <div className="h-20 w-20 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+            <TriangleAlert className="h-10 w-10 text-destructive" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold mb-2">Account Unavailable</h1>
-            <p className="text-muted-foreground">Sycord is currently not available. Please contact support.</p>
+            <h1 className="text-2xl font-bold mb-2 text-foreground">Account Unavailable</h1>
+            <p className="text-text-muted">Sycord is currently not available. Please contact support.</p>
           </div>
           <div className="pt-4 space-y-3">
             <a
@@ -264,7 +269,7 @@ function DashboardContent() {
             <div>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="text-sm text-text-muted hover:text-foreground transition-colors cursor-pointer"
               >
                 Sign Out
               </button>
@@ -295,10 +300,10 @@ function DashboardContent() {
 
   return (
     <>
-      <div className="min-h-screen bg-background md:ml-16 text-foreground">
-        {/* Top Header */}
-        <header className="sticky top-0 bg-background/90 backdrop-blur-md z-50">
-          <div className="max-w-xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="min-h-screen bg-background md:ml-16 text-foreground antialiased selection:bg-surface-raised selection:text-foreground">
+        {/* Minimal Sticky Header */}
+        <header className="sticky top-0 bg-background/80 backdrop-blur-lg border-b border-border-subtle z-40">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
             <Link href="/" className="flex items-center focus:outline-none opacity-90 hover:opacity-100 transition-opacity">
               <Image
                 src="/brand-logo.png"
@@ -315,7 +320,7 @@ function DashboardContent() {
                 <button
                   type="button"
                   aria-label="User account menu"
-                  className="relative size-8 rounded-full bg-[#a855f7] flex items-center justify-center text-white font-semibold text-xs transition-transform active:scale-[0.95] outline-none cursor-pointer shadow-sm hover:brightness-105 overflow-hidden"
+                  className="relative size-8 sm:size-8.5 rounded-full bg-surface-raised hover:bg-surface-muted border border-border flex items-center justify-center text-foreground font-semibold text-xs transition-transform active:scale-[0.95] outline-none cursor-pointer shadow-xs overflow-hidden"
                 >
                   {session?.user?.image ? (
                     <img
@@ -324,7 +329,7 @@ function DashboardContent() {
                       className="size-full object-cover"
                     />
                   ) : (
-                    userInitials
+                    <span className="text-[#a855f7] font-bold">{userInitials}</span>
                   )}
                 </button>
               </DropdownMenuTrigger>
@@ -380,8 +385,8 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-xl mx-auto px-4 sm:px-6 pt-4 pb-16">
-          <div className="space-y-6">
+        <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6 pb-24 md:pb-12">
+          <div className="space-y-5 sm:space-y-6">
             {/* Announcements if any */}
             {announcements.length > 0 && (
               <div className="space-y-2">
@@ -407,16 +412,16 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Filter Pills matching exact reference image */}
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1">
+            {/* Filter Pills matching standard layered system */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
               <button
                 type="button"
                 onClick={() => setArtifactFilter("all")}
                 className={cn(
-                  "h-8 px-4 rounded-[12px] text-xs font-medium transition-all select-none cursor-pointer",
+                  "h-8.5 px-4 rounded-[12px] sm:rounded-[14px] text-xs sm:text-sm font-medium transition-all select-none cursor-pointer shrink-0",
                   artifactFilter === "all"
-                    ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
+                    ? "bg-foreground text-background font-semibold shadow-xs"
+                    : "bg-surface border border-border text-text-secondary hover:text-foreground hover:bg-surface-raised active:bg-surface-muted"
                 )}
               >
                 All
@@ -425,39 +430,39 @@ function DashboardContent() {
                 type="button"
                 onClick={() => setArtifactFilter("website")}
                 className={cn(
-                  "h-8 px-3.5 rounded-[12px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  "h-8.5 px-3.5 sm:px-4 rounded-[12px] sm:rounded-[14px] text-xs sm:text-sm font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer shrink-0",
                   artifactFilter === "website"
-                    ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
+                    ? "bg-foreground text-background font-semibold shadow-xs"
+                    : "bg-surface border border-border text-text-secondary hover:text-foreground hover:bg-surface-raised active:bg-surface-muted"
                 )}
               >
-                <Monitor className="size-3.5" strokeWidth={1.75} />
+                <Monitor className="size-3.5 sm:size-4" strokeWidth={1.75} />
                 <span>Websites</span>
               </button>
               <button
                 type="button"
                 onClick={() => setArtifactFilter("file")}
                 className={cn(
-                  "h-8 px-3.5 rounded-[12px] text-xs font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer",
+                  "h-8.5 px-3.5 sm:px-4 rounded-[12px] sm:rounded-[14px] text-xs sm:text-sm font-medium transition-all inline-flex items-center gap-1.5 select-none cursor-pointer shrink-0",
                   artifactFilter === "file"
-                    ? "bg-white text-black font-semibold shadow-sm"
-                    : "bg-[#18181a] border border-[#27272a] text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]"
+                    ? "bg-foreground text-background font-semibold shadow-xs"
+                    : "bg-surface border border-border text-text-secondary hover:text-foreground hover:bg-surface-raised active:bg-surface-muted"
                 )}
               >
-                <FileSpreadsheet className="size-3.5" strokeWidth={1.75} />
+                <FileSpreadsheet className="size-3.5 sm:size-4" strokeWidth={1.75} />
                 <span>Files</span>
               </button>
             </div>
 
-            {/* Inline Search Bar + Plus Button */}
-            <div className="flex items-center gap-3 pt-2">
-              <div className="relative flex-1">
+            {/* Inline Search Bar + Plus Button Row */}
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="relative flex-1 min-w-0">
                 <Input
                   type="text"
                   placeholder="Enter text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-11 sm:h-12 bg-[#121214] border border-[#26262a] hover:border-[#38383f] focus-visible:border-zinc-400 text-sm text-foreground rounded-[16px] px-4 placeholder:text-zinc-500 shadow-sm transition-colors"
+                  className="h-11 sm:h-12 bg-surface border border-border hover:border-border-strong focus-visible:border-border-strong focus-visible:ring-1 focus-visible:ring-border-strong text-foreground placeholder:text-text-muted rounded-[14px] sm:rounded-[16px] px-4 text-sm shadow-xs transition-colors"
                 />
               </div>
 
@@ -486,58 +491,58 @@ function DashboardContent() {
                   <button
                     type="button"
                     aria-label="Create or upload options"
-                    className="size-11 sm:size-12 rounded-[16px] bg-white hover:bg-zinc-200 text-black flex items-center justify-center shrink-0 shadow-sm transition-all active:scale-[0.96] outline-none cursor-pointer"
+                    className="size-11 sm:size-12 rounded-[14px] sm:rounded-[16px] bg-foreground hover:bg-foreground/90 text-background flex items-center justify-center shrink-0 shadow-xs transition-all active:scale-[0.95] outline-none cursor-pointer"
                   >
                     <Plus className="size-5" strokeWidth={2.2} />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-52 bg-[#18181a] border border-[#2a2a2e] text-[#EDEDED] rounded-[18px] p-1.5 shadow-2xl z-50"
+                  className="w-52 bg-surface border border-border text-foreground rounded-[18px] p-1.5 shadow-2xl z-50"
                 >
                   <DropdownMenuItem
                     onClick={() => router.push("/dashboard/create")}
-                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-surface-raised focus:bg-surface-raised cursor-pointer"
                   >
                     <Monitor className="size-4 text-sky-400" />
                     <span>Create website</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/[0.08]" />
+                  <DropdownMenuSeparator className="bg-border" />
                   <DropdownMenuItem
                     onClick={handleCreateFile}
-                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-surface-raised focus:bg-surface-raised cursor-pointer"
                   >
-                    <FilePlus className="size-4 text-zinc-400" />
+                    <FilePlus className="size-4 text-text-muted" />
                     <span>Create file</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={handleCreateFolder}
-                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-surface-raised focus:bg-surface-raised cursor-pointer"
                   >
-                    <FolderPlus className="size-4 text-zinc-400" />
+                    <FolderPlus className="size-4 text-text-muted" />
                     <span>Create folder</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/[0.08]" />
+                  <DropdownMenuSeparator className="bg-border" />
                   <DropdownMenuItem
                     onClick={() => fileUploadInputRef.current?.click()}
-                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-surface-raised focus:bg-surface-raised cursor-pointer"
                   >
-                    <Upload className="size-4 text-zinc-400" />
+                    <Upload className="size-4 text-text-muted" />
                     <span>Upload file</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => folderUploadInputRef.current?.click()}
-                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-white/[0.08] cursor-pointer"
+                    className="rounded-[10px] text-xs py-2 px-2.5 gap-2.5 hover:bg-surface-raised focus:bg-surface-raised cursor-pointer"
                   >
-                    <FolderUp className="size-4 text-zinc-400" />
+                    <FolderUp className="size-4 text-text-muted" />
                     <span>Upload folder</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
 
-            {/* Projects & Artifacts List (Nudged exactly like reference image) */}
-            <div className="space-y-3 pt-3">
+            {/* Projects & Artifacts List (Layered standard card styling) */}
+            <div className="space-y-3 pt-1 sm:pt-2">
               {isLoading ? (
                 <div className="space-y-3">
                   {[1, 2].map((i) => (
@@ -556,14 +561,14 @@ function DashboardContent() {
                     return (
                       <div
                         key={project._id}
-                        className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm"
+                        className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[22px] border border-border/80 bg-surface/90 hover:bg-surface hover:border-border-strong text-foreground p-3 sm:p-4 transition-all duration-150 shadow-xs active:scale-[0.99]"
                       >
                         <Link
                           href={`/dashboard/sites/${project._id}/syra`}
-                          className="flex items-center gap-3.5 min-w-0 flex-1 focus:outline-none"
+                          className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1 focus:outline-none"
                         >
                           {/* Octopus / Website Icon */}
-                          <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-sky-500/30 transition-colors">
+                          <div className="size-11 sm:size-12 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center shrink-0 overflow-hidden group-hover:border-border transition-colors">
                             {project.profileImage ? (
                               <img
                                 src={project.profileImage}
@@ -582,21 +587,21 @@ function DashboardContent() {
                             )}
                           </div>
 
-                          <div className="flex flex-col min-w-0">
-                            <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <h3 className="text-sm sm:text-base font-semibold text-foreground group-hover:text-foreground leading-snug truncate">
                               {project.businessName || "your project name"}
                             </h3>
-                            <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                            <span className="text-xs text-text-muted transition-colors truncate mt-0.5">
                               {displayDomain}
                             </span>
                           </div>
                         </Link>
 
                         {/* Action Menu */}
-                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2 sm:ml-3">
                           <Link
                             href={`/dashboard/sites/${project._id}/syra`}
-                            className="hidden sm:inline-flex items-center justify-center h-8 px-3.5 rounded-[12px] bg-[#1a1a1e] hover:bg-[#24242a] border border-[#2c2c32] text-xs font-medium text-zinc-300 hover:text-white transition-all active:scale-[0.97]"
+                            className="hidden sm:inline-flex items-center justify-center h-8 px-3 rounded-[10px] bg-surface-raised hover:bg-surface-muted border border-border text-xs font-medium text-text-secondary hover:text-foreground transition-all active:scale-[0.97]"
                           >
                             Open AI Chat
                           </Link>
@@ -607,21 +612,21 @@ function DashboardContent() {
                                 variant="ghost"
                                 size="icon"
                                 aria-label="Project options"
-                                className="size-8 rounded-[10px] text-zinc-400 hover:text-white hover:bg-[#202024]"
+                                className="size-8 sm:size-8.5 rounded-[10px] text-text-muted hover:text-foreground hover:bg-surface-raised transition-colors"
                               >
                                 <MoreHorizontal className="size-4" strokeWidth={1.75} />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                               align="end"
-                              className="w-40 bg-[#18181a] border border-[#2a2a2e] text-[#EDEDED] shadow-2xl rounded-[16px] p-1.5 z-50"
+                              className="w-40 bg-surface border border-border text-foreground shadow-2xl rounded-[16px] p-1.5 z-50"
                             >
                               <DropdownMenuItem asChild>
                                 <Link
                                   href={`/dashboard/sites/${project._id}`}
-                                  className="cursor-pointer flex items-center gap-2 text-xs hover:bg-white/[0.08] rounded-[10px] py-2 px-2.5 text-zinc-300 hover:text-white"
+                                  className="cursor-pointer flex items-center gap-2 text-xs hover:bg-surface-muted focus:bg-surface-muted rounded-[10px] py-2 px-2.5 text-text-secondary hover:text-foreground"
                                 >
-                                  <Settings className="size-3.5 text-zinc-400" strokeWidth={1.75} />
+                                  <Settings className="size-3.5 text-text-muted" strokeWidth={1.75} />
                                   <span>Settings</span>
                                 </Link>
                               </DropdownMenuItem>
@@ -631,19 +636,19 @@ function DashboardContent() {
                                     href={liveUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="cursor-pointer flex items-center gap-2 text-xs hover:bg-white/[0.08] rounded-[10px] py-2 px-2.5 text-zinc-300 hover:text-white"
+                                    className="cursor-pointer flex items-center gap-2 text-xs hover:bg-surface-muted focus:bg-surface-muted rounded-[10px] py-2 px-2.5 text-text-secondary hover:text-foreground"
                                   >
-                                    <ExternalLink className="size-3.5 text-zinc-400" strokeWidth={1.75} />
+                                    <ExternalLink className="size-3.5 text-text-muted" strokeWidth={1.75} />
                                     <span>Visit Live</span>
                                   </a>
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator className="bg-white/[0.08]" />
+                              <DropdownMenuSeparator className="bg-border" />
                               <DropdownMenuItem
                                 onClick={() => setProjectToDelete({ id: project._id, name: project.businessName || "Project" })}
-                                className="cursor-pointer flex items-center gap-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-[10px] py-2 px-2.5"
+                                className="cursor-pointer flex items-center gap-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 focus:bg-destructive/10 rounded-[10px] py-2 px-2.5"
                               >
-                                <Trash2 className="size-3.5 text-rose-400" strokeWidth={1.75} />
+                                <Trash2 className="size-3.5 text-destructive" strokeWidth={1.75} />
                                 <span>Delete</span>
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -657,10 +662,10 @@ function DashboardContent() {
                   {displayDemoProject && (
                     <div
                       onClick={() => router.push("/dashboard/create")}
-                      className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm cursor-pointer"
+                      className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[22px] border border-border/80 bg-surface/90 hover:bg-surface hover:border-border-strong text-foreground p-3 sm:p-4 transition-all duration-150 shadow-xs cursor-pointer active:scale-[0.99]"
                     >
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 overflow-hidden group-hover:border-sky-500/30 transition-colors">
+                      <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+                        <div className="size-11 sm:size-12 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center shrink-0 overflow-hidden group-hover:border-border transition-colors">
                           <div className="size-full flex items-center justify-center text-sky-400">
                             <svg className="size-6 text-sky-400 fill-current" viewBox="0 0 24 24">
                               <path d="M12 2a6 6 0 0 0-6 6v1c0 .6.4 1 1 1h.1c.5 0 .9-.4 1-.9.4-2.3 2.1-4.1 4.5-4.1s4.1 1.8 4.5 4.1c.1.5.5.9 1 .9h.1c.6 0 1-.4 1-1V8a6 6 0 0 0-6-6zm-7 9c-.6 0-1 .4-1 1v4c0 1.7 1.3 3 3 3 .6 0 1-.4 1-1s-.4-1-1-1c-.6 0-1-.4-1-1v-4c0-.6-.4-1-1-1zm14 0c-.6 0-1 .4-1 1v4c0 .6-.4 1-1 1s-1 .4-1 1c0 .6.4 1 1 1 1.7 0 3-1.3 3-3v-4c0-.6-.4-1-1-1zm-10 1c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm6 0c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1s1-.4 1-1v-5c0-.6-.4-1-1-1zm-3 1c-.6 0-1 .4-1 1v4c0 .6.4 1 1 1s1-.4 1-1v-4c0-.6-.4-1-1-1z" />
@@ -668,18 +673,18 @@ function DashboardContent() {
                           </div>
                         </div>
 
-                        <div className="flex flex-col min-w-0">
-                          <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <h3 className="text-sm sm:text-base font-semibold text-foreground group-hover:text-foreground leading-snug truncate">
                             your project name
                           </h3>
-                          <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                          <span className="text-xs text-text-muted transition-colors truncate mt-0.5">
                             test.sycord.site
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="inline-flex items-center justify-center h-8 px-3.5 rounded-[12px] bg-[#1a1a1e] group-hover:bg-[#24242a] border border-[#2c2c32] text-xs font-medium text-zinc-300 group-hover:text-white transition-all">
+                      <div className="flex items-center gap-2 shrink-0 ml-2 sm:ml-3">
+                        <span className="inline-flex items-center justify-center h-8 px-3 rounded-[10px] bg-surface-raised group-hover:bg-surface-muted border border-border text-xs font-medium text-text-secondary group-hover:text-foreground transition-all">
                           Create
                         </span>
                       </div>
@@ -690,10 +695,10 @@ function DashboardContent() {
                   {filteredCustomFiles.map((file) => (
                     <div
                       key={file.id}
-                      className="group relative flex items-center justify-between rounded-[20px] border border-[#232326] bg-[#121214] hover:bg-[#161619] hover:border-[#333338] text-foreground p-3.5 sm:p-4 transition-all duration-150 shadow-sm"
+                      className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[22px] border border-border/80 bg-surface/90 hover:bg-surface hover:border-border-strong text-foreground p-3 sm:p-4 transition-all duration-150 shadow-xs"
                     >
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        <div className="size-11 rounded-[14px] bg-[#181824] border border-[#272738] flex items-center justify-center shrink-0 text-zinc-300">
+                      <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+                        <div className="size-11 sm:size-12 rounded-[14px] bg-surface-raised border border-border-subtle flex items-center justify-center shrink-0 text-text-secondary">
                           {file.type === "spreadsheet" ? (
                             <FileSpreadsheet className="size-5 text-emerald-400" strokeWidth={1.8} />
                           ) : file.type === "folder" ? (
@@ -703,21 +708,21 @@ function DashboardContent() {
                           )}
                         </div>
 
-                        <div className="flex flex-col min-w-0">
-                          <h3 className="text-sm sm:text-base font-semibold text-zinc-100 group-hover:text-white transition-colors leading-tight truncate">
+                        <div className="flex flex-col min-w-0 pr-2">
+                          <h3 className="text-sm sm:text-base font-semibold text-foreground group-hover:text-foreground leading-snug truncate">
                             {file.name}
                           </h3>
-                          <span className="text-xs text-zinc-400 font-normal transition-colors truncate mt-0.5">
+                          <span className="text-xs text-text-muted transition-colors truncate mt-0.5">
                             {file.meta || "Connected File"}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <div className="flex items-center gap-2 shrink-0 ml-2 sm:ml-3">
                         <button
                           type="button"
                           onClick={() => setCustomFiles((prev) => prev.filter((f) => f.id !== file.id))}
-                          className="size-8 rounded-[10px] text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
+                          className="size-8 sm:size-8.5 rounded-[10px] text-text-muted hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors cursor-pointer"
                         >
                           <Trash2 className="size-4" strokeWidth={1.75} />
                         </button>
@@ -729,8 +734,8 @@ function DashboardContent() {
                   {!displayDemoProject &&
                     filteredProjects.length === 0 &&
                     filteredCustomFiles.length === 0 && (
-                      <div className="text-center py-12 border border-dashed border-[#26262a] rounded-[20px] p-6 bg-[#121214]/40">
-                        <p className="text-sm text-zinc-400">No projects or files found matching &quot;{searchQuery}&quot;</p>
+                      <div className="text-center py-12 border border-dashed border-border rounded-[20px] p-6 bg-surface/40">
+                        <p className="text-sm text-text-muted">No projects or files found matching &quot;{searchQuery}&quot;</p>
                         <button
                           type="button"
                           onClick={() => router.push("/dashboard/create")}
@@ -756,21 +761,21 @@ function DashboardContent() {
       )}
 
       <Dialog open={!!debugError} onOpenChange={(open) => !open && setDebugError(null)}>
-        <DialogContent className="sm:max-w-md border-red-200 bg-red-50 dark:bg-red-950/20">
+        <DialogContent className="sm:max-w-md border-destructive/20 bg-destructive/5 text-foreground">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <DialogTitle className="flex items-center gap-2 text-destructive">
               <TriangleAlert className="h-5 w-5" />
               Authentication Error
             </DialogTitle>
-            <DialogDescription className="text-red-600/90 dark:text-red-400/90">
+            <DialogDescription className="text-text-muted">
               An error occurred during authentication.
             </DialogDescription>
           </DialogHeader>
-          <div className="p-4 bg-white dark:bg-black/20 rounded-md border border-red-100 dark:border-red-900/50 font-mono text-sm break-all">
+          <div className="p-4 bg-surface rounded-md border border-border font-mono text-sm break-all">
             {debugError}
           </div>
           <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setDebugError(null)} className="border-red-200 hover:bg-red-100">
+            <Button variant="outline" onClick={() => setDebugError(null)} className="border-border hover:bg-surface-raised">
               Close
             </Button>
           </div>
@@ -778,15 +783,17 @@ function DashboardContent() {
       </Dialog>
 
       <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-surface border-border text-foreground">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this project?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-text-muted">
               This will permanently delete &quot;{projectToDelete?.name}&quot; and all its data. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting} className="border-border hover:bg-surface-raised">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
@@ -808,13 +815,13 @@ export default function DashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen md:ml-16 px-4 pt-6">
-          <div className="max-w-xl mx-auto space-y-6">
+        <div className="min-h-screen md:ml-16 px-4 pt-4 sm:pt-6 pb-24 md:pb-12">
+          <div className="max-w-2xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
-              <Skeleton className="h-6 w-28 bg-zinc-800/80" />
-              <Skeleton className="size-8 rounded-full bg-zinc-800/80" />
+              <Skeleton className="h-7 w-28 bg-surface-raised rounded-md" />
+              <Skeleton className="size-8.5 rounded-full bg-surface-raised" />
             </div>
-            <Skeleton className="h-11 w-full rounded-[16px] bg-zinc-800/60" />
+            <Skeleton className="h-11 sm:h-12 w-full rounded-[14px] sm:rounded-[16px] bg-surface-raised" />
             <div className="space-y-3">
               {[1, 2].map((i) => (
                 <CardSkeleton key={i} />
