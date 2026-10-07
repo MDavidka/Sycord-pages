@@ -3793,9 +3793,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (typeof fn === 'function') fn();
     };
 
-    const AstroAvatar = ({ className = "" }: { className?: string }) => (
-        <div className={`h-6 w-6 shrink-0 flex items-center justify-center ${className}`}>
-            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-contain rounded-full" />
+    const SyraAvatar = ({ className = "" }: { className?: string }) => (
+        <div className={`h-6 w-6 shrink-0 flex items-center justify-center rounded-full overflow-hidden ${className}`}>
+            <img
+                src="/logo.png"
+                alt="Syra"
+                className="h-full w-full object-contain rounded-full"
+                onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+            />
         </div>
     );
 
@@ -3971,8 +3978,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 >
                     {groupedMessages.length === 0 && !isRunning && (
                         <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
-                            <AstroAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
-                            <span className={`text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                            <SyraAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
+                            <span className={`text-[17px] sm:text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                                 Tell me how can i help you?
                             </span>
                         </div>
@@ -3986,7 +3993,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         let assistantText = '';
                         if (group.role === 'assistant') {
                             if (group.segments && group.segments.length > 0) {
-                                // Gather all text segment content
                                 const textSegs = group.segments.filter(s => s.type === 'text' && s.content);
                                 if (textSegs.length > 0) {
                                     assistantText = textSegs.map(s => typeof s.content === 'string' ? s.content : '').filter(Boolean).join('\n\n');
@@ -4020,9 +4026,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             </div>
                                         )}
                                         <div className="flex justify-end">
-                                            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
+                                            <div className="flex flex-col items-end max-w-[88%] sm:max-w-[75%]">
                                                 <div
-                                                    className={`text-[15px] leading-[1.5] break-words ${
+                                                    className={`text-[16px] sm:text-[15px] leading-[1.5] break-words ${
                                                         isDark
                                                             ? 'bg-[#1D1D1D] text-[#F5F5F5] rounded-[24px] px-4.5 py-3 border border-[#292929]'
                                                             : 'bg-zinc-100 text-zinc-900 rounded-[24px] px-4.5 py-3 border border-zinc-200/80'
@@ -4045,7 +4051,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                         </div>
                                                     )}
                                                     {group.content && (
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-[1.5] ${isDark ? 'prose-invert prose-pre:bg-[#131313] prose-pre:border prose-pre:border-[#292929] prose-pre:rounded-xl prose-code:text-[#F5F5F5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden text-[16px] sm:text-[15px] prose-p:my-1 prose-p:leading-[1.5] ${isDark ? 'prose-invert prose-pre:bg-[#131313] prose-pre:border prose-pre:border-[#292929] prose-pre:rounded-xl prose-code:text-[#F5F5F5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             {Array.isArray(group.content) ? (
                                                                 <div className="space-y-2">
                                                                     {group.content.map((part, i) => {
@@ -4062,7 +4068,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     )}
                                                 </div>
                                                 {group.createdAt && (
-                                                    <span className="text-[11px] text-[#737373] mt-1 px-1 tracking-tight font-mono">
+                                                    <span className="text-[12px] sm:text-[11px] text-[#737373] mt-1 px-1 tracking-tight font-mono">
                                                         {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                                                     </span>
                                                 )}
@@ -4073,8 +4079,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                                 {group.role === 'assistant' && (
                                     <div className="flex items-start gap-3 w-full">
-                                        <AstroAvatar className="mt-0.5 shrink-0" />
-                                        <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                        <SyraAvatar className="mt-0.5 shrink-0" />
+                                        <div className="flex-1 min-w-0 max-w-[680px] space-y-2.5">
                                             {/* Questions / Answered Questions */}
                                             {questionSegments.length > 0 && (
                                                 <div className="my-2 space-y-2">
@@ -4093,7 +4099,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                             );
                                                         }
                                                         return (
-                                                            <AgentQuestionCard
+                                                             <AgentQuestionCard
                                                                 key={q.id || `q-${qIdx}`}
                                                                 question={q}
                                                                 isDark={isDark}
@@ -4116,7 +4122,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 />
                                             )}
 
-                                            {/* Live single active tool indicator */}
+                                            {/* Live tools and actions rendered in separate discrete spaces */}
                                             {isLiveTurn && actions.length > 0 && (
                                                 <ActionsList
                                                     actions={actions.filter(a => a.toolName !== 'drawDiagram')}
@@ -4125,7 +4131,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 />
                                             )}
 
-                                            {/* Unified permanent assistant text response */}
+                                            {/* Past assistant actions if any */}
+                                            {!isLiveTurn && Array.isArray(group.agentActions) && group.agentActions.length > 0 && (
+                                                <ActionsList
+                                                    actions={group.agentActions.filter(a => a.toolName !== 'drawDiagram')}
+                                                    isLive={false}
+                                                    isDark={isDark}
+                                                />
+                                            )}
+
+                                            {/* Unified assistant text response */}
                                             {assistantText ? (
                                                 <StreamingResponse
                                                     status={isLiveTurn ? 'streaming' : 'complete'}
@@ -4133,12 +4148,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     showActions={!isLiveTurn}
                                                     className="w-full"
                                                 >
-                                                    <div className={`text-[15px] sm:text-[15.5px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-[#F5F5F5]' : 'text-gray-800'}`}>
+                                                    <div className={`text-[16px] sm:text-[15.5px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-[#F5F5F5]' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(assistantText)}
                                                     </div>
                                                 </StreamingResponse>
                                             ) : isLiveTurn && (!actions.length || actions.length === 0) && (!currentThinking || isSystemProcessingText(currentThinking)) ? (
-                                                <div className="flex items-center gap-2 text-[13.5px] text-[#737373] select-none py-0.5">
+                                                <div className="flex items-center gap-2 text-[14.5px] sm:text-[13.5px] text-[#737373] select-none py-0.5">
                                                     <Marker role="status" className="px-0">
                                                         <MarkerContent className="shimmer text-[#737373]">Thinking...</MarkerContent>
                                                     </Marker>
@@ -4166,7 +4181,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     {/* Live Thinking/Action fallback when no assistant message in list yet */}
                     {isRunning && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
                         <div className="flex items-start gap-3 w-full">
-                            <AstroAvatar className="mt-0.5 shrink-0" />
+                            <SyraAvatar className="mt-0.5 shrink-0" />
                             <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
                                 {currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) ? (
                                     <ThinkingBlock
@@ -4182,7 +4197,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         isDark={isDark}
                                     />
                                 ) : (
-                                    <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                    <div className="flex items-center gap-2 text-[14.5px] sm:text-[13.5px] text-zinc-400 select-none py-0.5">
                                         <Marker role="status" className="px-0">
                                             <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
                                         </Marker>

@@ -170,7 +170,7 @@ export function AstroDashboard() {
         <div className="relative mb-4">
           <div className="h-16 w-16 rounded-[22px] bg-gradient-to-tr from-[#3b1578] via-[#1f1b3e] to-[#12131a] border border-[#3f3b60]/50 flex items-center justify-center shadow-lg shadow-purple-950/20 overflow-hidden">
             <img
-              src="/astro-icon.png"
+              src="/logo.png"
               alt="Astro"
               className="h-full w-full object-cover"
               onError={(e) => {

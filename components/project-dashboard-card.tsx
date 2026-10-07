@@ -67,8 +67,7 @@ export function ProjectDashboardCard({
 }: ProjectDashboardCardProps) {
   const displayDomain = domain ? domain.replace(/^https?:\/\//, "") : "sycord.com"
   const displayUrl = domain ? (domain.startsWith("http") ? domain : `https://${domain}`) : "#"
-  const isAstro = framework === "astro" || style === "astro" || businessName.toLowerCase().includes("astro")
-  const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : null)
+  const resolvedIcon = profileImage || null
 
   return (
     <div className="group relative flex items-center justify-between rounded-[22px] border border-border/80 bg-surface/90 hover:bg-surface hover:border-border-strong text-foreground p-4 sm:p-5 transition-all duration-200 shadow-sm active:scale-[0.99]">
@@ -82,7 +81,7 @@ export function ProjectDashboardCard({
             <img
               src={resolvedIcon}
               alt={businessName}
-              className={isAstro ? "size-6 object-contain" : "size-full object-cover"}
+              className="size-full object-cover"
               onError={(e) => {
                 ;(e.currentTarget as HTMLElement).style.display = "none"
               }}

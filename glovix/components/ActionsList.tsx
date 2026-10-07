@@ -135,10 +135,9 @@ export function resolveActionMark(action: StreamingAction): ActionMarkData | nul
         };
     }
     if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push') || name.includes('github')) {
-        const isRepoList = name.includes('repo') || cmd.includes('repo') || name.includes('list');
         return {
             kind: 'github',
-            label: isRepoList ? 'fetching github repositories' : 'connecting to github',
+            label: 'accessing github information',
             detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : (args.repo ? String(args.repo) : 'GitHub repository sync')),
             badge: 'github',
             status: action.status === 'running' ? 'running' : 'completed',
@@ -279,6 +278,19 @@ export function resolveActionMark(action: StreamingAction): ActionMarkData | nul
     return null;
 }
 
+function formatActionTime(action: StreamingAction): string | null {
+    if (action.startedAt && action.completedAt && action.completedAt > action.startedAt) {
+        const diffSec = ((action.completedAt - action.startedAt) / 1000).toFixed(1);
+        return `${diffSec}s`;
+    }
+    if (action.startedAt && (action.status === 'running' || !action.status || action.status === 'pending')) {
+        const now = Date.now();
+        const diffSec = Math.max(0.1, (now - action.startedAt) / 1000).toFixed(1);
+        return `${diffSec}s`;
+    }
+    return null;
+}
+
 export const SingleActionIndicator = memo(function SingleActionIndicator({
     action,
     isDark = true,
@@ -291,41 +303,59 @@ export const SingleActionIndicator = memo(function SingleActionIndicator({
     const label = mark?.label || action.displayName || action.toolName;
     const isRunning = action.status === 'running' || !action.status || action.status === 'pending';
     const isRisk = Boolean(mark?.is_risk || mark?.kind === 'security_risk');
+    const timeText = formatActionTime(action);
 
     return (
-        <div className="flex items-center gap-2.5 text-[14px] text-zinc-400 select-none py-1 animate-fade-in">
-            {/* Gray Icon for all tools, or integration brand icon */}
-            <div className="shrink-0 flex items-center justify-center text-zinc-400">
-                {isRisk ? (
-                    <Ban className="size-4 text-red-400 shrink-0" />
-                ) : kind === 'gmail' || kind === 'google-drive' || kind === 'linear' || kind === 'slack' || kind === 'supabase' || kind === 'github' ? (
-                    <McpBrandIcon id={kind} className="size-4" />
-                ) : kind === 'server' ? (
-                    <Server className="size-4 text-zinc-400 shrink-0" />
-                ) : kind === 'browser' ? (
-                    <MousePointer className="size-4 text-zinc-400 shrink-0" />
-                ) : kind === 'cloud' ? (
-                    <Cloud className="size-4 text-zinc-400 shrink-0" />
-                ) : kind === 'scrape' || kind === 'search' ? (
-                    <Globe className="size-4 text-zinc-400 shrink-0" />
-                ) : kind === 'typecheck' || kind === 'validate' ? (
-                    <CheckCircle2 className="size-4 text-zinc-400 shrink-0" />
-                ) : kind === 'file' || kind === 'read' || kind === 'edit' ? (
-                    <FileText className="size-4 text-zinc-400 shrink-0" />
-                ) : (
-                    <SquareTerminal className="size-4 text-zinc-400 shrink-0" />
+        <div className="group flex items-center justify-between gap-3 px-3.5 py-2.5 sm:px-3 sm:py-2 rounded-xl border text-[15px] sm:text-[13.5px] select-none animate-fade-in transition-all bg-white/[0.03] border-white/[0.08]">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                {/* Gray Icon for all tools, or integration brand icon */}
+                <div className="shrink-0 flex items-center justify-center text-zinc-400">
+                    {isRisk ? (
+                        <Ban className="size-4.5 sm:size-4 text-red-400 shrink-0" />
+                    ) : kind === 'gmail' || kind === 'google-drive' || kind === 'linear' || kind === 'slack' || kind === 'supabase' || kind === 'github' ? (
+                        <McpBrandIcon id={kind} className="size-4.5 sm:size-4" />
+                    ) : kind === 'server' ? (
+                        <Server className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : kind === 'browser' ? (
+                        <MousePointer className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : kind === 'cloud' ? (
+                        <Cloud className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : kind === 'scrape' || kind === 'search' ? (
+                        <Globe className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : kind === 'typecheck' || kind === 'validate' ? (
+                        <CheckCircle2 className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : kind === 'file' || kind === 'read' || kind === 'edit' ? (
+                        <FileText className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    ) : (
+                        <SquareTerminal className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
+                    )}
+                </div>
+
+                {/* Label text */}
+                <span className={cn('font-medium tracking-tight text-[15px] sm:text-[13.5px]', isRisk ? 'text-red-400' : isDark ? 'text-zinc-200' : 'text-zinc-800')}>
+                    {label}
+                </span>
+
+                {mark?.detail && (
+                    <span className={cn('truncate text-[13px] sm:text-[12px] font-mono opacity-60 hidden xs:inline')}>
+                        {mark.detail}
+                    </span>
                 )}
             </div>
 
-            {/* Gray label text */}
-            <span className={cn('font-normal tracking-tight', isRisk ? 'text-red-400' : 'text-zinc-400')}>
-                {label}
-            </span>
-
-            {/* Subtle indicator */}
-            {isRunning && (
-                <span className="inline-block size-1.5 rounded-full bg-zinc-400 animate-pulse ml-0.5" />
-            )}
+            {/* Time / status indicators */}
+            <div className="flex items-center gap-2 shrink-0">
+                {timeText && (
+                    <span className="text-[12px] sm:text-[11px] font-mono text-zinc-400 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                        {timeText}
+                    </span>
+                )}
+                {isRunning ? (
+                    <span className="inline-block size-2 rounded-full bg-indigo-400 animate-pulse" />
+                ) : (
+                    <Check className="size-4 text-zinc-400" />
+                )}
+            </div>
         </div>
     );
 });
@@ -343,11 +373,12 @@ export const ActionMarkRow = memo(function ActionMarkRow({
     const isRunning = action.status === 'running' || mark.status === 'running';
     const isError = action.status === 'error' || mark.status === 'error';
     const isRisk = Boolean(mark.is_risk || mark.kind === 'security_risk');
+    const timeText = formatActionTime(action);
 
     return (
         <div
             className={cn(
-                'group flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-[13px] transition-all border select-none',
+                'group flex items-center justify-between gap-3 px-3.5 py-2.5 sm:px-3 sm:py-2 rounded-xl text-[15px] sm:text-[13px] transition-all border select-none',
                 isRisk
                     ? 'border-red-500/30 bg-red-500/10 text-red-400 font-medium'
                     : isDark
@@ -359,30 +390,30 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 {/* Visual Icon matching the exact kind in monochrome gray */}
                 <div className="shrink-0 flex items-center justify-center text-zinc-400">
                     {isRisk ? (
-                        <Ban className="size-4 text-red-500 shrink-0" />
+                        <Ban className="size-4.5 sm:size-4 text-red-500 shrink-0" />
                     ) : mark.kind === 'gmail' || mark.kind === 'google-drive' || mark.kind === 'linear' || mark.kind === 'slack' || mark.kind === 'supabase' || mark.kind === 'github' ? (
-                        <McpBrandIcon id={mark.kind} className="size-4" />
+                        <McpBrandIcon id={mark.kind} className="size-4.5 sm:size-4" />
                     ) : mark.kind === 'server' ? (
-                        <Server className="size-4 text-zinc-400 shrink-0" />
+                        <Server className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'browser' ? (
-                        <MousePointer className="size-4 text-zinc-400 shrink-0" />
+                        <MousePointer className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'cloud' ? (
-                        <Cloud className="size-4 text-zinc-400 shrink-0" />
+                        <Cloud className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'scrape' ? (
-                        <Globe className="size-4 text-zinc-400 shrink-0" />
+                        <Globe className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'typecheck' ? (
-                        <CheckCircle2 className="size-4 text-zinc-400 shrink-0" />
+                        <CheckCircle2 className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'file' ? (
-                        <FileText className="size-4 text-zinc-400 shrink-0" />
+                        <FileText className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     ) : (
-                        <SquareTerminal className="size-4 text-zinc-400 shrink-0" />
+                        <SquareTerminal className="size-4.5 sm:size-4 text-zinc-400 shrink-0" />
                     )}
                 </div>
 
                 {/* Mark Label */}
                 <span className={cn(
-                    'shrink-0 font-medium tracking-tight',
-                    isRisk ? 'text-red-400 font-semibold' : (isDark ? 'text-zinc-300' : 'text-zinc-700')
+                    'shrink-0 font-medium tracking-tight text-[15px] sm:text-[13.5px]',
+                    isRisk ? 'text-red-400 font-semibold' : (isDark ? 'text-zinc-200' : 'text-zinc-800')
                 )}>
                     {mark.label}
                 </span>
@@ -390,7 +421,7 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 {/* Optional Detail string */}
                 {mark.detail && (
                     <span className={cn(
-                        'truncate text-[12px] font-mono',
+                        'truncate text-[13px] sm:text-[12px] font-mono',
                         isRisk ? 'text-red-400/90' : (isDark ? 'text-zinc-500' : 'text-zinc-500')
                     )}>
                         {mark.detail}
@@ -398,17 +429,23 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 )}
             </div>
 
-            {/* Right side: Badge and Status indicator */}
+            {/* Right side: Time, Badge and Status indicator */}
             <div className="flex items-center gap-2 shrink-0">
+                {timeText && (
+                    <span className="text-[12px] sm:text-[11px] font-mono text-zinc-400 bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                        {timeText}
+                    </span>
+                )}
+
                 {mark.badge && (
                     mark.badge === 'starting' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] sm:text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
                             <span className="size-1.5 rounded-full bg-zinc-400 animate-pulse" />
                             starting
                         </span>
                     ) : (
                         <span className={cn(
-                            'px-2 py-0.5 rounded-md text-[11px] font-mono border',
+                            'px-2 py-0.5 rounded-md text-[12px] sm:text-[11px] font-mono border',
                             isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/60' : 'bg-zinc-100 text-zinc-600 border-zinc-200'
                         )}>
                             {mark.badge}
@@ -1032,12 +1069,22 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     }
 
     if (isLive) {
-        // Only 1 tool displayed during execution (the latest/active tool)
-        const activeAction = actions.slice().reverse().find(a => a.status === 'running' || a.status === 'pending') || actions[actions.length - 1];
-        if (!activeAction) return null;
+        if (actions.length === 1) {
+            return (
+                <div className="py-1">
+                    <SingleActionIndicator action={actions[0]} isDark={isDark} />
+                </div>
+            );
+        }
         return (
-            <div className="py-0.5">
-                <SingleActionIndicator action={activeAction} isDark={isDark} />
+            <div className="space-y-1.5 py-1">
+                {actions.map((action, idx) => (
+                    <ActionMarkRow
+                        key={action.id || `live-act-${idx}`}
+                        action={action}
+                        isDark={isDark}
+                    />
+                ))}
             </div>
         );
     }

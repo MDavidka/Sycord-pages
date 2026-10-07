@@ -79,8 +79,7 @@ export function WebsitePreviewCard({
     : ""
   const gitTimeAgo = formatTimeAgo(githubSavedAt || createdAt)
 
-  const isAstro = framework === "astro" || style === "astro" || businessName.toLowerCase().includes("astro")
-  const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : "/logo.png")
+  const resolvedIcon = profileImage || "/logo.png"
 
   return (
     <Card className="relative overflow-hidden bg-[#1c1d20] border-[#2a2a30] text-white rounded-[16px] transition-all duration-200 hover:border-zinc-600/60 hover:bg-[#222227] shadow-sm">

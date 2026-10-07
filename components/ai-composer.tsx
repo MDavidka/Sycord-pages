@@ -315,7 +315,7 @@ export function AiComposer({
                 <div className="flex items-start gap-2.5 sm:gap-3 w-full">
                   <div className="size-6 sm:size-7 shrink-0 flex items-center justify-center mt-0.5">
                     <img
-                      src="/astro-icon.png"
+                      src="/logo.png"
                       alt="Syra"
                       className="size-full object-contain rounded-full"
                       onError={(e) => {
@@ -324,7 +324,7 @@ export function AiComposer({
                     />
                   </div>
                   <div className="flex-1 min-w-0 max-w-[90%] sm:max-w-[680px]">
-                    <div className="text-[14px] sm:text-[15.5px] leading-[1.6] font-normal text-[#F5F5F5] break-words overflow-hidden whitespace-pre-wrap">
+                    <div className="text-[15px] sm:text-[15.5px] leading-[1.6] font-normal text-[#F5F5F5] break-words overflow-hidden whitespace-pre-wrap">
                       {m.content}
                     </div>
                   </div>
@@ -337,12 +337,12 @@ export function AiComposer({
             <div className="flex items-start gap-2.5 sm:gap-3 w-full">
               <div className="size-6 sm:size-7 shrink-0 flex items-center justify-center mt-0.5">
                 <img
-                  src="/astro-icon.png"
+                  src="/logo.png"
                   alt="Syra"
                   className="size-full object-contain rounded-full"
                 />
               </div>
-              <div className="flex items-center gap-2 text-[13px] text-[#737373] select-none py-1">
+              <div className="flex items-center gap-2 text-[14px] sm:text-[13px] text-[#737373] select-none py-1">
                 <span className="size-1.5 rounded-full bg-indigo-400 animate-pulse" />
                 <span>Syra is thinking...</span>
               </div>
