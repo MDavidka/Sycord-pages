@@ -252,6 +252,8 @@ export interface ModelBrowserViewProps {
   onSelectModel?: (modelId: string, modelObj?: OmniModelItem) => void
   projectId?: string
   isStandalone?: boolean
+  initialOpenCustomProvider?: boolean
+  initialTab?: string
 }
 
 export function ModelBrowserView({
@@ -260,6 +262,8 @@ export function ModelBrowserView({
   onSelectModel,
   projectId = "global",
   isStandalone = false,
+  initialOpenCustomProvider = false,
+  initialTab = "All",
 }: ModelBrowserViewProps) {
   const [models, setModels] = useState<OmniModelItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -273,12 +277,12 @@ export function ModelBrowserView({
     }
     return new Set(["anthropic/claude-3.5-sonnet", "openai/gpt-4o", "google/gemini-2.5-flash"])
   })
-  const [activeTab, setActiveTab] = useState<string>("All")
+  const [activeTab, setActiveTab] = useState<string>(initialTab)
   const [searchQuery, setSearchQuery] = useState("")
   const [inspectingModel, setInspectingModel] = useState<OmniModelItem | null>(null)
 
   // Custom Provider Settings State
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(Boolean(initialOpenCustomProvider))
   const [settingsTab, setSettingsTab] = useState<"add" | "saved">("add")
   const [savedProviders, setSavedProviders] = useState<CustomProviderRecord[]>([])
   const [cpName, setCpName] = useState("")
@@ -1595,6 +1599,8 @@ export interface SycordOmniRouterModalProps {
   }>
   isDark?: boolean
   onlyTurnedOn?: boolean
+  initialOpenCustomProvider?: boolean
+  initialTab?: string
 }
 
 export function SycordOmniRouterModal({
@@ -1603,6 +1609,8 @@ export function SycordOmniRouterModal({
   selectedModel,
   onSelectModel,
   projectId = "global",
+  initialOpenCustomProvider = false,
+  initialTab = "All",
 }: SycordOmniRouterModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1616,6 +1624,8 @@ export function SycordOmniRouterModal({
           selectedModel={selectedModel}
           onSelectModel={onSelectModel}
           projectId={projectId}
+          initialOpenCustomProvider={initialOpenCustomProvider}
+          initialTab={initialTab}
         />
       </DialogContent>
     </Dialog>

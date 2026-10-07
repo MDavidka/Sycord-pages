@@ -45,6 +45,7 @@ interface ModelEffortSelectorProps {
   modelChoices?: ModelChoiceItem[];
   onModelSelect?: (modelId: string) => void;
   onAddModelsClick?: () => void;
+  onOpenCustomProvider?: () => void;
   isDark?: boolean;
   className?: string;
 }
@@ -58,6 +59,7 @@ export function ModelEffortSelector({
   modelChoices = [],
   onModelSelect,
   onAddModelsClick,
+  onOpenCustomProvider,
   isDark = true,
   className,
 }: ModelEffortSelectorProps) {
@@ -335,6 +337,36 @@ export function ModelEffortSelector({
                 <ChevronRight className="size-3.5 text-[#737373]" />
               </div>
             </button>
+
+            {/* Row 4: Direct Custom Provider Settings Trigger */}
+            <div className="pt-1 mt-1 border-t border-[#292929] dark:border-[#292929] border-zinc-200">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenCustomProvider) {
+                    onOpenCustomProvider();
+                  } else {
+                    onAddModelsClick?.();
+                  }
+                  setActiveSubView("none");
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer",
+                  isDark
+                    ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
+                    : "text-zinc-800 hover:bg-zinc-100"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
+                  <span>Custom Provider</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                  + API
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Submenu Panel (Direct list, no back button, no search input) */}
@@ -397,8 +429,8 @@ export function ModelEffortSelector({
                     })}
                   </div>
 
-                  {/* Fresh space at bottom for + Add Models (Sycord Omni Route) */}
-                  <div className="pt-1 mt-1 border-t border-[#222222]">
+                  {/* Fresh space at bottom for + Add Models & Custom Provider */}
+                  <div className="pt-1 mt-1 border-t border-[#222222] space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
@@ -418,6 +450,31 @@ export function ModelEffortSelector({
                         <span>Add Models</span>
                       </div>
                       <span className="text-[9px] font-mono text-zinc-400 bg-[#202020] px-1 py-0.2 rounded border border-[#292929]">Omni</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onOpenCustomProvider) {
+                          onOpenCustomProvider();
+                        } else {
+                          onAddModelsClick?.();
+                        }
+                        setActiveSubView("none");
+                        setIsOpen(false);
+                      }}
+                      className={cn(
+                        "w-full text-left flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
+                        isDark
+                          ? "text-emerald-400 hover:text-emerald-300 hover:bg-[#1D1D1D]"
+                          : "text-emerald-600 hover:bg-zinc-100"
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
+                        <span>Add Custom Provider</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">+ API</span>
                     </button>
                   </div>
                 </div>

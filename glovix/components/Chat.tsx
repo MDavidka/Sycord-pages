@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock, Cpu, Settings, Layers } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, extractTextToolCalls, stripToolCallMarkup, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -3422,6 +3422,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showSlashMenu, setShowSlashMenu] = useState(false);
     const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
     const [showOmniModal, setShowOmniModal] = useState(false);
+    const [showOmniCustomProvider, setShowOmniCustomProvider] = useState(false);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
     const [showDebugModal, setShowDebugModal] = useState(false);
@@ -3865,11 +3866,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             )}
             <SycordOmniRouterModal
                 open={showOmniModal}
-                onOpenChange={setShowOmniModal}
+                onOpenChange={(open) => {
+                    setShowOmniModal(open);
+                    if (!open) setShowOmniCustomProvider(false);
+                }}
                 selectedModel={selectedModel}
                 projectId={hostProjectIdForSlash || 'global'}
                 isDark={isDark}
                 modelChoices={availableModelChoices || []}
+                initialOpenCustomProvider={showOmniCustomProvider}
+                initialTab={showOmniCustomProvider ? "Custom" : "All"}
                 onSelectModel={(modelId, modelObj) => {
                     const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
                     if (choice) {
@@ -4454,7 +4460,37 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                                         <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
 
-                                        {/* Segment 3: Debug Information */}
+                                        {/* Segment 3: Add Custom Provider */}
+                                        <DropdownMenuItem
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 focus:bg-emerald-500/10"
+                                            onSelect={() => {
+                                                if (input.startsWith("/")) setInput("");
+                                                setShowOmniCustomProvider(true);
+                                                setShowOmniModal(true);
+                                            }}
+                                        >
+                                            <Cpu className="h-3.5 w-3.5 text-emerald-400" />
+                                            Custom AI Provider
+                                            <span className="ml-auto text-[11px] font-mono text-emerald-400/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-[4px] border border-emerald-500/20">/provider</span>
+                                        </DropdownMenuItem>
+
+                                        {/* Segment 4: Model Library */}
+                                        <DropdownMenuItem
+                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
+                                            onSelect={() => {
+                                                if (input.startsWith("/")) setInput("");
+                                                setShowOmniCustomProvider(false);
+                                                setShowOmniModal(true);
+                                            }}
+                                        >
+                                            <Layers className="h-3.5 w-3.5 text-zinc-400" />
+                                            Model Library
+                                            <span className="ml-auto text-[11px] font-mono text-zinc-500">/models</span>
+                                        </DropdownMenuItem>
+
+                                        <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
+
+                                        {/* Segment 5: Debug Information */}
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={async () => {
@@ -4474,7 +4510,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             <span className="ml-auto text-[11px] font-mono text-zinc-500">/debug</span>
                                         </DropdownMenuItem>
 
-                                        {/* Segment 4: Support */}
+                                        {/* Segment 6: Support */}
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
@@ -4537,6 +4573,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         }).catch(() => {});
                                     }}
                                     onAddModelsClick={() => {
+                                        setShowOmniCustomProvider(false);
+                                        setShowOmniModal(true);
+                                    }}
+                                    onOpenCustomProvider={() => {
+                                        setShowOmniCustomProvider(true);
                                         setShowOmniModal(true);
                                     }}
                                     isDark={isDark}
