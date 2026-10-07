@@ -1,0 +1,49 @@
+/* Homepage-only polish. Arc tokens, imagery, content and scroll story stay intact. */
+main:has(> section header a[href="/contact"]) {
+  --landing-border: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --landing-rule: color-mix(in oklab, var(--foreground) 5%, transparent);
+  & h1, & h2 { letter-spacing: 0 !important; }
+  & header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; }
+  & header a { min-width: 0; }
+  & header a[href="/contact"] { min-height: 44px; flex-shrink: 0; border-color: var(--landing-border) !important; }
+  /* Replace decorative section boxes with the existing open page surface. */
+  & > section > div[class*="rounded-3xl"],
+  & > section > div[class*="rounded-[36px]"],
+  & > footer > div { border: none; border-radius: 0; padding-inline: 0; }
+  & > section [style*="border-color"] { border-color: var(--landing-border) !important; }
+  & > section [data-orientation="vertical"] > .border-b { padding-inline: 0; border-color: var(--landing-rule) !important; }
+  & > section button[aria-expanded] { min-height: 56px; gap: 1rem; }
+  & > section [role="region"] { line-height: 1.75; }
+  & > footer a { display: inline-flex; min-height: 44px; align-items: center; }
+  /* Keep the release link, but avoid covering the phone image or footer links. */
+  & > div.fixed:last-child { position: static; display: flex; justify-content: center; padding: 0 1.25rem max(1.5rem, env(safe-area-inset-bottom, 0px)); }
+  & > div.fixed:last-child a { min-height: 44px; }
+}
+@media (max-width: 767px) {
+  main:has(> section header a[href="/contact"]) {
+    & h1 { max-width: 100%; white-space: normal; overflow-wrap: break-word; text-wrap: balance; font-size: 34px; line-height: 1.15; }
+    & section:first-child h1 { margin-top: 0; }
+    & section:first-child .md\:hidden:has(> h1) { padding-top: 2.5rem; }
+    & > section[class*="pt-24"] { padding-top: 4rem; }
+    & > section[class*="pt-16"] { padding-top: 2.5rem; }
+    & > section h2 { font-size: 28px; line-height: 1.2; }
+    /* Stable prompt height when longer examples rotate on a narrow screen. */
+    & > section > .flex.justify-center > .transition-opacity { display: grid; grid-template-columns: auto minmax(0, 1fr); width: 100%; max-width: 36rem; min-height: 96px; }
+    & > section > .flex.justify-center > .transition-opacity > span { min-width: 0; overflow-wrap: break-word; line-height: 1.75; }
+    & > section > div[class*="rounded-[36px]"] { padding-block: 2.5rem; }
+    & > section > div[class*="rounded-[36px]"] > .flex { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 28rem; margin-inline: auto; }
+    & > section > div[class*="rounded-[36px]"] a { min-height: 44px; }
+    & > footer { margin-top: 4rem; }
+    & > footer > div > .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.5rem; }
+    & > footer > div > .grid > div:first-child { grid-column: span 2; }
+    & > footer ul { margin-top: 0.75rem; }
+  }
+}
+@media (max-width: 767px) and (max-height: 700px) {
+  main:has(> section header a[href="/contact"]) section:first-child .md\:hidden:has(> h1) { padding-top: 1.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  main:has(> section header a[href="/contact"]) *,
+  main:has(> section header a[href="/contact"]) *::before,
+  main:has(> section header a[href="/contact"]) *::after { animation: none !important; transition: none !important; }
+}
