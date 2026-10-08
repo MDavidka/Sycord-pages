@@ -102,7 +102,7 @@ export function safeJoin(root: string, rel: string): string {
 }
 
 /** True for files that must never be written into / read from the sandbox. */
-function isDisallowedFile(name: string): boolean {
+export function isDisallowedFile(name: string): boolean {
   if (!name) return true
   if (name.includes("..") || name.includes("\0")) return true
   if (path.isAbsolute(name)) return true

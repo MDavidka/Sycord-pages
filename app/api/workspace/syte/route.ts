@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
+import { isDisallowedFile } from "@/lib/workspace/sandbox"
 import {
   syteExecuteCommand,
   syteGetLogs,
@@ -215,7 +216,7 @@ export async function POST(req: Request): Promise<Response> {
       if (!path) {
         return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
       }
-      if (path.includes("..") || path.startsWith("/")) {
+      if (isDisallowedFile(path)) {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteReadFile(uuid, path)
@@ -231,7 +232,7 @@ export async function POST(req: Request): Promise<Response> {
       if (!path) {
         return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
       }
-      if (path.includes("..") || path.startsWith("/")) {
+      if (isDisallowedFile(path)) {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteWriteFile(uuid, path, content)
@@ -243,7 +244,7 @@ export async function POST(req: Request): Promise<Response> {
 
     case "list_files": {
       const path = typeof body.path === "string" ? body.path : ""
-      if (path.includes("..") || path.startsWith("/")) {
+      if (path !== "" && isDisallowedFile(path)) {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteListFiles(uuid, path)
