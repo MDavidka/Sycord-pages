@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock, Cpu, Settings, Layers } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft, Clock, Cpu, Settings, Layers, Lightbulb, Globe } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, extractTextToolCalls, stripToolCallMarkup, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -399,6 +399,81 @@ function ModelSelector({ selectedModel, choices, loading, error, onSelect, showM
             )}
         </div>
     )
+}
+
+export function ExactWorkingTimeline({
+    thinkingTime = 6,
+    toolLabel = "acessing web",
+    framingHeading = "Framing the question",
+    framingContent = "They want a pattern for the wait itself, not the final answer. The useful pa",
+}: {
+    thinkingTime?: number | string;
+    toolLabel?: string;
+    framingHeading?: string;
+    framingContent?: string;
+}) {
+    const [collapsed, setCollapsed] = useState(false);
+
+    return (
+        <div className="w-full max-w-[680px] py-2 text-left select-none font-sans">
+            {/* Step 1: Thinking Orb */}
+            <div
+                className="flex items-center gap-2.5 text-[14px] cursor-pointer"
+                onClick={() => setCollapsed(!collapsed)}
+            >
+                {/* Iridescent blue glowing orb */}
+                <div
+                    className="size-4 rounded-full shrink-0"
+                    style={{
+                        background: 'radial-gradient(circle at 35% 35%, #e0e7ff 0%, #818cf8 45%, #4f46e5 100%)',
+                        boxShadow: '0 0 10px rgba(99, 102, 241, 0.45)',
+                    }}
+                />
+                <span className="text-[#f4f4f5] font-normal tracking-tight">thinking</span>
+                <span className="text-[#71717a] font-normal text-[13.5px]">{typeof thinkingTime === 'number' ? `${thinkingTime}s` : thinkingTime}</span>
+                <ChevronDown className={cn("size-3.5 text-[#71717a] shrink-0 transition-transform duration-150", collapsed && "-rotate-90")} />
+            </div>
+
+            {!collapsed && (
+                <div className="mt-4 space-y-4">
+                    {/* Step 2: Accessing web */}
+                    <div className="relative pl-6">
+                        {/* Gray vertical connector line */}
+                        <div className="absolute left-[7px] top-[22px] bottom-[-8px] w-[1.5px] bg-[#27282d]" />
+
+                        <div className="flex items-center gap-2 text-[14px]">
+                            <Globe className="size-3.5 text-[#a1a1aa] shrink-0 absolute left-0 top-[3px]" />
+                            <span className="font-normal text-[#d4d4d8] tracking-tight">{toolLabel}</span>
+                        </div>
+
+                        {/* Two skeleton pill blocks */}
+                        <div className="flex items-center gap-2.5 mt-2.5">
+                            <div className="h-3.5 w-16 rounded-[5px] bg-[#24262b]" />
+                            <div className="h-3.5 w-16 rounded-[5px] bg-[#24262b]" />
+                        </div>
+                    </div>
+
+                    {/* Step 3: Framing the question */}
+                    <div className="relative pl-6">
+                        {/* Gray vertical connector line */}
+                        <div className="absolute left-[7px] top-[22px] bottom-0 w-[1.5px] bg-[#27282d]" />
+
+                        <div className="flex items-center gap-2 text-[14px]">
+                            <Lightbulb className="size-3.5 text-[#a1a1aa] shrink-0 absolute left-0 top-[3px]" />
+                            <span className="text-[#a1a1aa] font-normal tracking-tight">
+                                Framing the <span className="text-[#60a5fa]">question</span>
+                            </span>
+                        </div>
+
+                        {/* Thought snippet */}
+                        <div className="mt-2 text-[13.5px] text-[#e4e4e7] leading-[1.45] max-w-[500px]">
+                            {framingContent}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
@@ -3826,7 +3901,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#131313]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#0e0e10]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3914,81 +3989,63 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     void loadAvailableModels();
                 }}
             />
-            {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
-            {embedded && (
-                <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
-                    {/* Progressive blur — strongest at the very top, fading to clear so
-                        content scrolls smoothly underneath. Layered for a true gradient blur. */}
-                    <div className="absolute inset-0 -z-10" aria-hidden="true">
-                        <div
-                            className="absolute inset-0 backdrop-blur-[3px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)' }}
-                        />
-                        <div
-                            className="absolute inset-0 backdrop-blur-[10px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
-                        />
-                        <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#131313] via-[#131313]/85 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
-                        />
+            {/* Header: PanelLeft + project title + Eye + avatar */}
+            <header className="sticky top-0 left-0 right-0 z-30 bg-[#0e0e10]/95">
+                <div
+                    className="relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-5 pt-2"
+                    style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
+                >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        <button
+                            type="button"
+                            onClick={handleBack}
+                            aria-label="Toggle Sidebar or Go Back"
+                            className="flex size-8 items-center justify-center text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                        >
+                            <PanelLeft className="size-5" strokeWidth={1.8} />
+                        </button>
+
+                        <span className="text-[17px] font-semibold tracking-[-0.015em] truncate text-white">
+                            {hostProjectName || 'testbest'}
+                        </span>
                     </div>
 
-                    <div
-                        className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
-                        style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
-                    >
-                        <div className="flex items-center gap-2.5 min-w-0 z-10 relative">
-                            <button
-                                type="button"
-                                onClick={handleBack}
-                                aria-label="Toggle Sidebar or Go Back"
-                                className={`relative z-10 flex size-11 items-center justify-center rounded-[14px] transition-all active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900'}`}
-                            >
-                                <PanelLeft className="size-5" strokeWidth={1.75} />
-                            </button>
+                    <div className="flex items-center gap-3.5">
+                        <button
+                            type="button"
+                            onClick={() => onOpenPreview ? onOpenPreview() : undefined}
+                            aria-label="Open preview"
+                            title="Open preview"
+                            className="flex size-8 items-center justify-center text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                        >
+                            <Eye className="size-5" strokeWidth={1.8} />
+                        </button>
 
-                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-[#F5F5F5]' : 'text-gray-900'}`}>
-                                {hostProjectName || 'Test project'}
-                            </span>
-                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            {showPreviewButton && onOpenPreview && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenPreview}
-                                    aria-label="Open preview"
-                                    title="Open preview"
-                                    className={`flex size-11 items-center justify-center rounded-[14px] transition-colors active:scale-[0.97] ${isDark ? 'text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929]' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
-                                >
-                                    <Eye className="size-[18px]" strokeWidth={1.75} />
-                                </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowDeepMemory(true)}
+                            aria-label="Profile"
+                            className="flex size-8 items-center justify-center overflow-hidden rounded-full border border-white/10 shrink-0 cursor-pointer"
+                        >
+                            {profileImage && !profileImgError ? (
+                                <img
+                                    src={profileImage}
+                                    alt="Profile"
+                                    referrerPolicy="no-referrer"
+                                    onError={() => setProfileImgError(true)}
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <img
+                                    src="/placeholder-user.jpg"
+                                    alt="Profile"
+                                    className="h-full w-full object-cover"
+                                />
                             )}
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex size-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-[0.97] border ${isDark ? 'bg-[#1D1D1D] text-[#F5F5F5] border-[#292929]' : 'border-gray-300 bg-black/[0.05] text-gray-900'}`}
-                            >
-                                {profileImage && !profileImgError ? (
-                                    <img
-                                        src={profileImage}
-                                        alt="Profile"
-                                        referrerPolicy="no-referrer"
-                                        onError={() => setProfileImgError(true)}
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : (
-                                    <span className="text-sm font-semibold">
-                                        {(user?.email?.[0] || 'M').toUpperCase()}
-                                    </span>
-                                )}
-                            </button>
-                        </div>
+                        </button>
                     </div>
-                </header>
-            )}
+                </div>
+            </header>
 
             {/* Messages Area */}
             <div
@@ -4001,11 +4058,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.length === 0 && !isRunning && (
-                        <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
-                            <SyraAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
-                            <span className={`text-[17px] sm:text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
-                                Tell me how can i help you?
-                            </span>
+                        <div className="pt-24 pb-4 flex flex-col justify-end min-h-[380px]">
+                            <ExactWorkingTimeline
+                                thinkingTime={6}
+                                toolLabel="acessing web"
+                                framingHeading="Framing the question"
+                                framingContent="They want a pattern for the wait itself, not the final answer. The useful pa"
+                            />
                         </div>
                     )}
 
@@ -4204,30 +4263,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     {/* Live Thinking/Action fallback when no assistant message in list yet */}
                     {isRunning && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <div className="flex items-start gap-3 w-full">
-                            <SyraAvatar className="mt-0.5 shrink-0" />
-                            <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
-                                {currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) ? (
-                                    <ThinkingBlock
-                                        thinking={currentThinking}
-                                        isDark={isDark}
-                                        startTime={thinkingStartTime}
-                                        effortLevel={effortLevel}
-                                    />
-                                ) : actions.length > 0 ? (
-                                    <ActionsList
-                                        actions={actions.filter(a => a.toolName !== 'drawDiagram')}
-                                        isLive={true}
-                                        isDark={isDark}
-                                    />
-                                ) : (
-                                    <div className="flex items-center gap-2 text-[14.5px] sm:text-[13.5px] text-zinc-400 select-none py-0.5">
-                                        <Marker role="status" className="px-0">
-                                            <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
-                                        </Marker>
-                                    </div>
-                                )}
-                            </div>
+                        <div className="w-full">
+                            <ExactWorkingTimeline
+                                thinkingTime={thinkingStartTime ? Math.max(1, Math.round((Date.now() - thinkingStartTime) / 1000)) : 6}
+                                toolLabel={actions[0]?.displayName || actions[0]?.toolName || "acessing web"}
+                                framingHeading="Framing the question"
+                                framingContent={currentThinking || "They want a pattern for the wait itself, not the final answer. The useful pa"}
+                            />
                         </div>
                     )}
 
@@ -4321,10 +4363,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-3 transition-all ${
-                            pendingQuestion ? 'py-1.5' : 'pt-2 pb-2.5'
-                        } ${isDark ? 'bg-[#171717] border-[#292929] focus-within:border-[#383838]' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
+                        {/* Composer card */}
+                        <div className={`rounded-[28px] border px-4 pt-3.5 pb-3 transition-all ${
+                            pendingQuestion ? 'py-1.5' : ''
+                        } ${isDark ? 'bg-[#161719] border-[#242529]' : 'bg-zinc-100 border-zinc-200/80 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4347,14 +4389,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             ? "AI is working on your task..."
                                             : "Help you write code, debug and ship production-ready work. Type / for skills & integrations."
                                     }
-                                    className={`w-full bg-transparent text-[15px] sm:text-[15.5px] leading-[1.5] px-3 pt-2 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${
+                                    className={`w-full bg-transparent text-[14.5px] sm:text-[15px] leading-[1.5] px-1 pt-1 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[140px] ${
                                         isRunning
-                                            ? 'cursor-not-allowed text-[#737373] placeholder:text-[#737373]'
+                                            ? 'cursor-not-allowed text-[#71717a] placeholder:text-[#52525b]'
                                             : isDark
-                                            ? 'text-[#F5F5F5] placeholder:text-[#737373]'
+                                            ? 'text-[#f4f4f5] placeholder:text-[#52525b]'
                                             : 'text-gray-900 placeholder:text-gray-400'
                                     }`}
-                                    style={{ height: 'auto', minHeight: isRunning ? '44px' : '76px' }}
+                                    style={{ height: 'auto', minHeight: isRunning ? '44px' : '64px' }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape' && showSlashMenu) {
                                             e.preventDefault();
@@ -4370,7 +4412,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             )}
 
                             {/* Toolbar */}
-                            <div className={`flex items-center gap-2 ${pendingQuestion ? 'px-0.5' : 'px-1'}`}>
+                            <div className={`flex items-center gap-2 pt-1 ${pendingQuestion ? 'px-0.5' : ''}`}>
                                 <DropdownMenu open={showSlashMenu} onOpenChange={(open) => {
                                     setShowSlashMenu(open);
                                     if (open) {
@@ -4383,9 +4425,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-[12px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#292929] bg-[#1D1D1D] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
+                                            className={`flex size-9 items-center justify-center rounded-[14px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#2c2d33] bg-[#212226] text-zinc-400 hover:text-white hover:bg-[#28292f]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900'}`}
                                         >
-                                            <Slash className="h-3.5 w-3.5" />
+                                            <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                                            </svg>
                                         </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
@@ -4591,7 +4635,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         aria-label="Voice input"
                                         aria-pressed={isListening}
                                         onClick={handleVoiceInput}
-                                        className={`flex size-10 items-center justify-center rounded-[12px] transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
+                                        className={`flex size-9 items-center justify-center rounded-full transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : 'text-[#71717a] hover:text-[#d4d4d8]'}`}
                                     >
                                         <Mic className={`size-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
@@ -4601,22 +4645,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex size-10 flex-shrink-0 items-center justify-center rounded-full bg-[#F5F5F5] text-[#131313] transition-all active:scale-[0.97] hover:bg-white"
+                                            className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-[#27282d] text-[#e4e4e7] transition-all active:scale-[0.97] hover:bg-[#323339]"
                                         >
-                                            <div className="size-3 rounded-sm bg-[#131313]" />
+                                            <div className="size-2.5 rounded-sm bg-[#e4e4e7]" />
                                         </button>
                                     ) : (
                                         <button
                                             type="submit"
                                             disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
                                             aria-label="Send"
-                                            className={`flex size-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-[0.97] disabled:cursor-not-allowed ${
-                                                !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-[#F5F5F5] text-[#131313] hover:bg-white'
-                                                    : isDark ? 'bg-[#202020] text-[#737373] border border-[#292929]' : 'bg-zinc-200 text-zinc-400'
-                                            }`}
+                                            className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-[#27282d] text-[#71717a] hover:text-white transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
-                                            <ArrowUp className="size-5" strokeWidth={2.25} />
+                                            <ArrowUp className="size-4.5" strokeWidth={2.2} />
                                         </button>
                                     )}
                                 </div>

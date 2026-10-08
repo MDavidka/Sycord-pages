@@ -70,6 +70,7 @@ export function ModelEffortSelector({
   // Default models if choices are empty
   const defaultModels: ModelChoiceItem[] = useMemo(
     () => [
+      { id: "qwen-3-235b", label: "Qwen 3 235B", apiModel: "qwen-3-235b" },
       { id: "syra-base", label: "Ara Medium", apiModel: "syra-base" },
       { id: "syra-havy", label: "Ara High", apiModel: "syra-havy" },
       { id: "syra-ultra", label: "Ara Extra High", apiModel: "syra-ultra" },
