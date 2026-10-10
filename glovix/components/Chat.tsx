@@ -3902,7 +3902,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#0e0e10]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#131313]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3991,7 +3991,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }}
             />
             {/* Header: PanelLeft + project title + Eye + avatar */}
-            <header className="sticky top-0 left-0 right-0 z-30 bg-[#0e0e10]/95">
+            <header className="sticky top-0 left-0 right-0 z-30 bg-[#131313]/95">
                 <div
                     className="relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-5 pt-2"
                     style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
