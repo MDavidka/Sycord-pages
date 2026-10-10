@@ -1003,6 +1003,7 @@ export function ModelBrowserView({
         name: trimmedName,
         provider: providerSlug,
         base_url: trimmedUrl,
+        api_key: cpApiKey.trim(),
         api_key_masked: cpApiKey ? `${cpApiKey.slice(0, 4)}...${cpApiKey.slice(-4)}` : "",
         models: stagedModelsList,
         created_at: new Date().toISOString(),

@@ -82,12 +82,44 @@ export function AstroDashboard() {
     setIsSending(true)
 
     try {
+      let customProviderPayload: { base_url: string; api_key?: string; provider?: string } | null = null
+      if (typeof window !== "undefined") {
+        try {
+          const rawCp = localStorage.getItem("sycord_custom_providers")
+          if (rawCp) {
+            const list: any[] = JSON.parse(rawCp)
+            if (Array.isArray(list)) {
+              const matched = list.find((p) => {
+                const slug = (p.provider || "").toLowerCase()
+                const mLower = (selectedModel || "").toLowerCase()
+                if (slug && mLower.startsWith(`${slug}/`)) return true
+                if (Array.isArray(p.models)) {
+                  return p.models.some((m: string) => {
+                    const mStr = String(m).toLowerCase()
+                    return mStr === mLower || `${slug}/${mStr}` === mLower
+                  })
+                }
+                return false
+              })
+              if (matched && matched.base_url) {
+                customProviderPayload = {
+                  base_url: matched.base_url,
+                  api_key: matched.api_key || "",
+                  provider: matched.provider || matched.name,
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: selectedModel,
           messages: [{ role: "user", content: input }],
+          ...(customProviderPayload ? { custom_provider: customProviderPayload } : {}),
         }),
       })
 

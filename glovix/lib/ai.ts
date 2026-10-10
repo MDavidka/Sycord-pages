@@ -633,6 +633,38 @@ async function _sendMessageInternal(
     const savedEffort = typeof window !== "undefined" ? localStorage.getItem("syra_effort_level") : null;
     const effectiveEffort = savedEffort || "extra_high";
 
+    // Look up custom provider config if actualModelId belongs to a custom provider
+    let customProviderPayload: { base_url: string; api_key?: string; provider?: string } | null = null;
+    if (typeof window !== "undefined") {
+        try {
+            const rawCp = localStorage.getItem("sycord_custom_providers");
+            if (rawCp) {
+                const providersList: any[] = JSON.parse(rawCp);
+                if (Array.isArray(providersList)) {
+                    const matched = providersList.find((p) => {
+                        const slug = (p.provider || "").toLowerCase();
+                        const modelLower = actualModelId.toLowerCase();
+                        if (slug && modelLower.startsWith(`${slug}/`)) return true;
+                        if (Array.isArray(p.models)) {
+                            return p.models.some((m: string) => {
+                                const mStr = String(m).toLowerCase();
+                                return mStr === modelLower || `${slug}/${mStr}` === modelLower;
+                            });
+                        }
+                        return false;
+                    });
+                    if (matched && matched.base_url) {
+                        customProviderPayload = {
+                            base_url: matched.base_url,
+                            api_key: matched.api_key || "",
+                            provider: matched.provider || matched.name,
+                        };
+                    }
+                }
+            }
+        } catch {}
+    }
+
     // Build request body
     const requestBody: any = {
         model: actualModelId,
@@ -643,6 +675,7 @@ async function _sendMessageInternal(
         max_tokens: maxTokens,
         thinking_level: effectiveEffort,
         reasoning_effort: effectiveEffort === 'low' ? 'low' : effectiveEffort === 'medium' ? 'medium' : 'high',
+        ...(customProviderPayload ? { custom_provider: customProviderPayload } : {}),
     };
 
     // Create abort controller that combines user signal + our timeout

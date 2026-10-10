@@ -392,3 +392,189 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
     },
   })
 }
+
+export interface StreamCustomProviderOptions extends StreamVercelAiOptions {
+  baseUrl: string
+  apiKey?: string
+  providerName?: string
+}
+
+/**
+ * Streams chat completions directly through a custom provider's own API endpoint
+ * instead of the basic Vercel gateway.
+ */
+export async function streamCustomAiProvider(options: StreamCustomProviderOptions): Promise<Response> {
+  const model = options.model || "default"
+  const encoder = new TextEncoder()
+
+  // Clean / normalize endpoint URL
+  let targetUrl = options.baseUrl.trim()
+  if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+    targetUrl = `https://${targetUrl}`
+  }
+  targetUrl = targetUrl.replace(/\/+$/, "")
+  if (!targetUrl.endsWith("/chat/completions")) {
+    targetUrl = `${targetUrl}/chat/completions`
+  }
+
+  // 4.3 HTTP 400 Guard: Sanitize message chain
+  const sanitizedMessages = (options.messages || [])
+    .filter((m) => {
+      if (!m) return false
+      if (m.role === "tool" || (m.tool_calls && m.tool_calls.length > 0)) return true
+      if (typeof m.content === "string") return m.content.trim().length > 0
+      if (Array.isArray(m.content)) return m.content.length > 0
+      return m.content !== null && m.content !== undefined
+    })
+
+  const hasUserMessage = sanitizedMessages.some((m) => m.role === "user")
+  if (!hasUserMessage && sanitizedMessages.length > 0 && sanitizedMessages[0].role === "assistant") {
+    sanitizedMessages.unshift({ role: "user", content: "Continue" })
+  }
+
+  const requestBody: Record<string, any> = {
+    model,
+    messages: sanitizedMessages.length > 0 ? sanitizedMessages : [{ role: "user", content: "Hello" }],
+    temperature: options.temperature ?? 0.7,
+    max_tokens: options.max_tokens ?? 16384,
+    stream: true,
+    ...(options.tools && Array.isArray(options.tools) && options.tools.length > 0
+      ? { tools: options.tools, tool_choice: "auto" }
+      : {}),
+  }
+
+  if (options.thinking_level) {
+    requestBody.thinking_level = options.thinking_level
+  }
+  if (options.reasoning_effort) {
+    requestBody.reasoning_effort = options.reasoning_effort
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false
+      const enqueue = (chunk: Uint8Array) => {
+        if (!closed) controller.enqueue(chunk)
+      }
+      const sendEvent = (data: string) => enqueue(encoder.encode(`data: ${data}\n\n`))
+      const done = () => {
+        if (closed) return
+        sendEvent("[DONE]")
+        closed = true
+        controller.close()
+      }
+
+      enqueue(encoder.encode(": custom-provider-stream-ready\n\n"))
+      const keepaliveTimer = setInterval(() => {
+        if (!closed) {
+          enqueue(encoder.encode(": ping\n\n"))
+        }
+      }, 15000)
+
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          "Accept-Encoding": "identity",
+        }
+        if (options.apiKey && options.apiKey.trim()) {
+          headers["Authorization"] = `Bearer ${options.apiKey.trim()}`
+        }
+
+        const res = await fetch(targetUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody),
+          cache: "no-store",
+          signal: options.signal
+            ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
+            : AbortSignal.timeout(180_000),
+        })
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => `HTTP ${res.status}`)
+          const providerLabel = options.providerName || "Custom Provider"
+          const actionableMessage = `[${providerLabel} hiba / Error] ${res.status}: ${errText}`
+
+          sendEvent(
+            JSON.stringify({
+              id: `chatcmpl-${Date.now()}`,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: `\n\n${actionableMessage}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }),
+          )
+          done()
+          return
+        }
+
+        if (!res.body) {
+          throw new Error(`No response body from ${options.providerName || "custom provider"}`)
+        }
+
+        const reader = res.body.getReader()
+        try {
+          while (!options.signal?.aborted) {
+            const { done: streamDone, value } = await reader.read()
+            if (streamDone) break
+            if (value && value.byteLength > 0) {
+              enqueue(value)
+            }
+          }
+        } finally {
+          if (options.signal?.aborted) {
+            await reader.cancel().catch(() => undefined)
+          }
+          reader.releaseLock()
+        }
+        done()
+      } catch (err: any) {
+        if (options.signal?.aborted) {
+          if (!closed) {
+            closed = true
+            controller.close()
+          }
+          return
+        }
+        if (!closed) {
+          sendEvent(
+            JSON.stringify({
+              id: `chatcmpl-${Date.now()}`,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: `\n\n[${options.providerName || "Custom Provider"} error] ${err?.message || "Stream terminated unexpectedly"}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }),
+          )
+          done()
+        }
+      } finally {
+        clearInterval(keepaliveTimer)
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-store, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+      "Content-Encoding": "identity",
+    },
+  })
+}
+

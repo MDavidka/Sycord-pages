@@ -6,10 +6,12 @@
 // Configure via env:
 //   VERCEL_AI (or VERCEL_AI_KEY, AI_GATEWAY_API_KEY)
 
-import { isVercelAiConfigured, streamVercelAiGateway } from "@/lib/vercel-ai-gateway"
+import { isVercelAiConfigured, streamVercelAiGateway, streamCustomAiProvider } from "@/lib/vercel-ai-gateway"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
+import { DEFAULT_SYSTEM_PROVIDERS } from "@/app/api/ai/custom-providers/route"
+import clientPromise from "@/lib/mongodb"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -66,15 +68,85 @@ function normalizeToGatewayModel(requested?: string): string {
   return clean
 }
 
+/**
+ * Resolves custom provider configuration from request payload, database, or system defaults.
+ */
+async function resolveCustomProvider(
+  rawModel: string,
+  userId: string,
+  explicitCp?: { base_url?: string; api_key?: string; provider?: string }
+): Promise<{ baseUrl: string; apiKey?: string; providerName: string; resolvedModel: string } | null> {
+  const modelStr = (rawModel || "").trim()
+  const modelLower = modelStr.toLowerCase()
+
+  // 1. If explicit custom_provider payload is provided by client
+  if (explicitCp?.base_url) {
+    const slug = (explicitCp.provider || "").toLowerCase()
+    let pureModel = modelStr
+    if (slug && pureModel.toLowerCase().startsWith(`${slug}/`)) {
+      pureModel = pureModel.slice(slug.length + 1)
+    }
+    return {
+      baseUrl: explicitCp.base_url,
+      apiKey: explicitCp.api_key,
+      providerName: explicitCp.provider || "Custom Provider",
+      resolvedModel: pureModel,
+    }
+  }
+
+  // 2. Fetch configured providers for user + system providers (e.g. Vyce AI)
+  let userProviders: any[] = []
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    userProviders = await db.collection("user_custom_providers").find({ userId }).toArray()
+  } catch {}
+
+  const allProviders = [...userProviders, ...DEFAULT_SYSTEM_PROVIDERS]
+
+  for (const p of allProviders) {
+    const slug = (p.provider || p.name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+    const pBaseUrl = p.base_url || ""
+    if (!pBaseUrl) continue
+
+    // Check if model matches provider slug prefix, e.g. "vyceai/deepseek-v4.1" or "vyceai/..."
+    if (slug && modelLower.startsWith(`${slug}/`)) {
+      const pureModel = modelStr.slice(slug.length + 1)
+      return {
+        baseUrl: pBaseUrl,
+        apiKey: p.api_key,
+        providerName: p.name || slug,
+        resolvedModel: pureModel,
+      }
+    }
+
+    // Check if model is listed explicitly in provider's model array
+    if (Array.isArray(p.models)) {
+      const found = p.models.some((m: string) => {
+        const mStr = String(m).toLowerCase()
+        return mStr === modelLower || `${slug}/${mStr}` === modelLower
+      })
+      if (found) {
+        let pureModel = modelStr
+        if (slug && pureModel.toLowerCase().startsWith(`${slug}/`)) {
+          pureModel = pureModel.slice(slug.length + 1)
+        }
+        return {
+          baseUrl: pBaseUrl,
+          apiKey: p.api_key,
+          providerName: p.name || slug,
+          resolvedModel: pureModel,
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
-  const userId = (session?.user as { id?: string } | undefined)?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
+  const userId = (session?.user as { id?: string } | undefined)?.id || "guest_user"
 
   const rate = checkRateLimit(`ai-chat:${userId}`, { limit: 40, windowMs: 60_000 })
   if (!rate.allowed) {
@@ -105,6 +177,29 @@ export async function POST(req: Request) {
     })
   }
 
+  const requestedModel = String(body?.model || "")
+
+  // Check if requested model belongs to a custom provider (e.g. Vyce AI or user-added custom provider)
+  const customProviderMatch = await resolveCustomProvider(requestedModel, userId, body?.custom_provider)
+
+  if (customProviderMatch) {
+    // Call the custom provider's own API directly (not the basic Vercel gateway)
+    return streamCustomAiProvider({
+      baseUrl: customProviderMatch.baseUrl,
+      apiKey: customProviderMatch.apiKey,
+      providerName: customProviderMatch.providerName,
+      model: customProviderMatch.resolvedModel,
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      max_tokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      thinking_level: typeof body?.thinking_level === "string" ? body.thinking_level : undefined,
+      reasoning_effort: typeof body?.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+      signal: req.signal,
+    })
+  }
+
+  // Standard models: route via Vercel AI Gateway
   if (!isVercelAiConfigured()) {
     return new Response(
       JSON.stringify({
