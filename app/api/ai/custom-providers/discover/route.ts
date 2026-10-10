@@ -13,9 +13,7 @@ export const maxDuration = 30
  */
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
-  }
+  const userId = session?.user?.id || "guest_user"
 
   let body: any
   try {

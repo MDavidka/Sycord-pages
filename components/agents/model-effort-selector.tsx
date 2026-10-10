@@ -332,24 +332,17 @@ export function ModelEffortSelector({
               </div>
             </button>
 
-            {/* Row 3: Model + Subtrigger */}
+            {/* Row 3: Model - Clicking instantly opens model library popup */}
             <button
               type="button"
-              onClick={() =>
-                setActiveSubView((prev) => (prev === "models" ? "none" : "models"))
-              }
-              onMouseEnter={() => {
-                if (typeof window !== "undefined" && window.innerWidth >= 640) {
-                  setActiveSubView("models");
-                }
+              onClick={() => {
+                onAddModelsClick?.();
+                setActiveSubView("none");
+                setIsOpen(false);
               }}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer",
-                activeSubView === "models"
-                  ? isDark
-                    ? "bg-[#202020] text-[#F5F5F5]"
-                    : "bg-zinc-100 text-zinc-950"
-                  : isDark
+                isDark
                   ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
                   : "text-zinc-800 hover:bg-zinc-100"
               )}
@@ -362,36 +355,6 @@ export function ModelEffortSelector({
                 <ChevronRight className="size-3.5 text-[#737373]" />
               </div>
             </button>
-
-            {/* Row 4: Direct Custom Provider Settings Trigger */}
-            <div className="pt-1 mt-1 border-t border-[#292929] dark:border-[#292929] border-zinc-200">
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenCustomProvider) {
-                    onOpenCustomProvider();
-                  } else {
-                    onAddModelsClick?.();
-                  }
-                  setActiveSubView("none");
-                  setIsOpen(false);
-                }}
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer",
-                  isDark
-                    ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
-                    : "text-zinc-800 hover:bg-zinc-100"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
-                  <span>Custom Provider</span>
-                </div>
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
-                  + API
-                </span>
-              </button>
-            </div>
           </div>
 
           {/* Submenu Panel (Direct list, no back button, no search input) */}

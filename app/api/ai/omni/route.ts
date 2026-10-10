@@ -49,8 +49,21 @@ export async function GET(request: Request) {
         return m
       })
 
-    // 2. Append custom provider models
-    for (const cp of customProviders) {
+    // 2. Append custom provider models (with Vyce AI pre-configured fallback)
+    const hasVyce = customProviders.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
+    const effectiveCustomProviders = hasVyce
+      ? customProviders
+      : [
+          ...customProviders,
+          {
+            name: "Vyce AI",
+            provider: "vyceai",
+            base_url: "https://vyceai.com/v1",
+            models: ["claude-sonnet-4-6", "deepseek-v4.1", "agnes-3.0-flash"],
+          },
+        ]
+
+    for (const cp of effectiveCustomProviders) {
       const providerSlug = cp.provider || cp.name?.toLowerCase().replace(/[^a-z0-9_-]/g, "_") || "custom"
       const providerDisplayName = cp.name || providerSlug
       const modelList = Array.isArray(cp.models) ? cp.models : []

@@ -78,6 +78,21 @@ export interface CustomProviderRecord {
   created_at?: string
 }
 
+// Pre-configured system providers (e.g. Vyce AI direct access)
+export const DEFAULT_PRECONFIGURED_PROVIDERS: CustomProviderRecord[] = [
+  {
+    id: "cp_vyceai",
+    name: "Vyce AI",
+    provider: "vyceai",
+    provider_type: "vyceai",
+    base_url: "https://vyceai.com/v1",
+    api_key: "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e",
+    api_key_masked: "sk-3...c68e",
+    models: ["claude-sonnet-4-6", "deepseek-v4.1", "agnes-3.0-flash"],
+    created_at: "2026-10-11T00:00:00.000Z",
+  },
+]
+
 // TypingMind & LobeHub colored model icons catalog map
 const TYPINGMIND_CDN_BASE = "https://raw.githubusercontent.com/TypingMind/model-icons/main/icons/"
 const LOBEHUB_CDN_BASE = "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/"
@@ -110,6 +125,9 @@ const TYPINGMIND_COLOR_MAP: Record<string, string> = {
   vicuna: "vicuna.png",
   openrouter: "openrouterai.png",
   openassistant: "openassistant.webp",
+  vyceai: "openai.svg",
+  vyce: "openai.svg",
+  agnes: "gemini-color.jpg",
 }
 
 const LOBEHUB_MAP: Record<string, string> = {
@@ -197,6 +215,8 @@ export function getTypingMindIconFile(brandOrModel: string): string | null {
   if (k.includes("replit")) return "replit-color.jpg"
   if (k.includes("bing")) return "bing-color.jpg"
   if (k.includes("llava")) return "llava-color.jpg"
+  if (k.includes("agnes")) return "gemini-color.jpg"
+  if (k.includes("vyce")) return "openai.svg"
 
   return null
 }
@@ -206,6 +226,9 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
   const k = brandOrModel.toLowerCase().trim()
 
   if (LOBEHUB_MAP[k]) return LOBEHUB_MAP[k]
+
+  if (k.includes("agnes")) return "gemini-color"
+  if (k.includes("vyce")) return "openai"
 
   if (k.includes("claude") || k.includes("anthropic") || k.includes("sonnet") || k.includes("haiku") || k.includes("opus")) return "claude-color"
   if (k.includes("openai") || k.includes("gpt") || k.includes("chatgpt") || k.includes("o1") || k.includes("o3") || k.includes("o4")) return "openai"
@@ -361,9 +384,24 @@ export function ModelBrowserView({
     initialOpenCustomProvider ? "settings" : "models"
   )
   const [settingsTab, setSettingsTab] = useState<"add" | "saved">("add")
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1)
   const [userCredits, setUserCredits] = useState<{ credits: number; maxCredits: number; isPremium: boolean } | null>(null)
   const [creditsLoading, setCreditsLoading] = useState(false)
-  const [savedProviders, setSavedProviders] = useState<CustomProviderRecord[]>([])
+  const [savedProviders, setSavedProviders] = useState<CustomProviderRecord[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("sycord_custom_providers")
+        if (cached) {
+          const list: CustomProviderRecord[] = JSON.parse(cached)
+          if (Array.isArray(list) && list.length > 0) {
+            const hasVyce = list.some((p) => p.provider === "vyceai" || p.name === "Vyce AI")
+            return hasVyce ? list : [...DEFAULT_PRECONFIGURED_PROVIDERS, ...list]
+          }
+        }
+      } catch {}
+    }
+    return DEFAULT_PRECONFIGURED_PROVIDERS
+  })
   const [cpName, setCpName] = useState("")
   const [cpBaseUrl, setCpBaseUrl] = useState("")
   const [cpApiKey, setCpApiKey] = useState("")
@@ -403,10 +441,12 @@ export function ModelBrowserView({
       .then((r) => r.json())
       .then((data) => {
         if (data?.ok && Array.isArray(data.providers)) {
-          setSavedProviders(data.providers)
+          const hasVyce = data.providers.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
+          const merged = hasVyce ? data.providers : [...DEFAULT_PRECONFIGURED_PROVIDERS, ...data.providers]
+          setSavedProviders(merged)
           if (typeof window !== "undefined") {
             try {
-              localStorage.setItem("sycord_custom_providers", JSON.stringify(data.providers))
+              localStorage.setItem("sycord_custom_providers", JSON.stringify(merged))
             } catch {}
           }
         }
@@ -415,7 +455,11 @@ export function ModelBrowserView({
         if (typeof window !== "undefined") {
           try {
             const cached = localStorage.getItem("sycord_custom_providers")
-            if (cached) setSavedProviders(JSON.parse(cached))
+            if (cached) {
+              const list = JSON.parse(cached)
+              const hasVyce = list.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
+              setSavedProviders(hasVyce ? list : [...DEFAULT_PRECONFIGURED_PROVIDERS, ...list])
+            }
           } catch {}
         }
       })
@@ -467,6 +511,68 @@ export function ModelBrowserView({
               }
             }
           } catch {}
+        }
+
+        // Ensure default Vyce AI models are always present
+        const hasVyceModel = loadedModels.some((m) => m.provider === "vyceai" || m.id.includes("vyceai"))
+        if (!hasVyceModel) {
+          const vyceModels: OmniModelItem[] = [
+            {
+              id: "vyceai/claude-sonnet-4-6",
+              name: "Claude Sonnet 4.6",
+              provider: "vyceai",
+              providerDisplay: "Vyce AI",
+              provider_display: "Vyce AI",
+              swe_score: 74,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 270000,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Claude Sonnet 4.6 direct API endpoint via Vyce AI",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vyceai", "claude"],
+            },
+            {
+              id: "vyceai/deepseek-v4.1",
+              name: "DeepSeek V4.1",
+              provider: "vyceai",
+              providerDisplay: "Vyce AI",
+              provider_display: "Vyce AI",
+              swe_score: 68,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 270000,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "DeepSeek V4.1 foundation reasoning endpoint via Vyce AI",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vyceai", "deepseek"],
+            },
+            {
+              id: "vyceai/agnes-3.0-flash",
+              name: "Agnes 3.0 Flash",
+              provider: "vyceai",
+              providerDisplay: "Vyce AI",
+              provider_display: "Vyce AI",
+              swe_score: 63,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 512000,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Agnes 3.0 Flash long-context endpoint via Vyce AI",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vyceai", "agnes"],
+            },
+          ]
+          loadedModels.unshift(...vyceModels)
         }
 
         setModels(loadedModels)
@@ -722,8 +828,11 @@ export function ModelBrowserView({
   }
 
   // --- SMART MODEL AUTO-DISCOVERY ACTION ---
-  const handleDiscoverModels = async () => {
-    if (!cpBaseUrl.trim()) {
+  const handleDiscoverModels = async (overrideUrl?: string, overrideKey?: string) => {
+    const targetUrl = (overrideUrl !== undefined ? overrideUrl : cpBaseUrl).trim()
+    const targetKey = (overrideKey !== undefined ? overrideKey : cpApiKey).trim()
+
+    if (!targetUrl) {
       toast.error("Please enter a Base URL or Chat Completion URL")
       return
     }
@@ -739,8 +848,8 @@ export function ModelBrowserView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          base_url: cpBaseUrl.trim(),
-          api_key: cpApiKey.trim(),
+          base_url: targetUrl,
+          api_key: targetKey,
         }),
       })
 
@@ -917,6 +1026,7 @@ export function ModelBrowserView({
       setSelectedDiscoveredModels(new Set())
       setManualModels([])
       setDiscoveryStatus({ type: "idle" })
+      setWizardStep(1)
       setCurrentView("models")
       setActiveTab("Custom")
     } catch (err: any) {
@@ -1241,263 +1351,436 @@ export function ModelBrowserView({
               </button>
             </div>
 
-            {/* Tab 1: ADD CUSTOM PROVIDER FORM */}
+            {/* Tab 1: ADD CUSTOM PROVIDER WIZARD (1 Input Per Page) */}
             {settingsTab === "add" && (
               <div className="space-y-4">
-                {/* Provider Name Input */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[#8C8C8C]">
-                    Provider Name <span className="text-red-400">*</span>
-                  </label>
-                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
-                    <Server className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
-                    <input
-                      type="text"
-                      value={cpName}
-                      onChange={(e) => setCpName(e.target.value)}
-                      placeholder="e.g. Ollama Local, Groq Custom, DeepInfra, Together"
-                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
-                    />
+                {/* Stepper Progress Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-[#242424]">
+                  <div className="flex items-center gap-2">
+                    {[
+                      { step: 1, label: "Name" },
+                      { step: 2, label: "URL" },
+                      { step: 3, label: "API Key" },
+                      { step: 4, label: "Models" },
+                    ].map((s) => {
+                      const isActive = wizardStep === s.step
+                      const isDone = wizardStep > s.step
+                      return (
+                        <div key={s.step} className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isDone || (s.step === 2 && cpName.trim()) || (s.step === 3 && cpBaseUrl.trim())) {
+                                setWizardStep(s.step as any)
+                              }
+                            }}
+                            className={`flex items-center justify-center size-6 rounded-full text-[11px] font-semibold transition-all ${
+                              isActive
+                                ? "bg-white text-black ring-2 ring-white/30"
+                                : isDone
+                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                : "bg-[#1C1C1C] text-[#666666] border border-[#2B2B2B]"
+                            }`}
+                          >
+                            {isDone ? <Check className="size-3" strokeWidth={2.5} /> : s.step}
+                          </button>
+                          <span className={`text-[11px] font-medium hidden xs:inline ${isActive ? "text-white" : "text-[#737373]"}`}>
+                            {s.label}
+                          </span>
+                          {s.step < 4 && <div className="w-3 h-px bg-[#2E2E2E] mx-0.5" />}
+                        </div>
+                      )
+                    })}
                   </div>
+                  <span className="text-[11px] text-[#737373] font-mono">
+                    Step {wizardStep} of 4
+                  </span>
                 </div>
 
-                {/* Base URL Input */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[#8C8C8C]">
-                    Base URL / Chat Completion URL <span className="text-red-400">*</span>
-                  </label>
-                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
-                    <Globe className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
-                    <input
-                      type="text"
-                      value={cpBaseUrl}
-                      onChange={(e) => setCpBaseUrl(e.target.value)}
-                      placeholder="http://localhost:11434/v1 or https://api.groq.com/openai/v1"
-                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
-                    />
-                  </div>
-                  <p className="text-[11px] text-[#8C8C8C]">
-                    Accepts standard OpenAI-compatible endpoints or chat completion endpoints.
-                  </p>
-                </div>
-
-                {/* API Key Input */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[#8C8C8C]">
-                    API Key <span className="text-[11px] text-[#8C8C8C]">(Optional for local endpoints)</span>
-                  </label>
-                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
-                    <Key className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
-                    <input
-                      type={cpShowKey ? "text" : "password"}
-                      value={cpApiKey}
-                      onChange={(e) => setCpApiKey(e.target.value)}
-                      placeholder="sk-..."
-                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setCpShowKey(!cpShowKey)}
-                      className="text-[#8C8C8C] hover:text-white ml-2 shrink-0"
-                    >
-                      {cpShowKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Smart Auto-Discovery Section */}
-                <div className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-medium text-white flex items-center gap-1.5">
-                        <Sparkles className="size-3.5 text-emerald-400" />
-                        Smart Model Auto-Discovery
-                      </span>
-                      <p className="text-[11px] text-[#8C8C8C]">
-                        Scan the base URL to discover available models automatically.
+                {/* STEP 1: PROVIDER NAME */}
+                {wizardStep === 1 && (
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-white">Provider Name</h4>
+                      <p className="text-xs text-[#8C8C8C]">
+                        Choose a name for your custom AI provider or select a preset.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={isDiscovering || !cpBaseUrl.trim()}
-                      onClick={handleDiscoverModels}
-                      className="px-3 py-1.5 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all shrink-0 active:scale-[0.97]"
-                    >
-                      {isDiscovering ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin text-emerald-400" />
-                          <span>Searching...</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="size-3.5 text-emerald-400" />
-                          <span>Search Models</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
 
-                  {/* Discovery Status Banner */}
-                  {discoveryStatus.type === "loading" && (
-                    <div className="p-2.5 rounded-[12px] bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2">
-                      <Loader2 className="size-4 animate-spin shrink-0" />
-                      <span>{discoveryStatus.message}</span>
+                    <div className="relative flex items-center min-h-[46px] bg-[#191919] border border-[#242424] focus-within:border-[#383838] rounded-[14px] px-3.5 transition-colors">
+                      <Server className="size-4 text-[#8C8C8C] mr-2.5 shrink-0" />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={cpName}
+                        onChange={(e) => setCpName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && cpName.trim()) {
+                            e.preventDefault()
+                            setWizardStep(2)
+                          }
+                        }}
+                        placeholder="e.g. Vyce AI, Ollama Local, Groq, Together AI"
+                        className="w-full bg-transparent text-xs text-white placeholder:text-[#666666] outline-none font-medium"
+                      />
                     </div>
-                  )}
 
-                  {discoveryStatus.type === "success" && (
-                    <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-                      <CheckCircle2 className="size-4 shrink-0" />
-                      <span>{discoveryStatus.message}</span>
-                    </div>
-                  )}
-
-                  {discoveryStatus.type === "error" && (
-                    <div className="p-2.5 rounded-[12px] bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
-                      <AlertCircle className="size-4 shrink-0" />
-                      <span>{discoveryStatus.message}</span>
-                    </div>
-                  )}
-
-                  {/* Discovered Models Checkbox Selector */}
-                  {discoveredModels.length > 0 && (
-                    <div className="space-y-2 pt-1 border-t border-[#242424]">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-[#8C8C8C]">
-                          Select models to add ({selectedDiscoveredModels.size}/{discoveredModels.length}):
-                        </span>
-                        <div className="flex items-center gap-2">
+                    {/* Quick Preset Buttons */}
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] text-[#737373]">Quick presets:</span>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { name: "Vyce AI", url: "https://vyceai.com/v1" },
+                          { name: "Ollama (Local)", url: "http://localhost:11434/v1" },
+                          { name: "Groq", url: "https://api.groq.com/openai/v1" },
+                          { name: "Together AI", url: "https://api.together.xyz/v1" },
+                          { name: "DeepInfra", url: "https://api.deepinfra.com/v1/openai" },
+                        ].map((preset) => (
                           <button
+                            key={preset.name}
                             type="button"
-                            onClick={handleSelectAllDiscovered}
-                            className="text-emerald-400 hover:underline"
+                            onClick={() => {
+                              setCpName(preset.name)
+                              setCpBaseUrl(preset.url)
+                              setWizardStep(2)
+                            }}
+                            className="px-2.5 py-1 rounded-[10px] bg-[#1A1A1A] hover:bg-[#222222] border border-[#2A2A2A] text-[11px] text-[#A3A3A3] hover:text-white transition-colors"
                           >
-                            Select all
+                            + {preset.name}
                           </button>
-                          <span className="text-[#383838]">•</span>
-                          <button
-                            type="button"
-                            onClick={handleDeselectAllDiscovered}
-                            className="text-[#8C8C8C] hover:text-white"
-                          >
-                            Deselect all
-                          </button>
-                        </div>
+                        ))}
                       </div>
+                    </div>
 
-                      <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
-                        {discoveredModels.map((m) => {
-                          const isSelected = selectedDiscoveredModels.has(m.id)
-                          return (
-                            <div
-                              key={m.id}
-                              onClick={() => handleToggleDiscoveredModel(m.id)}
-                              className={`p-2 rounded-[10px] text-xs flex items-center justify-between cursor-pointer border transition-colors ${
-                                isSelected
-                                  ? "bg-[#222222] border-emerald-500/30 text-emerald-300"
-                                  : "bg-[#161616] border-[#242424] text-[#8C8C8C] hover:text-white"
-                              }`}
+                    <div className="flex justify-end pt-3 border-t border-[#242424]">
+                      <button
+                        type="button"
+                        disabled={!cpName.trim()}
+                        onClick={() => setWizardStep(2)}
+                        className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
+                      >
+                        <span>Next: Endpoint URL</span>
+                        <ChevronRight className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 2: BASE URL */}
+                {wizardStep === 2 && (
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-white">Base URL / Endpoint</h4>
+                      <p className="text-xs text-[#8C8C8C]">
+                        Enter the OpenAI-compatible base URL or chat completion endpoint.
+                      </p>
+                    </div>
+
+                    <div className="relative flex items-center min-h-[46px] bg-[#191919] border border-[#242424] focus-within:border-[#383838] rounded-[14px] px-3.5 transition-colors">
+                      <Globe className="size-4 text-[#8C8C8C] mr-2.5 shrink-0" />
+                      <input
+                        type="text"
+                        autoFocus
+                        value={cpBaseUrl}
+                        onChange={(e) => setCpBaseUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && cpBaseUrl.trim()) {
+                            e.preventDefault()
+                            setWizardStep(3)
+                          }
+                        }}
+                        placeholder="https://vyceai.com/v1 or http://localhost:11434/v1"
+                        className="w-full bg-transparent text-xs text-white placeholder:text-[#666666] outline-none font-mono"
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-[#737373]">
+                      Standard endpoints like <code className="text-[#A3A3A3]">/v1</code>, <code className="text-[#A3A3A3]">/v1/chat/completions</code>, or host root are accepted.
+                    </p>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-[#242424]">
+                      <button
+                        type="button"
+                        onClick={() => setWizardStep(1)}
+                        className="px-4 py-2.5 rounded-[14px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2E2E2E] text-white text-xs font-medium transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!cpBaseUrl.trim()}
+                        onClick={() => setWizardStep(3)}
+                        className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
+                      >
+                        <span>Next: API Key</span>
+                        <ChevronRight className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 3: API KEY */}
+                {wizardStep === 3 && (
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-white">API Key</h4>
+                      <p className="text-xs text-[#8C8C8C]">
+                        Enter your authorization key (leave blank for local Ollama / non-authenticated endpoints).
+                      </p>
+                    </div>
+
+                    <div className="relative flex items-center min-h-[46px] bg-[#191919] border border-[#242424] focus-within:border-[#383838] rounded-[14px] px-3.5 transition-colors">
+                      <Key className="size-4 text-[#8C8C8C] mr-2.5 shrink-0" />
+                      <input
+                        type={cpShowKey ? "text" : "password"}
+                        autoFocus
+                        value={cpApiKey}
+                        onChange={(e) => setCpApiKey(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            setWizardStep(4)
+                            handleDiscoverModels(cpBaseUrl, cpApiKey)
+                          }
+                        }}
+                        placeholder="sk-... or authorization token"
+                        className="w-full bg-transparent text-xs text-white placeholder:text-[#666666] outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCpShowKey(!cpShowKey)}
+                        className="text-[#8C8C8C] hover:text-white ml-2 shrink-0 p-1"
+                      >
+                        {cpShowKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-[#242424]">
+                      <button
+                        type="button"
+                        onClick={() => setWizardStep(2)}
+                        className="px-4 py-2.5 rounded-[14px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2E2E2E] text-white text-xs font-medium transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWizardStep(4)
+                          handleDiscoverModels(cpBaseUrl, cpApiKey)
+                        }}
+                        className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all flex items-center gap-2 active:scale-[0.97]"
+                      >
+                        <Sparkles className="size-3.5 text-black" />
+                        <span>Auto-Fetch Models →</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STEP 4: AUTO FETCH MODELS (WITH MANUAL INPUT BAR FALLBACK) */}
+                {wizardStep === 4 && (
+                  <div className="space-y-4 py-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                          <Sparkles className="size-4 text-emerald-400" />
+                          Fetch Models for {cpName || "Provider"}
+                        </h4>
+                        <p className="text-xs text-[#8C8C8C]">
+                          Auto-fetching models from endpoint. If not possible, use manual input bar below.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isDiscovering}
+                        onClick={() => handleDiscoverModels(cpBaseUrl, cpApiKey)}
+                        className="px-3 py-1.5 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white disabled:opacity-50 flex items-center gap-1.5 transition-all shrink-0 active:scale-[0.97]"
+                      >
+                        {isDiscovering ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin text-emerald-400" />
+                            <span>Fetching...</span>
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="size-3.5 text-emerald-400" />
+                            <span>Retry Auto-Fetch</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Discovery Status Banner */}
+                    {discoveryStatus.type === "loading" && (
+                      <div className="p-3 rounded-[14px] bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2.5">
+                        <Loader2 className="size-4 animate-spin shrink-0" />
+                        <span>{discoveryStatus.message}</span>
+                      </div>
+                    )}
+
+                    {discoveryStatus.type === "success" && (
+                      <div className="p-3 rounded-[14px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2.5">
+                        <CheckCircle2 className="size-4 shrink-0" />
+                        <span>{discoveryStatus.message}</span>
+                      </div>
+                    )}
+
+                    {discoveryStatus.type === "error" && (
+                      <div className="p-3 rounded-[14px] bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2.5">
+                        <AlertCircle className="size-4 shrink-0" />
+                        <span>{discoveryStatus.message}</span>
+                      </div>
+                    )}
+
+                    {/* Discovered Models Checkbox Selector */}
+                    {discoveredModels.length > 0 && (
+                      <div className="p-3.5 rounded-[18px] bg-[#191919] border border-[#242424] space-y-2.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-[#8C8C8C]">
+                            Auto-discovered ({selectedDiscoveredModels.size}/{discoveredModels.length}):
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSelectAllDiscovered}
+                              className="text-emerald-400 hover:underline"
                             >
-                              <span className="font-mono truncate">{m.id}</span>
+                              Select all
+                            </button>
+                            <span className="text-[#383838]">•</span>
+                            <button
+                              type="button"
+                              onClick={handleDeselectAllDiscovered}
+                              className="text-[#8C8C8C] hover:text-white"
+                            >
+                              Deselect all
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {discoveredModels.map((m) => {
+                            const isSelected = selectedDiscoveredModels.has(m.id)
+                            return (
                               <div
-                                className={`size-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
+                                key={m.id}
+                                onClick={() => handleToggleDiscoveredModel(m.id)}
+                                className={`p-2.5 rounded-[12px] text-xs flex items-center justify-between cursor-pointer border transition-colors ${
                                   isSelected
-                                    ? "bg-emerald-500 border-emerald-500 text-black"
-                                    : "border-[#383838]"
+                                    ? "bg-[#222222] border-emerald-500/30 text-emerald-300"
+                                    : "bg-[#161616] border-[#242424] text-[#8C8C8C] hover:text-white"
                                 }`}
                               >
-                                {isSelected && <Check className="size-3" strokeWidth={3} />}
+                                <span className="font-mono truncate">{m.id}</span>
+                                <div
+                                  className={`size-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
+                                    isSelected
+                                      ? "bg-emerald-500 border-emerald-500 text-black"
+                                      : "border-[#383838]"
+                                  }`}
+                                >
+                                  {isSelected && <Check className="size-3" strokeWidth={3} />}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Manual Model Input Bar Fallback / Addon */}
+                    <div className="p-3.5 rounded-[18px] bg-[#191919] border border-[#242424] space-y-2.5">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-medium text-white flex items-center gap-1.5">
+                          <Plus className="size-3.5 text-blue-400" />
+                          Manual Model Input Bar
+                        </span>
+                        <p className="text-[11px] text-[#8C8C8C]">
+                          If auto-fetch is not possible or missing models, type model IDs manually.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={manualModelInput}
+                          onChange={(e) => setManualModelInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              handleAddManualModel()
+                            }
+                          }}
+                          placeholder="e.g. claude-sonnet-4-6, deepseek-v4.1, agnes-3.0-flash"
+                          className="flex-1 bg-[#161616] border border-[#242424] focus:border-[#333333] rounded-[12px] px-3 py-2 text-xs text-white placeholder:text-[#666666] outline-none font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddManualModel}
+                          className="px-3.5 py-2 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white transition-all shrink-0 active:scale-[0.97]"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {manualModels.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {manualModels.map((m) => (
+                            <span
+                              key={m}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#1F1F1F] border border-blue-500/30 text-blue-300 text-xs font-mono"
+                            >
+                              <span>{m}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveManualModel(m)}
+                                className="hover:text-white"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer with Back & Save */}
+                    <div className="pt-2 flex items-center justify-between border-t border-[#242424]">
+                      <button
+                        type="button"
+                        onClick={() => setWizardStep(3)}
+                        className="px-4 py-2.5 rounded-[14px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2E2E2E] text-white text-xs font-medium transition-all"
+                      >
+                        Back
+                      </button>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-[#8C8C8C] hidden sm:inline">
+                          Ready: <strong className="text-white">{stagedModelsList.length}</strong> models
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isSavingProvider || !cpName.trim() || !cpBaseUrl.trim() || stagedModelsList.length === 0}
+                          onClick={handleSaveCustomProvider}
+                          className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
+                        >
+                          {isSavingProvider ? (
+                            <>
+                              <Loader2 className="size-3.5 animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="size-3.5" strokeWidth={2.5} />
+                              <span>Save Provider & Add Models ({stagedModelsList.length})</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Manual Model Adder Fallback */}
-                <div className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] space-y-3">
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-medium text-white flex items-center gap-1.5">
-                      <Plus className="size-3.5 text-blue-400" />
-                      Manual Model Adder
-                    </span>
-                    <p className="text-[11px] text-[#8C8C8C]">
-                      Add specific model IDs if auto-discovery is unavailable or to include custom fine-tunes.
-                    </p>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={manualModelInput}
-                      onChange={(e) => setManualModelInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleAddManualModel()
-                        }
-                      }}
-                      placeholder="e.g. llama3:8b, mistral-large, qwen2.5-coder-32b"
-                      className="flex-1 bg-[#161616] border border-[#242424] focus:border-[#333333] rounded-[12px] px-3 py-2 text-xs text-white placeholder:text-[#8C8C8C] outline-none font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddManualModel}
-                      className="px-3.5 py-2 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white transition-all shrink-0 active:scale-[0.97]"
-                    >
-                      Add
-                    </button>
-                  </div>
-
-                  {/* Manually added chips */}
-                  {manualModels.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {manualModels.map((m) => (
-                        <span
-                          key={m}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#1F1F1F] border border-blue-500/30 text-blue-300 text-xs font-mono"
-                        >
-                          <span>{m}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveManualModel(m)}
-                            className="hover:text-white"
-                          >
-                            <X className="size-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Staged Models Summary & Save Button */}
-                <div className="pt-2 flex items-center justify-between border-t border-[#242424]">
-                  <div className="text-xs text-[#8C8C8C]">
-                    Total Models Ready:{" "}
-                    <span className="font-semibold text-white">{stagedModelsList.length}</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isSavingProvider || !cpName.trim() || !cpBaseUrl.trim() || stagedModelsList.length === 0}
-                    onClick={handleSaveCustomProvider}
-                    className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
-                  >
-                    {isSavingProvider ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="size-3.5" strokeWidth={2.5} />
-                        <span>Save Provider & Add Models</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                )}
               </div>
             )}
 
@@ -1715,7 +1998,7 @@ export function SycordOmniRouterModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
+        overlayClassName="!bg-transparent data-[state=open]:!bg-transparent !backdrop-blur-none"
         className="!p-0 !gap-0 !bg-transparent !border-0 !shadow-none !w-full !max-w-full sm:!max-w-lg !fixed !inset-x-0 !bottom-0 !top-auto !left-0 !right-0 !translate-x-0 !translate-y-0 sm:!inset-auto sm:!top-1/2 sm:!left-1/2 sm:!bottom-auto sm:!right-auto sm:!-translate-x-1/2 sm:!-translate-y-1/2 z-[9999] rounded-t-[28px] sm:rounded-[28px] overflow-hidden"
         showCloseButton={false}
       >

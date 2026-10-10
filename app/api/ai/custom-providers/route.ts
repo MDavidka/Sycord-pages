@@ -7,6 +7,23 @@ import { syteSyncHandshake, syteGetHandshakeStatus } from "@/lib/deploy/syte-cli
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+export const DEFAULT_SYSTEM_PROVIDERS = [
+  {
+    id: "cp_vyceai",
+    name: "Vyce AI",
+    provider: "vyceai",
+    provider_type: "vyceai",
+    base_url: "https://vyceai.com/v1",
+    api_key: "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e",
+    api_key_masked: "sk-3...c68e",
+    models: ["claude-sonnet-4-6", "deepseek-v4.1", "agnes-3.0-flash"],
+    gcp_project: "",
+    gcp_location: "us-central1",
+    is_synced: true,
+    created_at: "2026-10-11T00:00:00.000Z",
+  },
+]
+
 export async function GET() {
   const session = await getServerSession(authOptions)
   const userId = session?.user?.id || "guest_user"
@@ -23,29 +40,39 @@ export async function GET() {
     // Also get VM sync status
     const vmStatusRes = await syteGetHandshakeStatus().catch(() => ({ data: null }))
 
+    const formatted = customProviders.map((p) => ({
+      id: p.id || p._id?.toString(),
+      name: p.name,
+      provider: p.provider,
+      provider_type: p.provider_type || p.provider,
+      base_url: p.base_url || "",
+      api_key_masked: p.api_key ? `${p.api_key.slice(0, 4)}...${p.api_key.slice(-4)}` : "",
+      models: p.models || [],
+      gcp_project: p.gcp_project || "",
+      gcp_location: p.gcp_location || "us-central1",
+      is_synced: p.is_synced ?? true,
+      created_at: p.createdAt,
+    }))
+
+    // Ensure Vyce AI is always present
+    const hasVyce = formatted.some((p) => p.provider === "vyceai" || p.name === "Vyce AI")
+    const allProviders = hasVyce ? formatted : [...DEFAULT_SYSTEM_PROVIDERS, ...formatted]
+
     return NextResponse.json({
       ok: true,
-      providers: customProviders.map((p) => ({
-        id: p.id || p._id?.toString(),
-        name: p.name,
-        provider: p.provider,
-        provider_type: p.provider_type || p.provider,
-        base_url: p.base_url || "",
-        api_key_masked: p.api_key ? `${p.api_key.slice(0, 4)}...${p.api_key.slice(-4)}` : "",
-        models: p.models || [],
-        gcp_project: p.gcp_project || "",
-        gcp_location: p.gcp_location || "us-central1",
-        is_synced: p.is_synced ?? true,
-        created_at: p.createdAt,
-      })),
+      providers: allProviders,
       vm_handshake: vmStatusRes?.data || null,
     })
   } catch (err: any) {
-    // If Mongo unavailable, proxy directly to Syte VM
+    // If Mongo unavailable, return default system providers merged with VM providers
     const vmRes = await syteGetHandshakeStatus().catch(() => ({ data: null }))
+    const vmProviders = vmRes?.data?.custom_providers || []
+    const hasVyce = vmProviders.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
+    const allProviders = hasVyce ? vmProviders : [...DEFAULT_SYSTEM_PROVIDERS, ...vmProviders]
+
     return NextResponse.json({
       ok: true,
-      providers: vmRes?.data?.custom_providers || [],
+      providers: allProviders,
       vm_handshake: vmRes?.data || null,
     })
   }

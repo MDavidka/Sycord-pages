@@ -4539,21 +4539,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                                         <div className={`my-1.5 border-b ${isDark ? "border-white/[0.08]" : "border-zinc-200/80"}`} />
 
-                                        {/* Segment 3: Add Custom Provider */}
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 focus:bg-emerald-500/10"
-                                            onSelect={() => {
-                                                if (input.startsWith("/")) setInput("");
-                                                setShowOmniCustomProvider(true);
-                                                setShowOmniModal(true);
-                                            }}
-                                        >
-                                            <Cpu className="h-3.5 w-3.5 text-emerald-400" />
-                                            Custom AI Provider
-                                            <span className="ml-auto text-[11px] font-mono text-emerald-400/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-[4px] border border-emerald-500/20">/provider</span>
-                                        </DropdownMenuItem>
-
-                                        {/* Segment 4: Select Model */}
+                                        {/* Segment 3: Select Model */}
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
