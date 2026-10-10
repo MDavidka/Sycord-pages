@@ -4553,7 +4553,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             <span className="ml-auto text-[11px] font-mono text-emerald-400/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-[4px] border border-emerald-500/20">/provider</span>
                                         </DropdownMenuItem>
 
-                                        {/* Segment 4: Model Library */}
+                                        {/* Segment 4: Select Model */}
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[12px] py-1.5 px-2.5 cursor-pointer rounded-lg text-zinc-200 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                                             onSelect={() => {
@@ -4563,7 +4563,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             }}
                                         >
                                             <Layers className="h-3.5 w-3.5 text-zinc-400" />
-                                            Model Library
+                                            Select Model
                                             <span className="ml-auto text-[11px] font-mono text-zinc-500">/models</span>
                                         </DropdownMenuItem>
 

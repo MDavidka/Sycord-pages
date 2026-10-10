@@ -2,14 +2,16 @@ import { Metadata } from "next"
 import { ModelBrowserView } from "@/components/sycord-omni-router-modal"
 
 export const metadata: Metadata = {
-  title: "Model Browser | Sycord",
-  description: "Browse, explore, and configure AI models for Sycord.",
+  title: "Select Model | Sycord",
+  description: "Select and configure AI models for Sycord.",
 }
 
 export default function ModelsPage() {
   return (
-    <div className="w-full min-h-screen bg-[#131313]">
-      <ModelBrowserView isStandalone={true} />
+    <div className="w-full min-h-screen bg-[#111111] flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <div className="w-full max-w-lg">
+        <ModelBrowserView isStandalone={true} />
+      </div>
     </div>
   )
 }

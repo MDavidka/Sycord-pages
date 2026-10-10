@@ -878,160 +878,92 @@ export function ModelBrowserView({
     }
   }
 
+  const [showFilterPills, setShowFilterPills] = useState(false)
+
   return (
-    <div className="w-full h-full flex flex-col bg-[#131313] text-[#F5F5F5] select-none overflow-y-auto">
-      {/* Top Navbar */}
-      <header className="w-full max-w-4xl mx-auto px-4 sm:px-6 pt-5 pb-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <Image
-            src="/logo.png"
-            alt="Sycord"
-            width={24}
-            height={24}
-            className="rounded-[6px] object-contain shrink-0"
-            priority
-          />
-          <span className="text-sm font-medium tracking-tight text-[#F5F5F5]">Sycord</span>
+    <div className="w-full flex flex-col bg-[#161616] text-[#FFFFFF] select-none rounded-t-[28px] sm:rounded-[28px] border border-[#242424] shadow-2xl overflow-hidden max-h-[85vh] sm:max-h-[640px]">
+      {/* Top Handle Bar */}
+      <div className="pt-3 pb-1 flex justify-center shrink-0">
+        <div className="w-9 h-1 rounded-full bg-[#383838]" />
+      </div>
+
+      {/* Header section: Title + Subtitle */}
+      <div className="px-5 pt-2 pb-3 shrink-0 flex items-start justify-between">
+        <div className="space-y-0.5">
+          <h2 className="text-lg font-semibold tracking-tight text-white">
+            Select a model
+          </h2>
+          <p className="text-xs text-[#8C8C8C]">
+            Choose the model for your next response.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Settings button with astro chat logo inline next to X */}
-          <button
-            type="button"
-            onClick={() => setShowSettingsModal(true)}
-            aria-label="Settings"
-            title="Settings & Credits"
-            className="flex size-11 items-center justify-center rounded-[14px] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-[#292929] hover:border-[#383838] transition-all active:scale-[0.97] relative"
-          >
-            <div className="size-5 shrink-0 flex items-center justify-center rounded-full overflow-hidden">
-              <img
-                src="/logo.png"
-                alt="Settings"
-                className="size-full object-contain"
-              />
-            </div>
-            {savedProviders.length > 0 && (
-              <span className="absolute -top-1 -right-1 size-4 rounded-full bg-emerald-500 text-[9px] font-bold text-black flex items-center justify-center">
-                {savedProviders.length}
-              </span>
-            )}
-          </button>
-
-          {/* Close button with X */}
-          <button
-            type="button"
-            onClick={() => {
-              if (onClose) {
-                onClose()
-              } else if (typeof window !== "undefined") {
-                if (window.history.length > 1) {
-                  window.history.back()
-                } else {
-                  window.location.href = "/"
-                }
-              }
-            }}
-            aria-label="Close"
-            className="flex size-11 items-center justify-center rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929] transition-all active:scale-[0.97]"
-          >
-            <X className="size-4" strokeWidth={1.75} />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Container */}
-      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-12 flex-1 flex flex-col space-y-6">
-        {/* Page Title Area without redundant text */}
-        <div className="pt-1">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">
-            Model Browser
-          </h1>
-        </div>
-
-        {/* Top Models SWE-Bench Carousel / Featured Models */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-0.5">
-            <span className="text-xs font-medium text-[#A3A3A3] flex items-center gap-2">
-              <BarChart3 className="size-3.5 text-[#737373]" strokeWidth={1.75} />
-              Top models benchmark capabilities
+        {/* Quick settings & provider config button */}
+        <button
+          type="button"
+          onClick={() => setShowSettingsModal(true)}
+          aria-label="Settings & Custom Providers"
+          title="Settings, Credits & Add Model"
+          className="flex size-9 items-center justify-center rounded-[12px] text-[#8C8C8C] hover:text-white bg-[#191919] hover:bg-[#1F1F1F] border border-[#242424] hover:border-[#333333] transition-colors relative"
+        >
+          <div className="size-4 shrink-0 flex items-center justify-center rounded-full overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="Settings"
+              className="size-full object-contain"
+            />
+          </div>
+          {savedProviders.length > 0 && (
+            <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-emerald-500 text-[8.5px] font-bold text-black flex items-center justify-center">
+              {savedProviders.length}
             </span>
-          </div>
+          )}
+        </button>
+      </div>
 
-          {/* Horizontal scrollable featured cards */}
-          <div className="flex gap-2.5 sm:gap-3 overflow-x-auto pb-1.5 scrollbar-none">
-            {featuredCards.map((item) => (
+      {/* Search Input Row with Filter Slider Button */}
+      <div className="px-5 pb-3 shrink-0 space-y-2.5">
+        <div className="flex items-center gap-2">
+          {/* Search container */}
+          <div className="flex-1 flex items-center bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[18px] px-3.5 h-11 transition-colors">
+            <Search className="size-4 text-[#8C8C8C] shrink-0 mr-2.5" strokeWidth={1.75} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search models..."
+              className="w-full bg-transparent text-sm text-white placeholder:text-[#8C8C8C] outline-none"
+            />
+            {searchQuery && (
               <button
-                key={item.id}
                 type="button"
-                onClick={() => {
-                  if (item.model) setInspectingModel(item.model)
-                }}
-                className="group flex-shrink-0 w-[140px] sm:w-[150px] p-3 rounded-[18px] bg-[#171717] hover:bg-[#1D1D1D] border border-[#292929] hover:border-[#383838] transition-all active:scale-[0.97] flex flex-col items-start gap-2.5 text-left cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-[#383838]"
+                onClick={() => setSearchQuery("")}
+                className="text-[#8C8C8C] hover:text-white shrink-0 p-1"
               >
-                <div className="flex size-9 items-center justify-center rounded-[12px] bg-[#1D1D1D] border border-[#222222] group-hover:border-[#292929] transition-colors">
-                  <ModelIcon
-                    provider={item.model?.provider}
-                    modelName={item.name}
-                    size={20}
-                  />
-                </div>
-
-                <div className="w-full min-w-0 space-y-0.5">
-                  <div className="text-xs font-medium text-[#F5F5F5] truncate group-hover:text-white transition-colors">
-                    {item.name}
-                  </div>
-                  <div className="text-[11px] text-[#737373] truncate">
-                    {item.model?.providerDisplay || item.model?.provider || "AI Model"}
-                  </div>
-                </div>
-
-                {item.model?.swe_score ? (
-                  <div className="w-full pt-1 border-t border-[#222222] flex items-center justify-between text-[10.5px]">
-                    <span className="text-[#737373]">SWE-bench</span>
-                    <span className="font-mono font-medium text-[#A3A3A3]">{item.model.swe_score}%</span>
-                  </div>
-                ) : null}
+                <X className="size-3.5" />
               </button>
-            ))}
+            )}
           </div>
+
+          {/* Filter button with sliders */}
+          <button
+            type="button"
+            onClick={() => setShowFilterPills(!showFilterPills)}
+            aria-label="Filter models"
+            title="Filter by provider or category"
+            className={`size-11 rounded-[18px] border flex items-center justify-center transition-all shrink-0 active:scale-[0.97] ${
+              showFilterPills || activeTab !== "All"
+                ? "bg-[#1F1F1F] border-[#333333] text-white"
+                : "bg-[#191919] border-[#242424] text-[#8C8C8C] hover:text-white hover:bg-[#1F1F1F]"
+            }`}
+          >
+            <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+          </button>
         </div>
 
-        {/* Search & Filter Bar */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2.5">
-            {/* Search Input Container */}
-            <div className="relative flex-1 flex items-center min-h-[44px] bg-[#171717] border border-[#292929] focus-within:border-[#383838] rounded-[18px] px-3.5 transition-colors">
-              <Search className="size-4 text-[#737373] shrink-0 mr-2.5" strokeWidth={1.75} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search models by name, provider, or ID..."
-                className="w-full bg-transparent text-xs sm:text-sm text-[#F5F5F5] placeholder:text-[#737373] outline-none"
-              />
-              <span className="text-xs text-[#737373] font-normal shrink-0 ml-2">
-                {filteredModels.length} models
-              </span>
-            </div>
-
-            {/* Quick Add Custom Provider Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsTab("add")
-                setShowSettingsModal(true)
-              }}
-              aria-label="Add Custom Provider"
-              title="Add Custom Provider"
-              className="flex items-center gap-1.5 px-3 min-h-[44px] rounded-[18px] bg-[#171717] border border-[#292929] text-xs font-medium text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0"
-            >
-              <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
-              <span className="hidden sm:inline">Add Provider</span>
-            </button>
-          </div>
-
-          {/* Pill Category Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {/* Collapsible Category Filter Pills */}
+        {showFilterPills && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-1 scrollbar-none animate-in fade-in slide-in-from-top-1 duration-150">
             {filterTabs.map((tab) => {
               const isSelected = activeTab === tab
               return (
@@ -1039,121 +971,107 @@ export function ModelBrowserView({
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
-                  className={`min-h-[44px] px-4 rounded-[18px] text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 active:scale-[0.97] ${
+                  className={`h-7 px-2.5 rounded-[10px] text-[11px] font-medium transition-all shrink-0 flex items-center gap-1.5 active:scale-[0.97] ${
                     isSelected
-                      ? "bg-[#F5F5F5] text-[#131313] font-semibold"
-                      : "bg-[#171717] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-[#292929]"
+                      ? "bg-white text-black font-semibold"
+                      : "bg-[#191919] text-[#8C8C8C] hover:text-white border border-[#242424]"
                   }`}
                 >
                   {tab === "Starred" && (
                     <Star
-                      className={`size-3.5 ${isSelected ? "fill-[#131313] text-[#131313]" : "fill-[#A3A3A3] text-[#A3A3A3]"}`}
+                      className={`size-3 ${isSelected ? "fill-black text-black" : "fill-[#8C8C8C] text-[#8C8C8C]"}`}
                     />
                   )}
                   {tab === "Custom" && (
-                    <Sparkles className={`size-3.5 ${isSelected ? "text-[#131313]" : "text-emerald-400"}`} />
+                    <Sparkles className={`size-3 ${isSelected ? "text-black" : "text-emerald-400"}`} />
                   )}
                   <span>{tab}</span>
                 </button>
               )
             })}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Model Cards List */}
-        <div className="space-y-3">
-          <div className="flex items-baseline justify-between px-0.5">
-            <span className="text-xs font-medium text-[#F5F5F5]">Available AI Models</span>
-            <span className="text-[11px] text-[#737373]">Click card for model specifications</span>
+      {/* Model Cards List (Scrollable) */}
+      <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2.5">
+        {loading && models.length === 0 ? (
+          <div className="space-y-2.5 animate-pulse">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-16 rounded-[18px] bg-[#191919] border border-[#242424]" />
+            ))}
           </div>
+        ) : filteredModels.length === 0 ? (
+          <div className="py-12 text-center text-xs text-[#8C8C8C] space-y-3">
+            <p>No models found matching your search.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsTab("add")
+                setShowSettingsModal(true)
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#191919] border border-[#242424] text-xs font-medium text-white hover:border-[#333333]"
+            >
+              <Plus className="size-3.5 text-emerald-400" />
+              <span>Add Custom Provider & Model</span>
+            </button>
+          </div>
+        ) : (
+          filteredModels.map((model) => {
+            const isActive = activeModelId === model.id
+            const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
+            const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
 
-          {loading && models.length === 0 ? (
-            <div className="space-y-2.5 animate-pulse">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-16 rounded-[20px] bg-[#171717] border border-[#222222]" />
-              ))}
-            </div>
-          ) : filteredModels.length === 0 ? (
-            <div className="py-12 text-center text-xs text-[#737373] space-y-3">
-              <p>No models found matching your search query.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsTab("add")
-                  setShowSettingsModal(true)
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#1D1D1D] border border-[#292929] text-xs font-medium text-[#F5F5F5] hover:border-[#383838]"
+            return (
+              <div
+                key={model.id}
+                onClick={() => handleSelectActiveModel(model)}
+                className={`w-full rounded-[18px] p-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 transition-all border cursor-pointer group active:scale-[0.99] ${
+                  isActive
+                    ? "bg-[#1F1F1F] border-[#333333]"
+                    : "bg-[#191919] hover:bg-[#1F1F1F] border-[#242424] hover:border-[#333333]"
+                }`}
               >
-                <Plus className="size-3.5 text-emerald-400" />
-                <span>Add Custom Provider & Model</span>
-              </button>
-            </div>
-          ) : (
-            filteredModels.map((model) => {
-              const isActive = activeModelId === model.id
-              const isStarred = starredModelIds.has(model.id)
-              const subtitle = getModelSubtitle(model)
-              const pricing = formatPricing(model)
-
-              return (
-                <div
-                  key={model.id}
-                  onClick={() => setInspectingModel(model)}
-                  className={`w-full rounded-[20px] p-3.5 sm:px-5 sm:py-4 flex items-center justify-between gap-4 transition-all border cursor-pointer group active:scale-[0.99] ${
-                    isActive
-                      ? "bg-[#1D1D1D] border-[#383838]"
-                      : "bg-[#171717] hover:bg-[#1D1D1D] border-[#292929] hover:border-[#383838]"
-                  }`}
-                >
-                  {/* Left: Provider Icon + Model Name + Provider Subtitle */}
-                  <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
-                    <div className="size-10 sm:size-11 shrink-0 flex items-center justify-center rounded-[14px] bg-[#1D1D1D] border border-[#222222]">
-                      <ModelIcon provider={model.provider} modelName={model.name} size={22} />
+                {/* Left: Model brand icon + Title & Subtitle */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-10 shrink-0 flex items-center justify-center rounded-[12px] bg-[#222222] border border-[#2A2A2A]">
+                    <ModelIcon provider={model.provider} modelName={model.name} size={22} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-white truncate group-hover:text-white transition-colors">
+                      {model.name}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2 group-hover:text-white transition-colors">
-                        <span className="truncate">{model.name}</span>
-                        {isActive && (
-                          <span className="text-[9.5px] font-medium text-[#F5F5F5] bg-[#202020] border border-[#383838] px-1.5 py-0.5 rounded-[8px]">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-[#737373] truncate mt-0.5">
-                        {subtitle}
-                      </div>
+                    <div className="text-xs text-[#8C8C8C] truncate mt-0.5">
+                      {model.providerDisplay || model.provider_display || model.provider || "Anthropic"}
                     </div>
                   </div>
+                </div>
 
-                  {/* Middle: Pricing info */}
-                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#A3A3A3] font-mono bg-[#1D1D1D] border border-[#222222] px-3 py-1.5 rounded-[12px] shrink-0">
-                    <Coins className="size-3.5 text-[#737373] shrink-0" strokeWidth={1.75} />
-                    <span>{pricing}</span>
+                {/* Right: Pricing lines + Radio button indicator */}
+                <div className="flex items-center gap-3.5 shrink-0">
+                  <div className="text-right text-[11px] leading-tight text-[#8C8C8C] font-mono tabular-nums">
+                    <div>{model.is_custom ? "Custom" : `${inCost} input /`}</div>
+                    <div>{model.is_custom ? "Endpoint" : `${outCost} output`}</div>
                   </div>
 
-                  {/* Right: Star Action Icon (Favorite toggle with 44px hit target) */}
-                  <button
-                    type="button"
-                    onClick={(e) => toggleStarModel(model.id, e)}
-                    aria-label={isStarred ? "Remove from favorites" : "Add to favorites"}
-                    title={isStarred ? "Unstar model" : "Star model as favorite"}
-                    className={`flex size-11 items-center justify-center rounded-[14px] border transition-all active:scale-[0.97] shrink-0 ${
-                      isStarred
-                        ? "bg-[#202020] border-[#383838] text-[#F5F5F5]"
-                        : "bg-transparent border-transparent text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#292929]"
+                  {/* Radio Indicator */}
+                  <div
+                    className={`size-5 rounded-full flex items-center justify-center transition-colors border ${
+                      isActive
+                        ? "border-white bg-white"
+                        : "border-[#444444] bg-transparent group-hover:border-[#666666]"
                     }`}
                   >
-                    <Star
-                      className={`size-4 ${isStarred ? "fill-[#F5F5F5]" : ""}`}
-                      strokeWidth={1.75}
-                    />
-                  </button>
+                    {isActive && (
+                      <div className="size-2 rounded-full bg-[#111111]" />
+                    )}
+                  </div>
                 </div>
-              )
-            })
-          )}
-        </div>
-      </main>
+              </div>
+            )
+          })
+        )}
+      </div>
 
       {/* --- CUSTOM PROVIDER SETTINGS MODAL --- */}
       <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
@@ -1711,7 +1629,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#131313] text-[#F5F5F5] shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        className="!p-0 !gap-0 !bg-transparent !border-0 !shadow-none max-w-lg w-full fixed bottom-0 sm:bottom-auto sm:top-1/2 left-1/2 -translate-x-1/2 sm:-translate-y-1/2 z-[9999] rounded-t-[28px] sm:rounded-[28px] overflow-hidden"
         showCloseButton={false}
       >
         <ModelBrowserView
