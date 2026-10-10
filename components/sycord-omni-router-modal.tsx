@@ -215,7 +215,7 @@ export function ModelIcon({
         height={size}
         onError={() => setError(true)}
         onClick={onClick}
-        className={`object-contain inline-block shrink-0 brightness-0 invert opacity-90 transition-opacity ${onClick ? "cursor-pointer" : ""} ${className}`}
+        className={`object-contain inline-block shrink-0 transition-opacity ${onClick ? "cursor-pointer" : ""} ${className}`}
         style={{ width: size, height: size }}
       />
     )
@@ -281,9 +281,11 @@ export function ModelBrowserView({
   const [searchQuery, setSearchQuery] = useState("")
   const [inspectingModel, setInspectingModel] = useState<OmniModelItem | null>(null)
 
-  // Custom Provider Settings State
+  // Custom Provider & Settings State
   const [showSettingsModal, setShowSettingsModal] = useState(Boolean(initialOpenCustomProvider))
   const [settingsTab, setSettingsTab] = useState<"add" | "saved">("add")
+  const [userCredits, setUserCredits] = useState<{ credits: number; maxCredits: number; isPremium: boolean } | null>(null)
+  const [creditsLoading, setCreditsLoading] = useState(false)
   const [savedProviders, setSavedProviders] = useState<CustomProviderRecord[]>([])
   const [cpName, setCpName] = useState("")
   const [cpBaseUrl, setCpBaseUrl] = useState("")
@@ -299,6 +301,24 @@ export function ModelBrowserView({
   const [manualModelInput, setManualModelInput] = useState("")
   const [manualModels, setManualModels] = useState<string[]>([])
   const [isSavingProvider, setIsSavingProvider] = useState(false)
+
+  // Fetch user credits
+  const loadUserCredits = () => {
+    setCreditsLoading(true)
+    fetch("/api/user/credits", { headers: { credentials: "include" } })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data.credits === "number") {
+          setUserCredits({
+            credits: data.credits,
+            maxCredits: data.isPremium ? 200 : 10,
+            isPremium: Boolean(data.isPremium),
+          })
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCreditsLoading(false))
+  }
 
   // Load custom providers from backend / local storage
   const loadCustomProviders = () => {
@@ -388,6 +408,7 @@ export function ModelBrowserView({
   useEffect(() => {
     loadModels()
     loadCustomProviders()
+    loadUserCredits()
   }, [projectId, selectedModel])
 
   // Save starred models to localStorage
@@ -422,21 +443,26 @@ export function ModelBrowserView({
       "gemini-2.5-pro": 51.8,
     }
 
-    const processed = models.map((m) => {
-      let score = m.swe_score ?? m.swe_bench_score
-      if (!score) {
-        for (const [key, s] of Object.entries(defaultScores)) {
-          if (m.id.toLowerCase().includes(key)) {
-            score = s
-            break
+    if (!Array.isArray(models)) return []
+
+    const processed = models
+      .filter((m): m is OmniModelItem => Boolean(m && (m.id || m.name)))
+      .map((m) => {
+        const mId = String(m.id || m.name || "").toLowerCase()
+        let score = m.swe_score ?? m.swe_bench_score
+        if (!score) {
+          for (const [key, s] of Object.entries(defaultScores)) {
+            if (mId.includes(key)) {
+              score = s
+              break
+            }
           }
         }
-      }
-      return {
-        ...m,
-        swe_score: score || Math.round(35 + (m.id.length * 3) % 35),
-      }
-    })
+        return {
+          ...m,
+          swe_score: score || Math.round(35 + ((m.id ? m.id.length : 5) * 3) % 35),
+        }
+      })
 
     return processed.sort((a, b) => (b.swe_score || 0) - (a.swe_score || 0)).slice(0, 6)
   }, [models])
@@ -462,7 +488,8 @@ export function ModelBrowserView({
 
   // Check if we have any custom models in library
   const hasCustomModels = useMemo(() => {
-    return models.some((m) => m.is_custom || (m.tags && m.tags.includes("custom")))
+    if (!Array.isArray(models)) return false
+    return models.some((m) => Boolean(m && (m.is_custom || (Array.isArray(m.tags) && m.tags.includes("custom")))))
   }, [models])
 
   // Filter tabs
@@ -484,40 +511,57 @@ export function ModelBrowserView({
   }, [hasCustomModels])
 
   const filteredModels = useMemo(() => {
-    let list = models
+    if (!Array.isArray(models)) return []
+    let list = models.filter((m): m is OmniModelItem => Boolean(m && (m.id || m.name)))
 
     if (activeTab === "Starred") {
-      list = list.filter((m) => starredModelIds.has(m.id))
+      list = list.filter((m) => m.id && starredModelIds.has(m.id))
     } else if (activeTab === "Anthropic") {
-      list = list.filter((m) => (m.provider || "").toLowerCase().includes("anthropic") || m.id.toLowerCase().includes("claude"))
+      list = list.filter((m) => (m.provider || "").toLowerCase().includes("anthropic") || (m.id || "").toLowerCase().includes("claude"))
     } else if (activeTab === "OpenAI") {
-      list = list.filter((m) => (m.provider || "").toLowerCase().includes("openai") || m.id.toLowerCase().includes("gpt") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3"))
+      list = list.filter((m) => {
+        const p = (m.provider || "").toLowerCase()
+        const id = (m.id || "").toLowerCase()
+        return p.includes("openai") || id.includes("gpt") || id.includes("o1") || id.includes("o3")
+      })
     } else if (activeTab === "Google") {
-      list = list.filter((m) => (m.provider || "").toLowerCase().includes("google") || m.id.toLowerCase().includes("gemini"))
+      list = list.filter((m) => (m.provider || "").toLowerCase().includes("google") || (m.id || "").toLowerCase().includes("gemini"))
     } else if (activeTab === "Open Source") {
       list = list.filter((m) => {
         const p = (m.provider || "").toLowerCase()
-        const id = m.id.toLowerCase()
+        const id = (m.id || "").toLowerCase()
         return p.includes("meta") || p.includes("mistral") || p.includes("deepseek") || p.includes("qwen") || id.includes("llama") || id.includes("qwen") || id.includes("deepseek")
       })
     } else if (activeTab === "Reasoning") {
-      list = list.filter((m) => m.supports_reasoning || m.id.toLowerCase().includes("r1") || m.id.toLowerCase().includes("o1") || m.id.toLowerCase().includes("o3") || (m.swe_score ?? 0) > 40)
+      list = list.filter((m) => {
+        const id = (m.id || "").toLowerCase()
+        return m.supports_reasoning || id.includes("r1") || id.includes("o1") || id.includes("o3") || (m.swe_score ?? 0) > 40
+      })
     } else if (activeTab === "Vision") {
-      list = list.filter((m) => m.supports_vision || m.supports_image || m.id.toLowerCase().includes("vision") || m.id.toLowerCase().includes("flux"))
+      list = list.filter((m) => {
+        const id = (m.id || "").toLowerCase()
+        return m.supports_vision || m.supports_image || id.includes("vision") || id.includes("flux")
+      })
     } else if (activeTab === "Custom") {
-      list = list.filter((m) => m.is_custom || (m.tags && m.tags.includes("custom")))
+      list = list.filter((m) => m.is_custom || (Array.isArray(m.tags) && m.tags.includes("custom")))
     }
 
     const q = searchQuery.toLowerCase().trim()
     if (!q) return list
 
     return list.filter((m) => {
+      const name = (m.name || "").toLowerCase()
+      const id = (m.id || "").toLowerCase()
+      const provider = (m.provider || "").toLowerCase()
+      const providerDisplay = (m.providerDisplay || m.provider_display || "").toLowerCase()
+      const description = (m.description || "").toLowerCase()
+
       return (
-        m.name.toLowerCase().includes(q) ||
-        m.id.toLowerCase().includes(q) ||
-        (m.provider && m.provider.toLowerCase().includes(q)) ||
-        (m.providerDisplay && m.providerDisplay.toLowerCase().includes(q)) ||
-        (m.description && m.description.toLowerCase().includes(q))
+        name.includes(q) ||
+        id.includes(q) ||
+        provider.includes(q) ||
+        providerDisplay.includes(q) ||
+        description.includes(q)
       )
     })
   }, [models, activeTab, searchQuery, starredModelIds])
@@ -525,6 +569,24 @@ export function ModelBrowserView({
   const handleSelectActiveModel = (model: OmniModelItem) => {
     setActiveModelId(model.id)
     toast.success(`${model.name || model.id} set as active model`)
+
+    // Hotpatch: sync selection with ModelEffortSelector and Chat
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("sycord_selected_model", String(model.id))
+        window.dispatchEvent(
+          new CustomEvent("sycord:model-selected", {
+            detail: {
+              modelId: model.id,
+              modelName: model.name,
+              provider: model.provider,
+              model,
+            },
+          })
+        )
+      } catch {}
+    }
+
     onSelectModel?.(model.id, model)
     if (!isStandalone && onClose) {
       onClose()
@@ -832,44 +894,58 @@ export function ModelBrowserView({
           <span className="text-sm font-medium tracking-tight text-[#F5F5F5]">Sycord</span>
         </div>
 
-        {onClose && !isStandalone && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex size-11 items-center justify-center rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929] transition-all active:scale-[0.97]"
-          >
-            <X className="size-4" strokeWidth={1.75} />
-          </button>
-        )}
-      </header>
-
-      {/* Main Content Container */}
-      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-12 flex-1 flex flex-col space-y-8">
-        {/* Page Title & Settings Area */}
-        <div className="flex items-start justify-between gap-4 pt-1">
-          <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">
-              Model Browser
-            </h1>
-            <p className="text-xs sm:text-[13px] text-[#737373] leading-relaxed">
-              Explore foundation AI models, pricing specifications, and benchmark metrics.
-            </p>
-          </div>
+        <div className="flex items-center gap-2">
+          {/* Settings button with astro chat logo inline next to X */}
           <button
             type="button"
             onClick={() => setShowSettingsModal(true)}
-            aria-label="Provider Settings"
-            title="Add Custom Provider & Manage Endpoints"
-            className="flex size-11 items-center justify-center rounded-[18px] bg-[#171717] border border-[#292929] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] hover:border-[#383838] transition-all active:scale-[0.97] shrink-0 group relative"
+            aria-label="Settings"
+            title="Settings & Credits"
+            className="flex size-11 items-center justify-center rounded-[14px] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-[#292929] hover:border-[#383838] transition-all active:scale-[0.97] relative"
           >
-            <Settings className="size-4 group-hover:rotate-45 transition-transform duration-200" strokeWidth={1.75} />
+            <div className="size-5 shrink-0 flex items-center justify-center rounded-full overflow-hidden">
+              <img
+                src="/logo.png"
+                alt="Settings"
+                className="size-full object-contain"
+              />
+            </div>
             {savedProviders.length > 0 && (
               <span className="absolute -top-1 -right-1 size-4 rounded-full bg-emerald-500 text-[9px] font-bold text-black flex items-center justify-center">
                 {savedProviders.length}
               </span>
             )}
           </button>
+
+          {/* Close button with X */}
+          <button
+            type="button"
+            onClick={() => {
+              if (onClose) {
+                onClose()
+              } else if (typeof window !== "undefined") {
+                if (window.history.length > 1) {
+                  window.history.back()
+                } else {
+                  window.location.href = "/"
+                }
+              }
+            }}
+            aria-label="Close"
+            className="flex size-11 items-center justify-center rounded-[14px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#1D1D1D] border border-transparent hover:border-[#292929] transition-all active:scale-[0.97]"
+          >
+            <X className="size-4" strokeWidth={1.75} />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content Container */}
+      <main className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-12 flex-1 flex flex-col space-y-6">
+        {/* Page Title Area without redundant text */}
+        <div className="pt-1">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F5F5F5]">
+            Model Browser
+          </h1>
         </div>
 
         {/* Top Models SWE-Bench Carousel / Featured Models */}
@@ -1037,11 +1113,6 @@ export function ModelBrowserView({
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2 group-hover:text-white transition-colors">
                         <span className="truncate">{model.name}</span>
-                        {model.is_custom && (
-                          <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
-                            Custom
-                          </span>
-                        )}
                         {isActive && (
                           <span className="text-[9.5px] font-medium text-[#F5F5F5] bg-[#202020] border border-[#383838] px-1.5 py-0.5 rounded-[8px]">
                             Active
@@ -1092,10 +1163,10 @@ export function ModelBrowserView({
             <div className="space-y-1">
               <h2 className="text-lg font-semibold text-[#F5F5F5] flex items-center gap-2">
                 <Settings className="size-5 text-emerald-400" />
-                Custom AI Providers
+                Settings & Providers
               </h2>
               <p className="text-xs text-[#737373]">
-                Connect self-hosted or third-party OpenAI-compatible endpoints and add custom models to your library.
+                Manage account credits, add custom models and connect AI endpoints.
               </p>
             </div>
             <button
@@ -1105,6 +1176,35 @@ export function ModelBrowserView({
               className="flex size-9 items-center justify-center rounded-[10px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] transition-colors"
             >
               <X className="size-4" strokeWidth={1.75} />
+            </button>
+          </div>
+
+          {/* Account Credits Balance Section */}
+          <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                <Coins className="size-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-xs font-medium text-[#737373]">Available Balance</div>
+                <div className="text-lg font-semibold text-[#F5F5F5] flex items-center gap-2">
+                  <span>{userCredits !== null ? `${userCredits.credits} Credits` : creditsLoading ? "Loading..." : "5 Credits"}</span>
+                  {userCredits?.isPremium && (
+                    <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                      PRO
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={loadUserCredits}
+              disabled={creditsLoading}
+              title="Refresh credits balance"
+              className="flex size-9 items-center justify-center rounded-[10px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#292929] text-[#A3A3A3] hover:text-[#F5F5F5] transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`size-4 ${creditsLoading ? "animate-spin" : ""}`} />
             </button>
           </div>
 
@@ -1119,7 +1219,7 @@ export function ModelBrowserView({
                   : "bg-[#1D1D1D] text-[#A3A3A3] hover:text-white border border-[#292929]"
               }`}
             >
-              Add Custom Provider
+              Add Custom Model / Provider
             </button>
             <button
               type="button"
@@ -1475,11 +1575,6 @@ export function ModelBrowserView({
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-[#F5F5F5] truncate flex items-center gap-2">
                     <span className="truncate">{inspectingModel.name}</span>
-                    {inspectingModel.is_custom && (
-                      <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
-                        Custom
-                      </span>
-                    )}
                   </h3>
                   <p className="text-xs text-[#737373] font-mono truncate">{inspectingModel.id}</p>
                 </div>

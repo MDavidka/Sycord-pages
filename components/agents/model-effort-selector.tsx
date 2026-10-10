@@ -142,6 +142,30 @@ export function ModelEffortSelector({
     };
   }, [isOpen]);
 
+  // Synchronize with model selection from Model Browser page / modal
+  useEffect(() => {
+    const handleModelSelected = (e: any) => {
+      const selectedId = e?.detail?.modelId;
+      if (selectedId && onModelSelect) {
+        onModelSelect(selectedId);
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "sycord_selected_model" && e.newValue && onModelSelect) {
+        onModelSelect(e.newValue);
+      }
+    };
+
+    window.addEventListener("sycord:model-selected", handleModelSelected as EventListener);
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("sycord:model-selected", handleModelSelected as EventListener);
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [onModelSelect]);
+
   // Model family display name
   const modelFamilyName =
     cleanModelDisplayName(activeModelObj.label || activeModelObj.apiModel || "Ara").split(" ")[0] || "Ara";

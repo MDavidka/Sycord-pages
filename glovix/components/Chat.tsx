@@ -558,6 +558,32 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
+    // Real-time synchronization when a model is selected on the Model Browser page or modal
+    useEffect(() => {
+        const handleModelSelected = (e: any) => {
+            const mId = e?.detail?.modelId;
+            if (!mId) return;
+            const choice = availableModelChoices?.find(c => c.modelType === mId || c.apiModel === mId);
+            const targetModelType = choice ? choice.modelType : mId;
+            const targetApiModel = choice ? choice.apiModel : mId;
+            setSelectedModel(targetModelType);
+            setAiModel(targetApiModel);
+            setAvailableModelChoices(prev => {
+                if (!prev) return prev;
+                return prev.map(c => ({
+                    ...c,
+                    active: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                    isAiTabActive: c.modelType === targetModelType || c.apiModel === targetApiModel,
+                }));
+            });
+        };
+
+        window.addEventListener('sycord:model-selected', handleModelSelected as EventListener);
+        return () => {
+            window.removeEventListener('sycord:model-selected', handleModelSelected as EventListener);
+        };
+    }, [availableModelChoices, setAiModel, setSelectedModel]);
+
     // Live execution actions. Remote project-agent actions are also copied onto
     // the current assistant message so completed and background runs survive a
     // reload; local tool calls already persist through tool_calls/tool messages.
