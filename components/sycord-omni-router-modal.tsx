@@ -21,6 +21,7 @@ import {
   Brain,
   Layers,
   ChevronRight,
+  ChevronLeft,
   Info,
   Plus,
   Trash2,
@@ -77,72 +78,127 @@ export interface CustomProviderRecord {
   created_at?: string
 }
 
-// LobeHub icons catalog map provided by specification
+// TypingMind & LobeHub colored model icons catalog map
+const TYPINGMIND_CDN_BASE = "https://raw.githubusercontent.com/TypingMind/model-icons/main/icons/"
 const LOBEHUB_CDN_BASE = "https://unpkg.com/@lobehub/icons-static-svg@latest/icons/"
+
+// Direct mapping to TypingMind color icons (PNG / JPG)
+const TYPINGMIND_COLOR_MAP: Record<string, string> = {
+  claude: "claude-color.jpg",
+  anthropic: "claude-color.jpg",
+  gemini: "gemini-color.jpg",
+  google: "gemini-color.jpg",
+  openai: "openai.svg",
+  gpt: "openai.svg",
+  "gpt-4": "gpt-4.webp",
+  "gpt-3.5": "gpt-35.webp",
+  mistral: "mistral-color.jpg",
+  llama: "llama.png",
+  meta: "llama.png",
+  deepseek: "deepseek.png",
+  qwen: "qwen2.png",
+  alibaba: "qwen2.png",
+  gemma: "gemma-color.jpg",
+  perplexity: "perplexity-color.jpg",
+  huggingface: "huggingface-color.jpg",
+  replit: "replit-color.jpg",
+  azure: "azureopenai.png",
+  bing: "bing-color.jpg",
+  pi: "pi-logo-192.png",
+  llava: "llava-color.jpg",
+  falcon: "falcon.png",
+  vicuna: "vicuna.png",
+  openrouter: "openrouterai.png",
+  openassistant: "openassistant.webp",
+}
 
 const LOBEHUB_MAP: Record<string, string> = {
   ace: "ace",
   ai21: "ai21",
-  anthropic: "claude",
-  claude: "claude",
+  anthropic: "claude-color",
+  claude: "claude-color",
   aya: "aya",
-  baichuan: "baichuan",
-  chatglm: "chatglm",
-  codegeex: "codegeex",
-  cogvideo: "cogvideo",
-  cogview: "cogview",
+  baichuan: "baichuan-color",
+  chatglm: "chatglm-color",
+  codegeex: "codegeex-color",
+  cogvideo: "cogvideo-color",
+  cogview: "cogview-color",
   "command-a": "command-a",
   codex: "codex",
   "dall-e": "dall-e",
-  dbrx: "dbrx",
+  dbrx: "dbrx-color",
   "deep-cogito": "deep-cogito",
-  deepseek: "deepseek",
+  deepseek: "deepseek-color",
   dolphin: "dolphin",
-  doubao: "doubao",
+  doubao: "doubao-color",
   elevenlabs: "elevenlabs",
   "fish-audio": "fish-audio",
   flux: "flux",
-  gemini: "gemini",
-  google: "gemini",
-  gemma: "gemma",
+  gemini: "gemini-color",
+  google: "gemini-color",
+  gemma: "gemma-color",
   "glm-v": "glm-v",
   grok: "grok",
   xai: "grok",
-  hunyuan: "hunyuan",
-  kimi: "kimi",
-  kolors: "kolors",
+  hunyuan: "hunyuan-color",
+  kimi: "kimi-color",
+  kolors: "kolors-color",
   kwaipilot: "kwaipilot",
   liquid: "liquid",
-  llava: "llava",
+  llava: "llava-color",
   longcat: "longcat",
   magic: "magic",
-  minimax: "minimax",
-  mistral: "mistral",
+  minimax: "minimax-color",
+  mistral: "mistral-color",
   morph: "morph",
   "nano-banana": "nano-banana",
   nova: "nova",
   openchat: "openchat",
   openai: "openai",
-  palm: "palm",
-  perplexity: "perplexity",
+  palm: "palm-color",
+  perplexity: "perplexity-color",
   phind: "phind",
   poolside: "poolside",
-  qwen: "qwen",
-  alibaba: "qwen",
+  qwen: "qwen-color",
+  alibaba: "qwen-color",
   reka: "reka",
-  rwkv: "rwkv",
+  rwkv: "rwkv-color",
   sora: "sora",
-  spark: "spark",
-  stepfun: "stepfun",
+  spark: "spark-color",
+  stepfun: "stepfun-color",
   voyage: "voyage",
-  wenxin: "wenxin",
+  wenxin: "wenxin-color",
   "xiaomi-mimo": "xiaomi-mimo",
   xuanyuan: "xuanyuan",
-  yi: "yi",
+  yi: "yi-color",
   ollama: "ollama",
-  groq: "groq",
-  together: "together",
+  groq: "groq-color",
+  together: "together-color",
   openrouter: "openrouter",
+}
+
+export function getTypingMindIconFile(brandOrModel: string): string | null {
+  if (!brandOrModel) return null
+  const k = brandOrModel.toLowerCase().trim()
+
+  if (TYPINGMIND_COLOR_MAP[k]) return TYPINGMIND_COLOR_MAP[k]
+  if (k.includes("claude") || k.includes("anthropic") || k.includes("sonnet") || k.includes("haiku") || k.includes("opus")) return "claude-color.jpg"
+  if (k.includes("gemini") || k.includes("google") || k.includes("vertex")) return "gemini-color.jpg"
+  if (k.includes("gemma")) return "gemma-color.jpg"
+  if (k.includes("mistral") || k.includes("mixtral")) return "mistral-color.jpg"
+  if (k.includes("llama") || k.includes("meta")) return "llama.png"
+  if (k.includes("deepseek")) return "deepseek.png"
+  if (k.includes("qwen") || k.includes("alibaba")) return "qwen2.png"
+  if (k.includes("perplexity")) return "perplexity-color.jpg"
+  if (k.includes("gpt-4")) return "gpt-4.webp"
+  if (k.includes("gpt-3")) return "gpt-35.webp"
+  if (k.includes("openai") || k.includes("gpt") || k.includes("chatgpt") || k.includes("o1") || k.includes("o3") || k.includes("o4")) return "openai.svg"
+  if (k.includes("huggingface") || k.includes("hf")) return "huggingface-color.jpg"
+  if (k.includes("replit")) return "replit-color.jpg"
+  if (k.includes("bing")) return "bing-color.jpg"
+  if (k.includes("llava")) return "llava-color.jpg"
+
+  return null
 }
 
 export function getLobeHubIconKey(brandOrModel: string): string | null {
@@ -151,44 +207,44 @@ export function getLobeHubIconKey(brandOrModel: string): string | null {
 
   if (LOBEHUB_MAP[k]) return LOBEHUB_MAP[k]
 
-  if (k.includes("claude") || k.includes("anthropic") || k.includes("sonnet") || k.includes("haiku") || k.includes("opus")) return "claude"
+  if (k.includes("claude") || k.includes("anthropic") || k.includes("sonnet") || k.includes("haiku") || k.includes("opus")) return "claude-color"
   if (k.includes("openai") || k.includes("gpt") || k.includes("chatgpt") || k.includes("o1") || k.includes("o3") || k.includes("o4")) return "openai"
-  if (k.includes("gemini") || k.includes("google") || k.includes("vertex")) return "gemini"
-  if (k.includes("gemma")) return "gemma"
-  if (k.includes("deepseek")) return "deepseek"
-  if (k.includes("qwen") || k.includes("alibaba")) return "qwen"
-  if (k.includes("mistral")) return "mistral"
+  if (k.includes("gemini") || k.includes("google") || k.includes("vertex")) return "gemini-color"
+  if (k.includes("gemma")) return "gemma-color"
+  if (k.includes("deepseek")) return "deepseek-color"
+  if (k.includes("qwen") || k.includes("alibaba")) return "qwen-color"
+  if (k.includes("mistral")) return "mistral-color"
   if (k.includes("grok") || k.includes("xai")) return "grok"
   if (k.includes("flux")) return "flux"
   if (k.includes("dall-e") || k.includes("dalle") || k.includes("cogview") || k.includes("kolors")) return "dall-e"
   if (k.includes("sora") || k.includes("cogvideo")) return "sora"
-  if (k.includes("minimax")) return "minimax"
-  if (k.includes("perplexity")) return "perplexity"
-  if (k.includes("stepfun")) return "stepfun"
-  if (k.includes("yi")) return "yi"
-  if (k.includes("baichuan")) return "baichuan"
-  if (k.includes("doubao")) return "doubao"
-  if (k.includes("kimi") || k.includes("moonshot")) return "kimi"
-  if (k.includes("chatglm") || k.includes("glm") || k.includes("zhipu") || k.includes("zai")) return "chatglm"
-  if (k.includes("codegeex")) return "codegeex"
+  if (k.includes("minimax")) return "minimax-color"
+  if (k.includes("perplexity")) return "perplexity-color"
+  if (k.includes("stepfun")) return "stepfun-color"
+  if (k.includes("yi")) return "yi-color"
+  if (k.includes("baichuan")) return "baichuan-color"
+  if (k.includes("doubao")) return "doubao-color"
+  if (k.includes("kimi") || k.includes("moonshot")) return "kimi-color"
+  if (k.includes("chatglm") || k.includes("glm") || k.includes("zhipu") || k.includes("zai")) return "chatglm-color"
+  if (k.includes("codegeex")) return "codegeex-color"
   if (k.includes("command")) return "command-a"
   if (k.includes("codex")) return "codex"
-  if (k.includes("dbrx")) return "dbrx"
+  if (k.includes("dbrx")) return "dbrx-color"
   if (k.includes("elevenlabs")) return "elevenlabs"
   if (k.includes("nova")) return "nova"
   if (k.includes("phind")) return "phind"
   if (k.includes("voyage")) return "voyage"
-  if (k.includes("wenxin") || k.includes("baidu")) return "wenxin"
-  if (k.includes("hunyuan")) return "hunyuan"
+  if (k.includes("wenxin") || k.includes("baidu")) return "wenxin-color"
+  if (k.includes("hunyuan")) return "hunyuan-color"
   if (k.includes("ollama")) return "ollama"
-  if (k.includes("groq")) return "groq"
-  if (k.includes("together")) return "together"
+  if (k.includes("groq")) return "groq-color"
+  if (k.includes("together")) return "together-color"
   if (k.includes("openrouter")) return "openrouter"
 
   return null
 }
 
-// Provider icon abstraction complying with Section 5
+// Provider icon abstraction fetching colorful icons from TypingMind & LobeHub
 export function ModelIcon({
   provider,
   modelName,
@@ -202,18 +258,37 @@ export function ModelIcon({
   className?: string
   onClick?: (e: React.MouseEvent) => void
 }) {
-  const iconKey = getLobeHubIconKey(provider || modelName || "")
-  const [error, setError] = useState(false)
+  const tmFile = getTypingMindIconFile(modelName || provider || "")
+  const lobeKey = getLobeHubIconKey(provider || modelName || "")
+  const [errorCount, setErrorCount] = useState(0)
 
-  if (iconKey && !error) {
-    const iconUrl = `${LOBEHUB_CDN_BASE}${iconKey}.svg`
+  // Level 1: Try TypingMind colored icon
+  if (tmFile && errorCount === 0) {
+    const tmUrl = `${TYPINGMIND_CDN_BASE}${tmFile}`
     return (
       <img
-        src={iconUrl}
+        src={tmUrl}
         alt={provider || modelName || "Model provider"}
         width={size}
         height={size}
-        onError={() => setError(true)}
+        onError={() => setErrorCount(1)}
+        onClick={onClick}
+        className={`object-contain rounded-[6px] inline-block shrink-0 transition-opacity ${onClick ? "cursor-pointer" : ""} ${className}`}
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+
+  // Level 2: Try LobeHub color SVG icon
+  if (lobeKey && errorCount <= 1) {
+    const lobeUrl = `${LOBEHUB_CDN_BASE}${lobeKey}.svg`
+    return (
+      <img
+        src={lobeUrl}
+        alt={provider || modelName || "Model provider"}
+        width={size}
+        height={size}
+        onError={() => setErrorCount(2)}
         onClick={onClick}
         className={`object-contain inline-block shrink-0 transition-opacity ${onClick ? "cursor-pointer" : ""} ${className}`}
         style={{ width: size, height: size }}
@@ -282,7 +357,9 @@ export function ModelBrowserView({
   const [inspectingModel, setInspectingModel] = useState<OmniModelItem | null>(null)
 
   // Custom Provider & Settings State
-  const [showSettingsModal, setShowSettingsModal] = useState(Boolean(initialOpenCustomProvider))
+  const [currentView, setCurrentView] = useState<"models" | "settings">(
+    initialOpenCustomProvider ? "settings" : "models"
+  )
   const [settingsTab, setSettingsTab] = useState<"add" | "saved">("add")
   const [userCredits, setUserCredits] = useState<{ credits: number; maxCredits: number; isPremium: boolean } | null>(null)
   const [creditsLoading, setCreditsLoading] = useState(false)
@@ -840,7 +917,7 @@ export function ModelBrowserView({
       setSelectedDiscoveredModels(new Set())
       setManualModels([])
       setDiscoveryStatus({ type: "idle" })
-      setShowSettingsModal(false)
+      setCurrentView("models")
       setActiveTab("Custom")
     } catch (err: any) {
       toast.error(err?.message || "Failed to save provider")
@@ -887,598 +964,608 @@ export function ModelBrowserView({
         <div className="w-9 h-1 rounded-full bg-[#383838]" />
       </div>
 
-      {/* Header section: Title + Subtitle */}
-      <div className="px-5 pt-2 pb-3 shrink-0 flex items-start justify-between">
-        <div className="space-y-0.5">
-          <h2 className="text-lg font-semibold tracking-tight text-white">
-            Select a model
-          </h2>
-          <p className="text-xs text-[#8C8C8C]">
-            Choose the model for your next response.
-          </p>
-        </div>
+      {currentView === "models" ? (
+        <>
+          {/* Header section: Title + Subtitle */}
+          <div className="px-5 pt-2 pb-3 shrink-0 flex items-start justify-between">
+            <div className="space-y-0.5">
+              <h2 className="text-lg font-semibold tracking-tight text-white">
+                Select a model
+              </h2>
+              <p className="text-xs text-[#8C8C8C]">
+                Choose the model for your next response.
+              </p>
+            </div>
 
-        {/* Quick settings & provider config button */}
-        <button
-          type="button"
-          onClick={() => setShowSettingsModal(true)}
-          aria-label="Settings & Custom Providers"
-          title="Settings, Credits & Add Model"
-          className="flex size-9 items-center justify-center rounded-[12px] text-[#8C8C8C] hover:text-white bg-[#191919] hover:bg-[#1F1F1F] border border-[#242424] hover:border-[#333333] transition-colors relative"
-        >
-          <div className="size-4 shrink-0 flex items-center justify-center rounded-full overflow-hidden">
-            <img
-              src="/logo.png"
-              alt="Settings"
-              className="size-full object-contain"
-            />
+            {/* Quick settings & provider config button with Lucide Setting icon */}
+            <button
+              type="button"
+              onClick={() => setCurrentView("settings")}
+              aria-label="Settings & Custom Providers"
+              title="Settings, Credits & Add Model"
+              className="flex size-9 items-center justify-center rounded-[12px] text-[#8C8C8C] hover:text-white bg-[#191919] hover:bg-[#1F1F1F] border border-[#242424] hover:border-[#333333] transition-colors relative active:scale-[0.97]"
+            >
+              <Settings className="size-4" strokeWidth={1.75} />
+              {savedProviders.length > 0 && (
+                <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-emerald-500 text-[8.5px] font-bold text-black flex items-center justify-center">
+                  {savedProviders.length}
+                </span>
+              )}
+            </button>
           </div>
-          {savedProviders.length > 0 && (
-            <span className="absolute -top-1 -right-1 size-3.5 rounded-full bg-emerald-500 text-[8.5px] font-bold text-black flex items-center justify-center">
-              {savedProviders.length}
-            </span>
-          )}
-        </button>
-      </div>
 
-      {/* Search Input Row with Filter Slider Button */}
-      <div className="px-5 pb-3 shrink-0 space-y-2.5">
-        <div className="flex items-center gap-2">
-          {/* Search container */}
-          <div className="flex-1 flex items-center bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[18px] px-3.5 h-11 transition-colors">
-            <Search className="size-4 text-[#8C8C8C] shrink-0 mr-2.5" strokeWidth={1.75} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search models..."
-              className="w-full bg-transparent text-sm text-white placeholder:text-[#8C8C8C] outline-none"
-            />
-            {searchQuery && (
+          {/* Search Input Row with Filter Slider Button */}
+          <div className="px-5 pb-3 shrink-0 space-y-2.5">
+            <div className="flex items-center gap-2">
+              {/* Search container */}
+              <div className="flex-1 flex items-center bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[18px] px-3.5 h-11 transition-colors">
+                <Search className="size-4 text-[#8C8C8C] shrink-0 mr-2.5" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search models..."
+                  className="w-full bg-transparent text-sm text-white placeholder:text-[#8C8C8C] outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="text-[#8C8C8C] hover:text-white shrink-0 p-1"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter button with sliders */}
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
-                className="text-[#8C8C8C] hover:text-white shrink-0 p-1"
+                onClick={() => setShowFilterPills(!showFilterPills)}
+                aria-label="Filter models"
+                title="Filter by provider or category"
+                className={`size-11 rounded-[18px] border flex items-center justify-center transition-all shrink-0 active:scale-[0.97] ${
+                  showFilterPills || activeTab !== "All"
+                    ? "bg-[#1F1F1F] border-[#333333] text-white"
+                    : "bg-[#191919] border-[#242424] text-[#8C8C8C] hover:text-white hover:bg-[#1F1F1F]"
+                }`}
               >
-                <X className="size-3.5" />
+                <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            {/* Collapsible Category Filter Pills */}
+            {showFilterPills && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-1 scrollbar-none animate-in fade-in slide-in-from-top-1 duration-150">
+                {filterTabs.map((tab) => {
+                  const isSelected = activeTab === tab
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                      className={`h-7 px-2.5 rounded-[10px] text-[11px] font-medium transition-all shrink-0 flex items-center gap-1.5 active:scale-[0.97] ${
+                        isSelected
+                          ? "bg-white text-black font-semibold"
+                          : "bg-[#191919] text-[#8C8C8C] hover:text-white border border-[#242424]"
+                      }`}
+                    >
+                      {tab === "Starred" && (
+                        <Star
+                          className={`size-3 ${isSelected ? "fill-black text-black" : "fill-[#8C8C8C] text-[#8C8C8C]"}`}
+                        />
+                      )}
+                      {tab === "Custom" && (
+                        <Sparkles className={`size-3 ${isSelected ? "text-black" : "text-emerald-400"}`} />
+                      )}
+                      <span>{tab}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Model Cards List (Scrollable) */}
+          <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2.5">
+            {loading && models.length === 0 ? (
+              <div className="space-y-2.5 animate-pulse">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-16 rounded-[18px] bg-[#191919] border border-[#242424]" />
+                ))}
+              </div>
+            ) : filteredModels.length === 0 ? (
+              <div className="py-12 text-center text-xs text-[#8C8C8C] space-y-3">
+                <p>No models found matching your search.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsTab("add")
+                    setCurrentView("settings")
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#191919] border border-[#242424] text-xs font-medium text-white hover:border-[#333333]"
+                >
+                  <Plus className="size-3.5 text-emerald-400" />
+                  <span>Add Custom Provider & Model</span>
+                </button>
+              </div>
+            ) : (
+              filteredModels.map((model) => {
+                const isActive = activeModelId === model.id
+                const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
+                const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
+
+                return (
+                  <div
+                    key={model.id}
+                    onClick={() => handleSelectActiveModel(model)}
+                    className={`w-full rounded-[18px] p-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 transition-all border cursor-pointer group active:scale-[0.99] ${
+                      isActive
+                        ? "bg-[#1F1F1F] border-[#333333]"
+                        : "bg-[#191919] hover:bg-[#1F1F1F] border-[#242424] hover:border-[#333333]"
+                    }`}
+                  >
+                    {/* Left: Model brand icon + Title & Subtitle */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="size-10 shrink-0 flex items-center justify-center rounded-[12px] bg-[#222222] border border-[#2A2A2A]">
+                        <ModelIcon provider={model.provider} modelName={model.name} size={22} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-white truncate group-hover:text-white transition-colors">
+                          {model.name}
+                        </div>
+                        <div className="text-xs text-[#8C8C8C] truncate mt-0.5">
+                          {model.providerDisplay || model.provider_display || model.provider || "Anthropic"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Pricing lines + Radio button indicator */}
+                    <div className="flex items-center gap-3.5 shrink-0">
+                      <div className="text-right text-[11px] leading-tight text-[#8C8C8C] font-mono tabular-nums">
+                        <div>{model.is_custom ? "Custom" : `${inCost} input /`}</div>
+                        <div>{model.is_custom ? "Endpoint" : `${outCost} output`}</div>
+                      </div>
+
+                      {/* Radio Indicator */}
+                      <div
+                        className={`size-5 rounded-full flex items-center justify-center transition-colors border ${
+                          isActive
+                            ? "border-white bg-white"
+                            : "border-[#444444] bg-transparent group-hover:border-[#666666]"
+                        }`}
+                      >
+                        {isActive && (
+                          <div className="size-2 rounded-full bg-[#111111]" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Header section with Back Button */}
+          <div className="px-5 pt-2 pb-3 shrink-0 flex items-center justify-between border-b border-[#242424]">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentView("models")}
+                aria-label="Back to models"
+                title="Back to models"
+                className="flex size-8 items-center justify-center rounded-[10px] text-[#8C8C8C] hover:text-white bg-[#191919] hover:bg-[#1F1F1F] border border-[#242424] hover:border-[#333333] transition-colors active:scale-[0.97]"
+              >
+                <ChevronLeft className="size-4" strokeWidth={2} />
+              </button>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight text-white flex items-center gap-2">
+                  <span>Provider Settings</span>
+                </h2>
+                <p className="text-xs text-[#8C8C8C]">
+                  Account balance & custom endpoints
+                </p>
+              </div>
+            </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="flex size-8 items-center justify-center rounded-[10px] text-[#8C8C8C] hover:text-white bg-[#191919] hover:bg-[#1F1F1F] border border-[#242424] transition-colors"
+              >
+                <X className="size-4" strokeWidth={1.75} />
               </button>
             )}
           </div>
 
-          {/* Filter button with sliders */}
-          <button
-            type="button"
-            onClick={() => setShowFilterPills(!showFilterPills)}
-            aria-label="Filter models"
-            title="Filter by provider or category"
-            className={`size-11 rounded-[18px] border flex items-center justify-center transition-all shrink-0 active:scale-[0.97] ${
-              showFilterPills || activeTab !== "All"
-                ? "bg-[#1F1F1F] border-[#333333] text-white"
-                : "bg-[#191919] border-[#242424] text-[#8C8C8C] hover:text-white hover:bg-[#1F1F1F]"
-            }`}
-          >
-            <SlidersHorizontal className="size-4" strokeWidth={1.75} />
-          </button>
-        </div>
+          {/* Scrollable Settings / Onboarding Content */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            {/* Account Credits Balance Section */}
+            <div className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Coins className="size-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-xs font-medium text-[#8C8C8C]">Available Balance</div>
+                  <div className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span>{userCredits !== null ? `${userCredits.credits} Credits` : creditsLoading ? "Loading..." : "5 Credits"}</span>
+                    {userCredits?.isPremium && (
+                      <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                        PRO
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={loadUserCredits}
+                disabled={creditsLoading}
+                title="Refresh credits balance"
+                className="flex size-9 items-center justify-center rounded-[10px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#292929] text-[#8C8C8C] hover:text-white transition-all disabled:opacity-50"
+              >
+                <RefreshCw className={`size-4 ${creditsLoading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
 
-        {/* Collapsible Category Filter Pills */}
-        {showFilterPills && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-1 scrollbar-none animate-in fade-in slide-in-from-top-1 duration-150">
-            {filterTabs.map((tab) => {
-              const isSelected = activeTab === tab
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`h-7 px-2.5 rounded-[10px] text-[11px] font-medium transition-all shrink-0 flex items-center gap-1.5 active:scale-[0.97] ${
-                    isSelected
-                      ? "bg-white text-black font-semibold"
-                      : "bg-[#191919] text-[#8C8C8C] hover:text-white border border-[#242424]"
-                  }`}
-                >
-                  {tab === "Starred" && (
-                    <Star
-                      className={`size-3 ${isSelected ? "fill-black text-black" : "fill-[#8C8C8C] text-[#8C8C8C]"}`}
-                    />
-                  )}
-                  {tab === "Custom" && (
-                    <Sparkles className={`size-3 ${isSelected ? "text-black" : "text-emerald-400"}`} />
-                  )}
-                  <span>{tab}</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Model Cards List (Scrollable) */}
-      <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2.5">
-        {loading && models.length === 0 ? (
-          <div className="space-y-2.5 animate-pulse">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-16 rounded-[18px] bg-[#191919] border border-[#242424]" />
-            ))}
-          </div>
-        ) : filteredModels.length === 0 ? (
-          <div className="py-12 text-center text-xs text-[#8C8C8C] space-y-3">
-            <p>No models found matching your search.</p>
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsTab("add")
-                setShowSettingsModal(true)
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[12px] bg-[#191919] border border-[#242424] text-xs font-medium text-white hover:border-[#333333]"
-            >
-              <Plus className="size-3.5 text-emerald-400" />
-              <span>Add Custom Provider & Model</span>
-            </button>
-          </div>
-        ) : (
-          filteredModels.map((model) => {
-            const isActive = activeModelId === model.id
-            const inCost = model.input_cost !== undefined ? `$${model.input_cost.toFixed(2)}` : "$0.50"
-            const outCost = model.output_cost !== undefined ? `$${model.output_cost.toFixed(2)}` : "$1.50"
-
-            return (
-              <div
-                key={model.id}
-                onClick={() => handleSelectActiveModel(model)}
-                className={`w-full rounded-[18px] p-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 transition-all border cursor-pointer group active:scale-[0.99] ${
-                  isActive
-                    ? "bg-[#1F1F1F] border-[#333333]"
-                    : "bg-[#191919] hover:bg-[#1F1F1F] border-[#242424] hover:border-[#333333]"
+            {/* Navigation Tabs (Add New vs Saved Providers) */}
+            <div className="flex items-center gap-2 border-b border-[#242424] pb-3">
+              <button
+                type="button"
+                onClick={() => setSettingsTab("add")}
+                className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all ${
+                  settingsTab === "add"
+                    ? "bg-white text-black font-semibold"
+                    : "bg-[#191919] text-[#8C8C8C] hover:text-white border border-[#242424]"
                 }`}
               >
-                {/* Left: Model brand icon + Title & Subtitle */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-10 shrink-0 flex items-center justify-center rounded-[12px] bg-[#222222] border border-[#2A2A2A]">
-                    <ModelIcon provider={model.provider} modelName={model.name} size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-white truncate group-hover:text-white transition-colors">
-                      {model.name}
-                    </div>
-                    <div className="text-xs text-[#8C8C8C] truncate mt-0.5">
-                      {model.providerDisplay || model.provider_display || model.provider || "Anthropic"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Pricing lines + Radio button indicator */}
-                <div className="flex items-center gap-3.5 shrink-0">
-                  <div className="text-right text-[11px] leading-tight text-[#8C8C8C] font-mono tabular-nums">
-                    <div>{model.is_custom ? "Custom" : `${inCost} input /`}</div>
-                    <div>{model.is_custom ? "Endpoint" : `${outCost} output`}</div>
-                  </div>
-
-                  {/* Radio Indicator */}
-                  <div
-                    className={`size-5 rounded-full flex items-center justify-center transition-colors border ${
-                      isActive
-                        ? "border-white bg-white"
-                        : "border-[#444444] bg-transparent group-hover:border-[#666666]"
-                    }`}
-                  >
-                    {isActive && (
-                      <div className="size-2 rounded-full bg-[#111111]" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      {/* --- CUSTOM PROVIDER SETTINGS MODAL --- */}
-      <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
-        <DialogContent className="bg-[#171717] border border-[#292929] text-[#F5F5F5] max-w-xl max-h-[85vh] overflow-y-auto rounded-[26px] p-6 shadow-2xl space-y-6">
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4 border-b border-[#292929] pb-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold text-[#F5F5F5] flex items-center gap-2">
-                <Settings className="size-5 text-emerald-400" />
-                Settings & Providers
-              </h2>
-              <p className="text-xs text-[#737373]">
-                Manage account credits, add custom models and connect AI endpoints.
-              </p>
+                Add Custom Model / Provider
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsTab("saved")}
+                className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  settingsTab === "saved"
+                    ? "bg-white text-black font-semibold"
+                    : "bg-[#191919] text-[#8C8C8C] hover:text-white border border-[#242424]"
+                }`}
+              >
+                <span>Configured Providers</span>
+                <span className="text-[10px] bg-[#292929] px-1.5 py-0.5 rounded-full text-[#8C8C8C]">
+                  {savedProviders.length}
+                </span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowSettingsModal(false)}
-              aria-label="Close"
-              className="flex size-9 items-center justify-center rounded-[10px] text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020] transition-colors"
-            >
-              <X className="size-4" strokeWidth={1.75} />
-            </button>
-          </div>
 
-          {/* Account Credits Balance Section */}
-          <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="size-10 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                <Coins className="size-5" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-xs font-medium text-[#737373]">Available Balance</div>
-                <div className="text-lg font-semibold text-[#F5F5F5] flex items-center gap-2">
-                  <span>{userCredits !== null ? `${userCredits.credits} Credits` : creditsLoading ? "Loading..." : "5 Credits"}</span>
-                  {userCredits?.isPremium && (
-                    <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
-                      PRO
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={loadUserCredits}
-              disabled={creditsLoading}
-              title="Refresh credits balance"
-              className="flex size-9 items-center justify-center rounded-[10px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#292929] text-[#A3A3A3] hover:text-[#F5F5F5] transition-all disabled:opacity-50"
-            >
-              <RefreshCw className={`size-4 ${creditsLoading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-
-          {/* Navigation Tabs (Add New vs Saved Providers) */}
-          <div className="flex items-center gap-2 border-b border-[#222222] pb-3">
-            <button
-              type="button"
-              onClick={() => setSettingsTab("add")}
-              className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all ${
-                settingsTab === "add"
-                  ? "bg-[#F5F5F5] text-[#131313] font-semibold"
-                  : "bg-[#1D1D1D] text-[#A3A3A3] hover:text-white border border-[#292929]"
-              }`}
-            >
-              Add Custom Model / Provider
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsTab("saved")}
-              className={`px-3.5 py-1.5 rounded-[12px] text-xs font-medium transition-all flex items-center gap-1.5 ${
-                settingsTab === "saved"
-                  ? "bg-[#F5F5F5] text-[#131313] font-semibold"
-                  : "bg-[#1D1D1D] text-[#A3A3A3] hover:text-white border border-[#292929]"
-              }`}
-            >
-              <span>Configured Providers</span>
-              <span className="text-[10px] bg-[#292929] px-1.5 py-0.5 rounded-full text-[#A3A3A3]">
-                {savedProviders.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Tab 1: ADD CUSTOM PROVIDER FORM */}
-          {settingsTab === "add" && (
-            <div className="space-y-5">
-              {/* Provider Name Input */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-[#A3A3A3]">
-                  Provider Name <span className="text-red-400">*</span>
-                </label>
-                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
-                  <Server className="size-4 text-[#737373] mr-2 shrink-0" />
-                  <input
-                    type="text"
-                    value={cpName}
-                    onChange={(e) => setCpName(e.target.value)}
-                    placeholder="e.g. Ollama Local, Groq Custom, DeepInfra, Together"
-                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Base URL Input */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-[#A3A3A3]">
-                  Base URL / Chat Completion URL <span className="text-red-400">*</span>
-                </label>
-                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
-                  <Globe className="size-4 text-[#737373] mr-2 shrink-0" />
-                  <input
-                    type="text"
-                    value={cpBaseUrl}
-                    onChange={(e) => setCpBaseUrl(e.target.value)}
-                    placeholder="http://localhost:11434/v1 or https://api.groq.com/openai/v1"
-                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
-                  />
-                </div>
-                <p className="text-[11px] text-[#737373]">
-                  Accepts standard OpenAI-compatible endpoints or chat completion endpoints.
-                </p>
-              </div>
-
-              {/* API Key Input */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-[#A3A3A3]">
-                  API Key <span className="text-[11px] text-[#737373]">(Optional for local endpoints)</span>
-                </label>
-                <div className="relative flex items-center min-h-[42px] bg-[#131313] border border-[#292929] focus-within:border-[#383838] rounded-[14px] px-3 transition-colors">
-                  <Key className="size-4 text-[#737373] mr-2 shrink-0" />
-                  <input
-                    type={cpShowKey ? "text" : "password"}
-                    value={cpApiKey}
-                    onChange={(e) => setCpApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-transparent text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCpShowKey(!cpShowKey)}
-                    className="text-[#737373] hover:text-[#F5F5F5] ml-2 shrink-0"
-                  >
-                    {cpShowKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Smart Auto-Discovery Section */}
-              <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-medium text-[#F5F5F5] flex items-center gap-1.5">
-                      <Sparkles className="size-3.5 text-emerald-400" />
-                      Smart Model Auto-Discovery
-                    </span>
-                    <p className="text-[11px] text-[#737373]">
-                      Scan the base URL to discover available models automatically.
-                    </p>
+            {/* Tab 1: ADD CUSTOM PROVIDER FORM */}
+            {settingsTab === "add" && (
+              <div className="space-y-4">
+                {/* Provider Name Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-[#8C8C8C]">
+                    Provider Name <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
+                    <Server className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
+                    <input
+                      type="text"
+                      value={cpName}
+                      onChange={(e) => setCpName(e.target.value)}
+                      placeholder="e.g. Ollama Local, Groq Custom, DeepInfra, Together"
+                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
+                    />
                   </div>
-                  <button
-                    type="button"
-                    disabled={isDiscovering || !cpBaseUrl.trim()}
-                    onClick={handleDiscoverModels}
-                    className="px-3 py-1.5 rounded-[12px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#383838] text-xs font-medium text-[#F5F5F5] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all shrink-0 active:scale-[0.97]"
-                  >
-                    {isDiscovering ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin text-emerald-400" />
-                        <span>Searching...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="size-3.5 text-emerald-400" />
-                        <span>Search Models</span>
-                      </>
-                    )}
-                  </button>
                 </div>
 
-                {/* Discovery Status Banner */}
-                {discoveryStatus.type === "loading" && (
-                  <div className="p-2.5 rounded-[12px] bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2">
-                    <Loader2 className="size-4 animate-spin shrink-0" />
-                    <span>{discoveryStatus.message}</span>
+                {/* Base URL Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-[#8C8C8C]">
+                    Base URL / Chat Completion URL <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
+                    <Globe className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
+                    <input
+                      type="text"
+                      value={cpBaseUrl}
+                      onChange={(e) => setCpBaseUrl(e.target.value)}
+                      placeholder="http://localhost:11434/v1 or https://api.groq.com/openai/v1"
+                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
+                    />
                   </div>
-                )}
-
-                {discoveryStatus.type === "success" && (
-                  <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-                    <CheckCircle2 className="size-4 shrink-0" />
-                    <span>{discoveryStatus.message}</span>
-                  </div>
-                )}
-
-                {discoveryStatus.type === "error" && (
-                  <div className="p-2.5 rounded-[12px] bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="size-4 shrink-0" />
-                    <span>{discoveryStatus.message}</span>
-                  </div>
-                )}
-
-                {/* Discovered Models Checkbox Selector */}
-                {discoveredModels.length > 0 && (
-                  <div className="space-y-2 pt-1 border-t border-[#222222]">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#A3A3A3]">
-                        Select models to add ({selectedDiscoveredModels.size}/{discoveredModels.length}):
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleSelectAllDiscovered}
-                          className="text-emerald-400 hover:underline"
-                        >
-                          Select all
-                        </button>
-                        <span className="text-[#383838]">•</span>
-                        <button
-                          type="button"
-                          onClick={handleDeselectAllDiscovered}
-                          className="text-[#737373] hover:text-[#A3A3A3]"
-                        >
-                          Deselect all
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
-                      {discoveredModels.map((m) => {
-                        const isSelected = selectedDiscoveredModels.has(m.id)
-                        return (
-                          <div
-                            key={m.id}
-                            onClick={() => handleToggleDiscoveredModel(m.id)}
-                            className={`p-2 rounded-[10px] text-xs flex items-center justify-between cursor-pointer border transition-colors ${
-                              isSelected
-                                ? "bg-[#1D1D1D] border-emerald-500/30 text-emerald-300"
-                                : "bg-[#171717] border-[#292929] text-[#737373] hover:text-[#A3A3A3]"
-                            }`}
-                          >
-                            <span className="font-mono truncate">{m.id}</span>
-                            <div
-                              className={`size-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                                isSelected
-                                  ? "bg-emerald-500 border-emerald-500 text-black"
-                                  : "border-[#383838]"
-                              }`}
-                            >
-                              {isSelected && <Check className="size-3" strokeWidth={3} />}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Manual Model Adder Fallback */}
-              <div className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-medium text-[#F5F5F5] flex items-center gap-1.5">
-                    <Plus className="size-3.5 text-blue-400" />
-                    Manual Model Adder
-                  </span>
-                  <p className="text-[11px] text-[#737373]">
-                    Add specific model IDs if auto-discovery is unavailable or to include custom fine-tunes.
+                  <p className="text-[11px] text-[#8C8C8C]">
+                    Accepts standard OpenAI-compatible endpoints or chat completion endpoints.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={manualModelInput}
-                    onChange={(e) => setManualModelInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        handleAddManualModel()
-                      }
-                    }}
-                    placeholder="e.g. llama3:8b, mistral-large, qwen2.5-coder-32b"
-                    className="flex-1 bg-[#171717] border border-[#292929] focus:border-[#383838] rounded-[12px] px-3 py-2 text-xs text-[#F5F5F5] placeholder:text-[#737373] outline-none font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddManualModel}
-                    className="px-3.5 py-2 rounded-[12px] bg-[#1D1D1D] hover:bg-[#252525] border border-[#383838] text-xs font-medium text-[#F5F5F5] hover:text-white transition-all shrink-0 active:scale-[0.97]"
-                  >
-                    Add
-                  </button>
+                {/* API Key Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-[#8C8C8C]">
+                    API Key <span className="text-[11px] text-[#8C8C8C]">(Optional for local endpoints)</span>
+                  </label>
+                  <div className="relative flex items-center min-h-[42px] bg-[#191919] border border-[#242424] focus-within:border-[#333333] rounded-[14px] px-3 transition-colors">
+                    <Key className="size-4 text-[#8C8C8C] mr-2 shrink-0" />
+                    <input
+                      type={cpShowKey ? "text" : "password"}
+                      value={cpApiKey}
+                      onChange={(e) => setCpApiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className="w-full bg-transparent text-xs text-white placeholder:text-[#8C8C8C] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCpShowKey(!cpShowKey)}
+                      className="text-[#8C8C8C] hover:text-white ml-2 shrink-0"
+                    >
+                      {cpShowKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Manually added chips */}
-                {manualModels.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {manualModels.map((m) => (
-                      <span
-                        key={m}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#1D1D1D] border border-blue-500/30 text-blue-300 text-xs font-mono"
-                      >
-                        <span>{m}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveManualModel(m)}
-                          className="hover:text-white"
-                        >
-                          <X className="size-3" />
-                        </button>
+                {/* Smart Auto-Discovery Section */}
+                <div className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-medium text-white flex items-center gap-1.5">
+                        <Sparkles className="size-3.5 text-emerald-400" />
+                        Smart Model Auto-Discovery
                       </span>
+                      <p className="text-[11px] text-[#8C8C8C]">
+                        Scan the base URL to discover available models automatically.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isDiscovering || !cpBaseUrl.trim()}
+                      onClick={handleDiscoverModels}
+                      className="px-3 py-1.5 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all shrink-0 active:scale-[0.97]"
+                    >
+                      {isDiscovering ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin text-emerald-400" />
+                          <span>Searching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="size-3.5 text-emerald-400" />
+                          <span>Search Models</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Discovery Status Banner */}
+                  {discoveryStatus.type === "loading" && (
+                    <div className="p-2.5 rounded-[12px] bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-2">
+                      <Loader2 className="size-4 animate-spin shrink-0" />
+                      <span>{discoveryStatus.message}</span>
+                    </div>
+                  )}
+
+                  {discoveryStatus.type === "success" && (
+                    <div className="p-2.5 rounded-[12px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+                      <CheckCircle2 className="size-4 shrink-0" />
+                      <span>{discoveryStatus.message}</span>
+                    </div>
+                  )}
+
+                  {discoveryStatus.type === "error" && (
+                    <div className="p-2.5 rounded-[12px] bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span>{discoveryStatus.message}</span>
+                    </div>
+                  )}
+
+                  {/* Discovered Models Checkbox Selector */}
+                  {discoveredModels.length > 0 && (
+                    <div className="space-y-2 pt-1 border-t border-[#242424]">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-[#8C8C8C]">
+                          Select models to add ({selectedDiscoveredModels.size}/{discoveredModels.length}):
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAllDiscovered}
+                            className="text-emerald-400 hover:underline"
+                          >
+                            Select all
+                          </button>
+                          <span className="text-[#383838]">•</span>
+                          <button
+                            type="button"
+                            onClick={handleDeselectAllDiscovered}
+                            className="text-[#8C8C8C] hover:text-white"
+                          >
+                            Deselect all
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                        {discoveredModels.map((m) => {
+                          const isSelected = selectedDiscoveredModels.has(m.id)
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={() => handleToggleDiscoveredModel(m.id)}
+                              className={`p-2 rounded-[10px] text-xs flex items-center justify-between cursor-pointer border transition-colors ${
+                                isSelected
+                                  ? "bg-[#222222] border-emerald-500/30 text-emerald-300"
+                                  : "bg-[#161616] border-[#242424] text-[#8C8C8C] hover:text-white"
+                              }`}
+                            >
+                              <span className="font-mono truncate">{m.id}</span>
+                              <div
+                                className={`size-4 rounded-[4px] border flex items-center justify-center shrink-0 ${
+                                  isSelected
+                                    ? "bg-emerald-500 border-emerald-500 text-black"
+                                    : "border-[#383838]"
+                                }`}
+                              >
+                                {isSelected && <Check className="size-3" strokeWidth={3} />}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Manual Model Adder Fallback */}
+                <div className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] space-y-3">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-medium text-white flex items-center gap-1.5">
+                      <Plus className="size-3.5 text-blue-400" />
+                      Manual Model Adder
+                    </span>
+                    <p className="text-[11px] text-[#8C8C8C]">
+                      Add specific model IDs if auto-discovery is unavailable or to include custom fine-tunes.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={manualModelInput}
+                      onChange={(e) => setManualModelInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          handleAddManualModel()
+                        }
+                      }}
+                      placeholder="e.g. llama3:8b, mistral-large, qwen2.5-coder-32b"
+                      className="flex-1 bg-[#161616] border border-[#242424] focus:border-[#333333] rounded-[12px] px-3 py-2 text-xs text-white placeholder:text-[#8C8C8C] outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddManualModel}
+                      className="px-3.5 py-2 rounded-[12px] bg-[#1F1F1F] hover:bg-[#252525] border border-[#2D2D2D] text-xs font-medium text-white transition-all shrink-0 active:scale-[0.97]"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Manually added chips */}
+                  {manualModels.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {manualModels.map((m) => (
+                        <span
+                          key={m}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-[#1F1F1F] border border-blue-500/30 text-blue-300 text-xs font-mono"
+                        >
+                          <span>{m}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveManualModel(m)}
+                            className="hover:text-white"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Staged Models Summary & Save Button */}
+                <div className="pt-2 flex items-center justify-between border-t border-[#242424]">
+                  <div className="text-xs text-[#8C8C8C]">
+                    Total Models Ready:{" "}
+                    <span className="font-semibold text-white">{stagedModelsList.length}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSavingProvider || !cpName.trim() || !cpBaseUrl.trim() || stagedModelsList.length === 0}
+                    onClick={handleSaveCustomProvider}
+                    className="px-5 py-2.5 rounded-[14px] bg-white hover:bg-[#EAEAEA] text-black font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
+                  >
+                    {isSavingProvider ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="size-3.5" strokeWidth={2.5} />
+                        <span>Save Provider & Add Models</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: CONFIGURED SAVED PROVIDERS LIST */}
+            {settingsTab === "saved" && (
+              <div className="space-y-4">
+                {savedProviders.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-[#8C8C8C] space-y-2">
+                    <p>No custom providers configured yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setSettingsTab("add")}
+                      className="text-emerald-400 hover:underline"
+                    >
+                      Add your first custom provider
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {savedProviders.map((provider) => (
+                      <div
+                        key={provider.id || provider.provider}
+                        className="p-4 rounded-[18px] bg-[#191919] border border-[#242424] space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-0.5 min-w-0">
+                            <h4 className="text-sm font-medium text-white truncate flex items-center gap-2">
+                              <span>{provider.name}</span>
+                              <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
+                                Active
+                              </span>
+                            </h4>
+                            <p className="text-xs text-[#8C8C8C] font-mono truncate">{provider.base_url}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProvider(provider)}
+                            title="Remove Provider"
+                            className="flex size-8 items-center justify-center rounded-[8px] text-[#8C8C8C] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] text-[#8C8C8C]">
+                            Models ({provider.models?.length || 0}):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(provider.models || []).map((m) => (
+                              <span
+                                key={m}
+                                className="px-2 py-0.5 rounded-[6px] bg-[#161616] border border-[#242424] text-[11px] font-mono text-[#8C8C8C]"
+                              >
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
-
-              {/* Staged Models Summary & Save Button */}
-              <div className="pt-2 flex items-center justify-between border-t border-[#292929]">
-                <div className="text-xs text-[#A3A3A3]">
-                  Total Models Ready:{" "}
-                  <span className="font-semibold text-[#F5F5F5]">{stagedModelsList.length}</span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isSavingProvider || !cpName.trim() || !cpBaseUrl.trim() || stagedModelsList.length === 0}
-                  onClick={handleSaveCustomProvider}
-                  className="px-5 py-2.5 rounded-[14px] bg-[#F5F5F5] hover:bg-white text-[#131313] font-semibold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 active:scale-[0.97]"
-                >
-                  {isSavingProvider ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="size-3.5" strokeWidth={2.5} />
-                      <span>Save Provider & Add Models</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 2: CONFIGURED SAVED PROVIDERS LIST */}
-          {settingsTab === "saved" && (
-            <div className="space-y-4">
-              {savedProviders.length === 0 ? (
-                <div className="py-8 text-center text-xs text-[#737373] space-y-2">
-                  <p>No custom providers configured yet.</p>
-                  <button
-                    type="button"
-                    onClick={() => setSettingsTab("add")}
-                    className="text-emerald-400 hover:underline"
-                  >
-                    Add your first custom provider
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {savedProviders.map((provider) => (
-                    <div
-                      key={provider.id || provider.provider}
-                      className="p-4 rounded-[18px] bg-[#131313] border border-[#292929] space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-0.5 min-w-0">
-                          <h4 className="text-sm font-medium text-[#F5F5F5] truncate flex items-center gap-2">
-                            <span>{provider.name}</span>
-                            <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-[6px]">
-                              Active
-                            </span>
-                          </h4>
-                          <p className="text-xs text-[#737373] font-mono truncate">{provider.base_url}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProvider(provider)}
-                          title="Remove Provider"
-                          className="flex size-8 items-center justify-center rounded-[8px] text-[#737373] hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <span className="text-[11px] text-[#737373]">
-                          Models ({provider.models?.length || 0}):
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(provider.models || []).map((m) => (
-                            <span
-                              key={m}
-                              className="px-2 py-0.5 rounded-[6px] bg-[#1D1D1D] border border-[#292929] text-[11px] font-mono text-[#A3A3A3]"
-                            >
-                              {m}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        </>
+      )}
 
       {/* OPENROUTER-STYLE MODEL DETAILS INSPECTOR MODAL */}
       {inspectingModel && (
@@ -1629,7 +1716,7 @@ export function SycordOmniRouterModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName="!bg-black/70 data-[state=open]:!bg-black/70 backdrop-blur-md"
-        className="!p-0 !gap-0 !bg-transparent !border-0 !shadow-none max-w-lg w-full fixed bottom-0 sm:bottom-auto sm:top-1/2 left-1/2 -translate-x-1/2 sm:-translate-y-1/2 z-[9999] rounded-t-[28px] sm:rounded-[28px] overflow-hidden"
+        className="!p-0 !gap-0 !bg-transparent !border-0 !shadow-none max-w-lg w-full fixed inset-x-0 bottom-0 sm:inset-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-[9999] rounded-t-[28px] sm:rounded-[28px] overflow-hidden"
         showCloseButton={false}
       >
         <ModelBrowserView
