@@ -430,9 +430,9 @@ export function ExactWorkingTimeline({
                         boxShadow: '0 0 10px rgba(99, 102, 241, 0.45)',
                     }}
                 />
-                <span className="text-[#f4f4f5] font-normal tracking-tight">thinking</span>
-                <span className="text-[#71717a] font-normal text-[13.5px]">{typeof thinkingTime === 'number' ? `${thinkingTime}s` : thinkingTime}</span>
-                <ChevronDown className={cn("size-3.5 text-[#71717a] shrink-0 transition-transform duration-150", collapsed && "-rotate-90")} />
+                <span className="text-zinc-100 font-normal tracking-tight">thinking</span>
+                <span className="text-zinc-400 font-normal text-[13.5px]">{typeof thinkingTime === 'number' ? `${thinkingTime}s` : thinkingTime}</span>
+                <ChevronDown className={cn("size-3.5 text-zinc-400 shrink-0 transition-transform duration-150", collapsed && "-rotate-90")} />
             </div>
 
             {!collapsed && (
@@ -440,34 +440,34 @@ export function ExactWorkingTimeline({
                     {/* Step 2: Accessing web */}
                     <div className="relative pl-6">
                         {/* Gray vertical connector line */}
-                        <div className="absolute left-[7px] top-[22px] bottom-[-8px] w-[1.5px] bg-[#27282d]" />
+                        <div className="absolute left-[7px] top-[22px] bottom-[-8px] w-[1.5px] bg-[#292929]" />
 
                         <div className="flex items-center gap-2 text-[14px]">
-                            <Globe className="size-3.5 text-[#a1a1aa] shrink-0 absolute left-0 top-[3px]" />
-                            <span className="font-normal text-[#d4d4d8] tracking-tight">{toolLabel}</span>
+                            <Globe className="size-3.5 text-zinc-400 shrink-0 absolute left-0 top-[3px]" />
+                            <span className="font-normal text-zinc-300 tracking-tight">{toolLabel}</span>
                         </div>
 
                         {/* Two skeleton pill blocks */}
                         <div className="flex items-center gap-2.5 mt-2.5">
-                            <div className="h-3.5 w-16 rounded-[5px] bg-[#24262b]" />
-                            <div className="h-3.5 w-16 rounded-[5px] bg-[#24262b]" />
+                            <div className="h-3.5 w-16 rounded-[5px] bg-[#202020] border border-[#292929]" />
+                            <div className="h-3.5 w-16 rounded-[5px] bg-[#202020] border border-[#292929]" />
                         </div>
                     </div>
 
                     {/* Step 3: Framing the question */}
                     <div className="relative pl-6">
                         {/* Gray vertical connector line */}
-                        <div className="absolute left-[7px] top-[22px] bottom-0 w-[1.5px] bg-[#27282d]" />
+                        <div className="absolute left-[7px] top-[22px] bottom-0 w-[1.5px] bg-[#292929]" />
 
                         <div className="flex items-center gap-2 text-[14px]">
-                            <Lightbulb className="size-3.5 text-[#a1a1aa] shrink-0 absolute left-0 top-[3px]" />
-                            <span className="text-[#a1a1aa] font-normal tracking-tight">
-                                Framing the <span className="text-[#60a5fa]">question</span>
+                            <Lightbulb className="size-3.5 text-zinc-400 shrink-0 absolute left-0 top-[3px]" />
+                            <span className="text-zinc-400 font-normal tracking-tight">
+                                Framing the <span className="text-blue-400">question</span>
                             </span>
                         </div>
 
                         {/* Thought snippet */}
-                        <div className="mt-2 text-[13.5px] text-[#e4e4e7] leading-[1.45] max-w-[500px]">
+                        <div className="mt-2 text-[13.5px] text-zinc-200 leading-[1.45] max-w-[500px]">
                             {framingContent}
                         </div>
                     </div>
@@ -4364,10 +4364,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Composer card */}
+                        {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[28px] border px-4 pt-3.5 pb-3 transition-all ${
                             pendingQuestion ? 'py-1.5' : ''
-                        } ${isDark ? 'bg-[#161719] border-[#242529]' : 'bg-zinc-100 border-zinc-200/80 shadow-sm'}`}>
+                        } ${isDark ? 'bg-[#171717] border-[#292929] focus-within:border-[#383838]' : 'bg-zinc-100 border-zinc-200/80 focus-within:border-zinc-300 shadow-sm'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4392,9 +4392,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     }
                                     className={`w-full bg-transparent text-[14.5px] sm:text-[15px] leading-[1.5] px-1 pt-1 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[140px] ${
                                         isRunning
-                                            ? 'cursor-not-allowed text-[#71717a] placeholder:text-[#52525b]'
+                                            ? 'cursor-not-allowed text-[#737373] placeholder:text-[#737373]'
                                             : isDark
-                                            ? 'text-[#f4f4f5] placeholder:text-[#52525b]'
+                                            ? 'text-[#F5F5F5] placeholder:text-[#737373]'
                                             : 'text-gray-900 placeholder:text-gray-400'
                                     }`}
                                     style={{ height: 'auto', minHeight: isRunning ? '44px' : '64px' }}
@@ -4426,7 +4426,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex size-9 items-center justify-center rounded-[14px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#2c2d33] bg-[#212226] text-zinc-400 hover:text-white hover:bg-[#28292f]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900'}`}
+                                            className={`flex size-9 items-center justify-center rounded-[14px] border transition-colors active:scale-[0.97] ${isDark ? 'border-[#292929] bg-[#1D1D1D] text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'border-zinc-200/80 bg-zinc-100 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-200/60'}`}
                                         >
                                             <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
@@ -4636,7 +4636,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         aria-label="Voice input"
                                         aria-pressed={isListening}
                                         onClick={handleVoiceInput}
-                                        className={`flex size-9 items-center justify-center rounded-full transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : 'text-[#71717a] hover:text-[#d4d4d8]'}`}
+                                        className={`flex size-9 items-center justify-center rounded-full transition-all active:scale-[0.97] ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#737373] hover:text-[#F5F5F5] hover:bg-[#202020]' : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100'}`}
                                     >
                                         <Mic className={`size-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
@@ -4646,16 +4646,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-[#27282d] text-[#e4e4e7] transition-all active:scale-[0.97] hover:bg-[#323339]"
+                                            className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-[#F5F5F5] text-[#131313] transition-all active:scale-[0.97] hover:bg-white"
                                         >
-                                            <div className="size-2.5 rounded-sm bg-[#e4e4e7]" />
+                                            <div className="size-2.5 rounded-sm bg-[#131313]" />
                                         </button>
                                     ) : (
                                         <button
                                             type="submit"
                                             disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
                                             aria-label="Send"
-                                            className="flex size-9 flex-shrink-0 items-center justify-center rounded-full bg-[#27282d] text-[#71717a] hover:text-white transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                                            className={`flex size-9 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-[0.97] disabled:cursor-not-allowed ${
+                                                !pendingQuestion && (input.trim() || selectedImages.length > 0)
+                                                    ? 'bg-[#F5F5F5] text-[#131313] hover:bg-white'
+                                                    : isDark ? 'bg-[#202020] text-[#737373] border border-[#292929]' : 'bg-zinc-200 text-zinc-400'
+                                            }`}
                                         >
                                             <ArrowUp className="size-4.5" strokeWidth={2.2} />
                                         </button>
