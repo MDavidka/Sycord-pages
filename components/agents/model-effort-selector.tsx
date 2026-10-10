@@ -467,15 +467,15 @@ export function ModelEffortSelector({
                       className={cn(
                         "w-full text-left flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
                         isDark
-                          ? "text-emerald-400 hover:text-emerald-300 hover:bg-[#1D1D1D]"
-                          : "text-emerald-600 hover:bg-zinc-100"
+                          ? "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1D1D1D]"
+                          : "text-zinc-700 hover:bg-zinc-100"
                       )}
                     >
                       <div className="flex items-center gap-1.5">
-                        <Plus className="size-3.5 text-emerald-400" strokeWidth={2.5} />
+                        <Plus className="size-3.5 text-zinc-400" strokeWidth={2} />
                         <span>Add Custom Provider</span>
                       </div>
-                      <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">+ API</span>
+                      <span className="text-[9px] font-mono text-zinc-400 bg-[#202020] px-1 py-0.2 rounded border border-[#292929]">+ API</span>
                     </button>
                   </div>
                 </div>

@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+}
+
+:root,
+:root[data-theme="dark"],
+.dark {
+  /* Alap felületek */
+  --background: #111111;         /* A teljes viewport alapháttere */
+  --surface: #191919;            /* Kártyák, panelek, tárolók */
+  --surface-raised: #1F1F1F;     /* Dropdownok, popoverek, modális rétegek */
+  --surface-muted: #141414;      /* Inaktív állapotok, kódblokkok háttere */
+
+  /* Tipográfia */
+  --foreground: #FFFFFF;         /* Elsődleges szövegek, aktív ikonok */
+  --text-secondary: #B4B4B4;     /* Magyarázó szövegek, másodlagos adatok */
+  --text-muted: #8C8C8C;         /* Helykitöltők, timestamp, inaktív címkék */
+
+  /* Szegélyek és elválasztók */
+  --border: #242424;             /* Alapértelmezett 1px panelelválasztó */
+  --border-subtle: #242424;      /* Belső finom kontúrok */
+  --border-strong: #333333;      /* Fókuszált, hoverelt vagy aktív szegélyek */
+
+  /* Szemantikus állapotok (nem neonszerű, visszafogott árnyalatok) */
+  --success: #22C55E;
+  --warning: #EAB308;
+  --danger: #EF4444;
+  --accent: #FFFFFF;
+
+  /* Lekerekítések (Vercel Concentric Nested Radii szabály) */
+  --radius-surface: 34px;        /* Külső nagy konténerek */
+  --radius-panel: 26px;          /* Belső kártyák, felugró panelek */
+  --radius-control: 18px;        /* Gombok, input mezők */
+  --radius-inner: 10px;          /* Vezérlőkön belüli badge-ek és chipek */
+
+  /* Tipográfia */
+  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}

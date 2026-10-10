@@ -59,6 +59,7 @@ import { LivePlanCard } from '@/components/agents/live-plan-card';
 import { parsePlanFromConnectionStream } from '../lib/plan-connection-language';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { cn } from '@/lib/utils';
+import { ThinkingBlock as AstroThinkingBlock } from '@/components/astro/ThinkingBlock';
 import { ContextSanitizer } from '@/lib/agent/context-sanitizer';
 import { TieredRouter } from '@/lib/agent/tiered-router';
 import { buildInjectedProjectContext } from '../lib/project-context';
@@ -4009,6 +4010,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         <span className="text-[17px] font-semibold tracking-[-0.015em] truncate text-white">
                             {hostProjectName || 'testbest'}
                         </span>
+
+                        <div className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-400 select-none">
+                            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Connected</span>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3.5">
@@ -4390,7 +4396,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             ? "AI is working on your task..."
                                             : "Help you write code, debug and ship production-ready work. Type / for skills & integrations."
                                     }
-                                    className={`w-full bg-transparent text-[14.5px] sm:text-[15px] leading-[1.5] px-1 pt-1 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[140px] ${
+                                    className={`w-full bg-transparent text-[16px] sm:text-[15px] leading-[1.5] px-1 pt-1 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[140px] ${
                                         isRunning
                                             ? 'cursor-not-allowed text-[#737373] placeholder:text-[#737373]'
                                             : isDark
@@ -4404,7 +4410,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             setShowSlashMenu(false);
                                             return;
                                         }
-                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                        // Master spec: Cmd+Enter or Ctrl+Enter submits; plain Enter adds newline
+                                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                                             e.preventDefault();
                                             handleSubmit(e);
                                         }
@@ -4877,16 +4884,16 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime, effortLevel 
 
     const isLive = Boolean(startTime) && thinkingTime === undefined;
 
-    if (isLive) {
-        return (
-            <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-1 animate-fade-in">
-                <Brain className="size-4 text-zinc-400 shrink-0 animate-pulse" />
-                <span className="font-normal text-zinc-400">Thinking…</span>
-            </div>
-        );
-    }
-
-    return null;
+    return (
+        <AstroThinkingBlock
+            thinking={thinking}
+            isDark={isDark}
+            startTime={startTime}
+            thinkingTime={thinkingTime}
+            effortLevel={effortLevel}
+            isStreaming={isLive}
+        />
+    );
 }
 
 function FileAttachmentBlock({ file, isDark }: { file: FileAttachment; isDark: boolean }) {

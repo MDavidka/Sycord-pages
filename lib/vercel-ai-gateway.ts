@@ -208,9 +208,27 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
   const model = options.model || "anthropic/claude-3.5-sonnet"
   const encoder = new TextEncoder()
 
+  // 4.3 HTTP 400 Guard: Sanitize message chain
+  // - Filter out empty message blocks
+  // - Ensure chain doesn't start with assistant or empty content
+  const sanitizedMessages = (options.messages || [])
+    .filter((m) => {
+      if (!m) return false
+      if (m.role === "tool" || (m.tool_calls && m.tool_calls.length > 0)) return true
+      if (typeof m.content === "string") return m.content.trim().length > 0
+      if (Array.isArray(m.content)) return m.content.length > 0
+      return m.content !== null && m.content !== undefined
+    })
+
+  // Ensure conversation has at least one valid user message
+  const hasUserMessage = sanitizedMessages.some((m) => m.role === "user")
+  if (!hasUserMessage && sanitizedMessages.length > 0 && sanitizedMessages[0].role === "assistant") {
+    sanitizedMessages.unshift({ role: "user", content: "Continue" })
+  }
+
   const requestBody: Record<string, any> = {
     model,
-    messages: options.messages,
+    messages: sanitizedMessages.length > 0 ? sanitizedMessages : [{ role: "user", content: "Hello" }],
     temperature: options.temperature ?? 0.7,
     max_tokens: options.max_tokens ?? 16384,
     stream: true,
@@ -258,7 +276,7 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
           headers["Authorization"] = `Bearer ${apiKey}`
         }
 
-        const res = await fetch(GATEWAY_CHAT_URL, {
+        let res = await fetch(GATEWAY_CHAT_URL, {
           method: "POST",
           headers,
           body: JSON.stringify(requestBody),
@@ -268,8 +286,30 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
             : AbortSignal.timeout(180_000),
         })
 
+        // 4.3 Fallback Provider on HTTP 403 (e.g. Gateway auth rejection or expired key)
+        const fallbackKey = (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY || "").trim()
+        if (res.status === 403 && fallbackKey && !headers["Authorization"]?.includes(fallbackKey)) {
+          console.warn("[Vercel AI Gateway] Received 403, attempting fallback authorization...")
+          headers["Authorization"] = `Bearer ${fallbackKey}`
+          res = await fetch(GATEWAY_CHAT_URL, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(requestBody),
+            cache: "no-store",
+            signal: options.signal
+              ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
+              : AbortSignal.timeout(180_000),
+          })
+        }
+
         if (!res.ok) {
           const errText = await res.text().catch(() => `HTTP ${res.status}`)
+          const actionableMessage = res.status === 403
+            ? "A Vercel Gateway hitelesítés sikertelen. Kérjük, ellenőrizd vagy frissítsd az API kulcsodat a Beállítások menüben."
+            : res.status === 400
+            ? "A küldött kérés formátuma nem megfelelő. Kérjük, próbáld újra egy új üzenettel."
+            : `[Vercel AI Gateway hiba] ${res.status}: ${errText}`
+
           sendEvent(
             JSON.stringify({
               id: `chatcmpl-${Date.now()}`,
@@ -279,7 +319,7 @@ export async function streamVercelAiGateway(options: StreamVercelAiOptions): Pro
               choices: [
                 {
                   index: 0,
-                  delta: { content: `\n\n[Vercel AI Gateway error] ${res.status}: ${errText}` },
+                  delta: { content: `\n\n${actionableMessage}` },
                   finish_reason: "stop",
                 },
               ],

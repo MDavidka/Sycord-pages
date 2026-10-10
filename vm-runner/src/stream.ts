@@ -26,12 +26,21 @@ function now() {
 function write(reply: FastifyReply, event: string, data: unknown) {
   reply.raw.write(`event: ${event}\n`)
   reply.raw.write(`data: ${JSON.stringify({ ...(data as Record<string, unknown>), timestamp: now() })}\n\n`)
+  if (typeof (reply.raw as any).flush === "function") {
+    (reply.raw as any).flush()
+  }
 }
 
 export function createSseReply(reply: FastifyReply): DeployStreamWriter {
+  // Disable Nagle's algorithm on TCP socket for immediate packet dispatch
+  if (reply.raw.socket) {
+    reply.raw.socket.setNoDelay(true)
+  }
+
   reply.raw.setHeader("Content-Type", "text/event-stream")
   reply.raw.setHeader("Cache-Control", "no-cache, no-transform")
   reply.raw.setHeader("Connection", "keep-alive")
+  reply.raw.setHeader("X-Accel-Buffering", "no")
 
   return {
     stage(stage, status, message) {

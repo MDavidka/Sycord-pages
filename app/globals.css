@@ -4,24 +4,26 @@
 @plugin "@tailwindcss/typography";
 @import "../components/agent-elements/agent-ui.css";
 
+@import "../styles/tokens.css";
+
 @custom-variant dark (&:is(.dark *));
 
 :root,
 :root[data-theme="dark"],
 .dark {
-  /* Arc UI semantic dark neutral foundation */
-  --background: oklch(19% 0 0);
-  --surface: oklch(21.5% 0 0);
-  --surface-raised: oklch(24% 0 0);
-  --surface-muted: oklch(26% 0 0);
+  /* Arc UI semantic dark neutral foundation (Master Spec) */
+  --background: #111111;
+  --surface: #191919;
+  --surface-raised: #1F1F1F;
+  --surface-muted: #141414;
 
-  --foreground: oklch(96% 0 0);
-  --text-secondary: oklch(77% 0 0);
-  --text-muted: oklch(64% 0 0);
+  --foreground: #FFFFFF;
+  --text-secondary: #B4B4B4;
+  --text-muted: #8C8C8C;
 
-  --border: oklch(29% 0 0);
-  --border-subtle: oklch(25% 0 0);
-  --border-strong: oklch(40% 0 0);
+  --border: #242424;
+  --border-subtle: #242424;
+  --border-strong: #333333;
 
   /* Component surfaces mapped to Arc tokens */
   --card: var(--surface);

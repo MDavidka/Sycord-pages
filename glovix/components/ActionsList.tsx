@@ -31,6 +31,7 @@ import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { Markdown } from '@/components/agent-elements/markdown';
 import { McpBrandIcon } from './McpBrandIcons';
+import { AutoCompactContainer } from '@/components/astro/AutoCompactContainer';
 import type { GenerationPlan } from '../lib/generation-plan';
 import type { ActionMarkData } from '../lib/project-agent';
 import { useStore } from '../store';
@@ -1077,14 +1078,16 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
             );
         }
         return (
-            <div className="space-y-1.5 py-1">
-                {actions.map((action, idx) => (
-                    <ActionMarkRow
-                        key={action.id || `live-act-${idx}`}
-                        action={action}
-                        isDark={isDark}
-                    />
-                ))}
+            <div className="py-1">
+                <AutoCompactContainer threshold={5} isDark={isDark}>
+                    {actions.map((action, idx) => (
+                        <ActionMarkRow
+                            key={action.id || `live-act-${idx}`}
+                            action={action}
+                            isDark={isDark}
+                        />
+                    ))}
+                </AutoCompactContainer>
             </div>
         );
     }
