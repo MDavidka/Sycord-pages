@@ -407,6 +407,8 @@ export interface StreamCustomProviderOptions extends StreamVercelAiOptions {
  */
 export async function streamCustomAiProvider(options: StreamCustomProviderOptions): Promise<Response> {
   const model = options.model || "default"
+  const encoder = new TextEncoder()
+
   // Check if provider is Google Vertex AI
   const isVertex =
     options.providerName?.toLowerCase().includes("vertex") ||
