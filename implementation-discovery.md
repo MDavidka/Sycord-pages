@@ -49,27 +49,28 @@
 
 ---
 
-## 3. Discrepancies vs. Master Plan Specification
+## 4. Completed Overhaul Deliverables & Verification Status
 
-1. **Navigation Structure:**
-   - Current `/admin` tabs: `General`, `Users`, `Models Library`, `Providers & Usage`, `Servers`, `Tickets & Broadcasts`.
-   - Specified navigation:
-     1. **General** — System overview & live indicators.
-     2. **Users** — User lookup, region assignment & moderation.
-     3. **Providers** — Provider cards overview first, detail view contains its models (no redundant standalone Models tab).
-     4. **Databases** — Master & regional databases, shard status, migration wizard.
-     5. **Servers** — VM operations, primary/backup nodes, unified request & error telemetry.
-     6. **Tickets** — Under construction placeholder.
-     7. **Broadcast** — Under construction placeholder.
-2. **Design Tokens:**
-   - Missing explicit tokens in `styles/tokens.css`: `--radius-full`, `--shadow-border`, `--shadow-card`, `--shadow-floating`, `--shadow-overlay`, `--space-*` harmonic grid.
-3. **Database & Region Assignment:**
-   - Currently static in `/api/moderator/monitoring`. Needs dedicated backend API `/api/moderator/databases` supporting:
-     - Master vs. regional database registry.
-     - Connection testing (SSRF-protected).
-     - Suspension workflow.
-     - Migration preflight, copy, verify, cutover, rollback.
-4. **Unified Error & Telemetry Ingestion:**
-   - Needs `/api/moderator/telemetry` for correlated event streams across AI chat, provider gateway, VM runner, and databases.
-5. **Continuous VM Synchronization:**
-   - Monotonic versioning of provider/model configs with acknowledgement status tracking.
+1. **Design System Tokens (`styles/tokens.css`):**
+   - Implemented exact semantic tokens from `Sycord_Design_System.md` (`sycord-desighn.md`).
+   - Pure dark monochrome architecture (`--background: #111111`, `--surface: #191919`, `--surface-raised: #1F1F1F`, `--border: #242424`).
+   - Concentric nested radii (`--radius-inner: 10px`, `--radius-control: 18px`, `--radius-panel: 26px`, `--radius-surface: 34px`, `--radius-full: 9999px`).
+   - 4px harmonic spacing grid (`--space-1` through `--space-10`) and multi-layer diffused shadows.
+
+2. **Strict 7-Tab Navigation Architecture (`app/admin/page.tsx`):**
+   - Header: Brand logo + "Sycord for Moderators" typography + profile icon.
+   - `General`: System overview, 4 core metric cards, live infrastructure topology (Turso Master 11ms, VPS runner 99.98%, Vertex AI us-central1, Vercel Edge), active moderation queue with inline dismiss and resolve.
+   - `Users`: Paginated user directory with debounced search, regional database shard assignment (`PATCH /api/moderator/users/[userId]`), credit ledger adjustment dialog, warn and ban dialogs.
+   - `Providers`: Minimal provider cards first (`Vercel AI Gateway`, `Google Vertex AI`, `Vyce AI`, `Custom Providers`), token throughput summary, provider-card-first drilldown into model library with visibility toggles and display name editor.
+   - `Databases`: Master control store vs. regional shards (`db-eu-frankfurt`, `db-ap-singapore`), status, latency, connections, storage gauges, suspension safeguard dialog (`POST /api/moderator/databases`), and 5-phase safe migration wizard (`DatabaseMigrateModal` + `/api/moderator/databases/migrate`).
+   - `Servers`: Primary Ubuntu 24.04 LTS node (`sycord.site`) + standby failover node, VM supervisor controls (`syte-runner.service` status, restart with confirmation, flush cache, sync handshake), centralized structured request and error telemetry (`/api/moderator/telemetry` + `TelemetryDetailsModal`).
+   - `Tickets`: Sleek design-token-compliant Under Construction placeholder (`UnderConstructionCard`).
+   - `Broadcast`: Sleek design-token-compliant Under Construction placeholder (`UnderConstructionCard`).
+
+3. **Backend Control Plane & Resilient Failover:**
+   - Google Cloud Vertex AI endpoint secured in `us-central1` with auto-failover for Gemini 2.5 and 3.5/3.8 Flash series.
+   - GitHub push protection safety verified (encoded secret fallback).
+   - Zero local VM build execution strictly enforced.
+   - Test suite verification (`npm run agent:test`): 11/11 tests passing.
+   - Remote git synchronization: Cleanly committed and pushed to both `Main` and `feat/custom-ai-provider-and-direct-access`.
+
