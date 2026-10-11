@@ -10,11 +10,11 @@ import {
   Database,
   HardDrive,
   Loader2,
-  Orbit,
+  Gauge,
   RefreshCw,
   ShieldCheck,
   TerminalSquare,
-  Workflow,
+  GitBranch,
   XCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -165,7 +165,7 @@ export function AstroControlCenter() {
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)]">
-              <Orbit className="size-5 text-[var(--foreground)]" />
+              <Gauge className="size-5 text-[var(--foreground)]" />
             </div>
             <div>
               <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-[var(--foreground)] sm:text-2xl">
@@ -297,7 +297,7 @@ export function AstroControlCenter() {
               <CardTitle className="text-base font-semibold">Self-healing workflow</CardTitle>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">The first milestone establishes observability before any repair command can run.</p>
             </div>
-            <Workflow className="size-5 shrink-0 text-[var(--text-secondary)]" />
+            <GitBranch className="size-5 shrink-0 text-[var(--text-secondary)]" />
           </CardHeader>
           <CardContent className="space-y-3 px-5 pb-5 sm:px-6 sm:pb-6">
             {[
