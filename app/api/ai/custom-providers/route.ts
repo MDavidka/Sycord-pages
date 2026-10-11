@@ -27,7 +27,7 @@ export const DEFAULT_SYSTEM_PROVIDERS = [
     name: "Google Vertex AI",
     provider: "vertex",
     provider_type: "vertex",
-    base_url: process.env.VERTEX_AI_BASE_URL || "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/global/publishers/google",
+    base_url: process.env.VERTEX_AI_BASE_URL || "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/us-central1/publishers/google",
     api_key: process.env.VERTEX_AI_API_KEY || process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || "",
     api_key_masked: "AQ.A...P_fA",
     models: [
@@ -38,7 +38,7 @@ export const DEFAULT_SYSTEM_PROVIDERS = [
       "gemini-3.8-flash",
     ],
     gcp_project: "673403509107",
-    gcp_location: "global",
+    gcp_location: "us-central1",
     is_synced: true,
     created_at: "2026-10-11T00:00:00.000Z",
   },

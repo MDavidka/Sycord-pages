@@ -96,7 +96,7 @@ export const DEFAULT_PRECONFIGURED_PROVIDERS: CustomProviderRecord[] = [
     name: "Google Vertex AI",
     provider: "vertex",
     provider_type: "vertex",
-    base_url: "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/global/publishers/google",
+    base_url: "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/us-central1/publishers/google",
     api_key: "",
     api_key_masked: "AQ.A...P_fA",
     models: [

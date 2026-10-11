@@ -663,7 +663,7 @@ export async function streamVertexAiDirect(options: StreamCustomProviderOptions)
       }, 15000)
 
       try {
-        const res = await fetch(endpoint, {
+        let res = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -675,6 +675,26 @@ export async function streamVertexAiDirect(options: StreamCustomProviderOptions)
             ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
             : AbortSignal.timeout(180_000),
         })
+
+        // If request to /locations/global fails with 403 or 404, retry automatically with /locations/us-central1
+        if (!res.ok && (res.status === 403 || res.status === 404) && endpoint.includes("/locations/global/")) {
+          const fallbackEndpoint = endpoint.replace("/locations/global/", "/locations/us-central1/")
+          const retryRes = await fetch(fallbackEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify(requestBody),
+            cache: "no-store",
+            signal: options.signal
+              ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
+              : AbortSignal.timeout(180_000),
+          }).catch(() => null)
+          if (retryRes && retryRes.ok) {
+            res = retryRes
+          }
+        }
 
         if (!res.ok) {
           const errText = await res.text().catch(() => `HTTP ${res.status}`)
