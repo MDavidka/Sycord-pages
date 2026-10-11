@@ -22,6 +22,26 @@ export const DEFAULT_SYSTEM_PROVIDERS = [
     is_synced: true,
     created_at: "2026-10-11T00:00:00.000Z",
   },
+  {
+    id: "cp_vertex_ai",
+    name: "Google Vertex AI",
+    provider: "vertex",
+    provider_type: "vertex",
+    base_url: process.env.VERTEX_AI_BASE_URL || "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/global/publishers/google",
+    api_key: process.env.VERTEX_AI_API_KEY || process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || "",
+    api_key_masked: "AQ.A...P_fA",
+    models: [
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-pro",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash",
+    ],
+    gcp_project: "673403509107",
+    gcp_location: "global",
+    is_synced: true,
+    created_at: "2026-10-11T00:00:00.000Z",
+  },
 ]
 
 export async function GET() {
@@ -54,9 +74,10 @@ export async function GET() {
       created_at: p.createdAt,
     }))
 
-    // Ensure Vyce AI is always present
-    const hasVyce = formatted.some((p) => p.provider === "vyceai" || p.name === "Vyce AI")
-    const allProviders = hasVyce ? formatted : [...DEFAULT_SYSTEM_PROVIDERS, ...formatted]
+    // Ensure default system providers (Vyce AI & Vertex AI) are always present
+    const existingIds = new Set(formatted.map((p) => p.id || p.provider))
+    const missingSystem = DEFAULT_SYSTEM_PROVIDERS.filter((sp) => !existingIds.has(sp.id) && !existingIds.has(sp.provider))
+    const allProviders = [...missingSystem, ...formatted]
 
     return NextResponse.json({
       ok: true,
@@ -67,8 +88,9 @@ export async function GET() {
     // If Mongo unavailable, return default system providers merged with VM providers
     const vmRes = await syteGetHandshakeStatus().catch(() => ({ data: null }))
     const vmProviders = vmRes?.data?.custom_providers || []
-    const hasVyce = vmProviders.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
-    const allProviders = hasVyce ? vmProviders : [...DEFAULT_SYSTEM_PROVIDERS, ...vmProviders]
+    const existingIds = new Set(vmProviders.map((p: any) => p.id || p.provider))
+    const missingSystem = DEFAULT_SYSTEM_PROVIDERS.filter((sp) => !existingIds.has(sp.id) && !existingIds.has(sp.provider))
+    const allProviders = [...missingSystem, ...vmProviders]
 
     return NextResponse.json({
       ok: true,

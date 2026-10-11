@@ -5,6 +5,7 @@ import { fetchVercelGatewayModels } from "@/lib/vercel-ai-gateway"
 import { syteSelectOmniModel } from "@/lib/deploy/syte-client"
 import { getAllModelConfigs } from "@/lib/models-config"
 import clientPromise from "@/lib/mongodb"
+import { DEFAULT_SYSTEM_PROVIDERS } from "@/app/api/ai/custom-providers/route"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,19 +50,12 @@ export async function GET(request: Request) {
         return m
       })
 
-    // 2. Append custom provider models (with Vyce AI pre-configured fallback)
-    const hasVyce = customProviders.some((p: any) => p.provider === "vyceai" || p.name === "Vyce AI")
-    const effectiveCustomProviders = hasVyce
-      ? customProviders
-      : [
-          ...customProviders,
-          {
-            name: "Vyce AI",
-            provider: "vyceai",
-            base_url: "https://vyceai.com/v1",
-            models: ["claude-sonnet-4-6", "deepseek-v4.1", "agnes-3.0-flash"],
-          },
-        ]
+    // 2. Append custom provider models (ensuring DEFAULT_SYSTEM_PROVIDERS like Vyce AI and Vertex AI are present)
+    const existingCpSlugs = new Set(
+      customProviders.map((p: any) => (p.provider || p.name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "_"))
+    )
+    const missingSystemProviders = DEFAULT_SYSTEM_PROVIDERS.filter((sp) => !existingCpSlugs.has(sp.provider))
+    const effectiveCustomProviders = [...missingSystemProviders, ...customProviders]
 
     for (const cp of effectiveCustomProviders) {
       const providerSlug = cp.provider || cp.name?.toLowerCase().replace(/[^a-z0-9_-]/g, "_") || "custom"

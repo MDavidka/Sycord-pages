@@ -78,7 +78,7 @@ export interface CustomProviderRecord {
   created_at?: string
 }
 
-// Pre-configured system providers (e.g. Vyce AI direct access)
+// Pre-configured system providers (e.g. Vyce AI & Google Vertex AI direct access)
 export const DEFAULT_PRECONFIGURED_PROVIDERS: CustomProviderRecord[] = [
   {
     id: "cp_vyceai",
@@ -89,6 +89,23 @@ export const DEFAULT_PRECONFIGURED_PROVIDERS: CustomProviderRecord[] = [
     api_key: "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e",
     api_key_masked: "sk-3...c68e",
     models: ["claude-sonnet-4-6", "deepseek-v4.1", "agnes-3.0-flash"],
+    created_at: "2026-10-11T00:00:00.000Z",
+  },
+  {
+    id: "cp_vertex_ai",
+    name: "Google Vertex AI",
+    provider: "vertex",
+    provider_type: "vertex",
+    base_url: "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/global/publishers/google",
+    api_key: "",
+    api_key_masked: "AQ.A...P_fA",
+    models: [
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-pro",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash",
+    ],
     created_at: "2026-10-11T00:00:00.000Z",
   },
 ]
@@ -573,6 +590,104 @@ export function ModelBrowserView({
             },
           ]
           loadedModels.unshift(...vyceModels)
+        }
+
+        // Ensure default Vertex AI Gemini models are always present
+        const hasVertexModel = loadedModels.some((m) => m.provider === "vertex" || m.id.includes("vertex/gemini"))
+        if (!hasVertexModel) {
+          const vertexModels: OmniModelItem[] = [
+            {
+              id: "vertex/gemini-2.5-flash",
+              name: "Gemini 2.5 Flash",
+              provider: "vertex",
+              providerDisplay: "Google Vertex AI",
+              provider_display: "Google Vertex AI",
+              swe_score: 58.6,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 1048576,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Google Gemini 2.5 Flash multimodal on Vertex AI direct API",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vertex", "gemini", "google"],
+            },
+            {
+              id: "vertex/gemini-2.5-flash-lite",
+              name: "Gemini 2.5 Flash Lite",
+              provider: "vertex",
+              providerDisplay: "Google Vertex AI",
+              provider_display: "Google Vertex AI",
+              swe_score: 54.0,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 1048576,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Google Gemini 2.5 Flash Lite ultra-fast lightweight model on Vertex AI direct API",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vertex", "gemini", "google"],
+            },
+            {
+              id: "vertex/gemini-2.5-pro",
+              name: "Gemini 2.5 Pro",
+              provider: "vertex",
+              providerDisplay: "Google Vertex AI",
+              provider_display: "Google Vertex AI",
+              swe_score: 62.4,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 2097152,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Google Gemini 2.5 Pro deep reasoning & coding model on Vertex AI direct API",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vertex", "gemini", "google"],
+            },
+            {
+              id: "vertex/gemini-3.5-flash",
+              name: "Gemini 3.5 Flash",
+              provider: "vertex",
+              providerDisplay: "Google Vertex AI",
+              provider_display: "Google Vertex AI",
+              swe_score: 66.8,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 1048576,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Google Gemini 3.5 Flash high-efficiency intelligent model on Vertex AI direct API",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vertex", "gemini", "google"],
+            },
+            {
+              id: "vertex/gemini-3.8-flash",
+              name: "Gemini 3.8 Flash",
+              provider: "vertex",
+              providerDisplay: "Google Vertex AI",
+              provider_display: "Google Vertex AI",
+              swe_score: 69.5,
+              input_cost: 0.0,
+              output_cost: 0.0,
+              context_window: 1048576,
+              supports_vision: true,
+              supports_tools: true,
+              supports_reasoning: true,
+              description: "Google Gemini 3.8 Flash next-gen high-speed frontier model on Vertex AI direct API",
+              is_active: false,
+              is_custom: true,
+              tags: ["custom", "vertex", "gemini", "google"],
+            },
+          ]
+          loadedModels.unshift(...vertexModels)
         }
 
         setModels(loadedModels)
