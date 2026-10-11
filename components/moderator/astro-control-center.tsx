@@ -89,23 +89,25 @@ export function AstroControlCenter() {
     setError(null)
     setCopied(false)
     try {
-      const [statusResponse, telemetryResponse] = await Promise.all([
-        fetch("/api/admin/vps-runner/status", { cache: "no-store" }),
-        fetch("/api/moderator/telemetry?limit=10", { cache: "no-store" }),
-      ])
-
+      const statusResponse = await fetch("/api/admin/vps-runner/status", { cache: "no-store" })
       const statusData = (await statusResponse.json().catch(() => ({}))) as VmStatus
+      setVmStatus(statusData)
       if (!statusResponse.ok && !statusData.online) {
-        setVmStatus(statusData)
         throw new Error(statusData.error || `VM status check failed (${statusResponse.status})`)
       }
-      setVmStatus(statusData)
 
-      const telemetryData = await telemetryResponse.json().catch(() => ({}))
-      if (telemetryResponse.ok && telemetryData?.ok && Array.isArray(telemetryData.events)) {
-        setEvents(telemetryData.events)
-        setTelemetryUnavailable(false)
-      } else {
+      // Telemetry is optional: a telemetry outage must not hide a successful VM status result.
+      try {
+        const telemetryResponse = await fetch("/api/moderator/telemetry?limit=10", { cache: "no-store" })
+        const telemetryData = await telemetryResponse.json().catch(() => ({}))
+        if (telemetryResponse.ok && telemetryData?.ok && Array.isArray(telemetryData.events)) {
+          setEvents(telemetryData.events)
+          setTelemetryUnavailable(false)
+        } else {
+          setEvents([])
+          setTelemetryUnavailable(true)
+        }
+      } catch {
         setEvents([])
         setTelemetryUnavailable(true)
       }
@@ -123,10 +125,13 @@ export function AstroControlCenter() {
   }, [runPreflight])
 
   const status = statusLabel(vmStatus)
+  const cpuValue = vmStatus?.cpu
   const cpuPercent = formatPercent(
-    typeof vmStatus?.cpu === "number"
-      ? vmStatus.cpu
-      : vmStatus?.cpu?.percent ?? vmStatus?.cpu?.usagePercent,
+    typeof cpuValue === "number"
+      ? cpuValue
+      : cpuValue && typeof cpuValue === "object"
+        ? cpuValue.percent ?? cpuValue.usagePercent
+        : null,
   )
   const memoryPercent = formatPercent(vmStatus?.mem?.percent)
   const diskPercent = formatPercent(vmStatus?.disk?.percent)
