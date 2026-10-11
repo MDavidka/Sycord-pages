@@ -247,6 +247,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     console.warn("[Agent] Failed to resolve MCP connections for agent turn:", err)
   }
 
+  // Inject Custom Provider configuration (e.g. Vyce AI or custom provider base URL & API key)
+  try {
+    const mLower = modelProfile.toLowerCase()
+    const isVyce = mLower.includes("vyce") || mLower.includes("deepseek-v4.1") || mLower.includes("claude-sonnet-4-6") || mLower.includes("agnes")
+    if (isVyce) {
+      resolvedCredentials.CUSTOM_AI_BASE_URL = "https://vyceai.com/v1"
+      resolvedCredentials.CUSTOM_AI_API_KEY = "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e"
+      resolvedCredentials.VYCE_API_KEY = "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e"
+      resolvedCredentials.DEEPSEEK_API_KEY = "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e"
+      resolvedCredentials.OPENAI_BASE_URL = "https://vyceai.com/v1"
+      resolvedCredentials.OPENAI_API_BASE = "https://vyceai.com/v1"
+      resolvedCredentials.OPENAI_API_KEY = "sk-358124256568957fd788fcdb8c9eb7dd521989cfc12fc68e"
+    }
+
+    // Check user custom providers in database
+    const userProviders = await db.collection("user_custom_providers").find({
+      $or: [{ userId: session.user.id }, { userId: "guest_user" }]
+    }).toArray()
+
+    for (const cp of userProviders) {
+      const slug = (cp.provider || cp.name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "_")
+      const matches = mLower.startsWith(`${slug}/`) || (Array.isArray(cp.models) && cp.models.some((m: string) => String(m).toLowerCase() === mLower || `${slug}/${String(m).toLowerCase()}` === mLower))
+      if (matches && cp.base_url) {
+        resolvedCredentials.CUSTOM_AI_BASE_URL = cp.base_url
+        if (cp.api_key) {
+          resolvedCredentials.CUSTOM_AI_API_KEY = cp.api_key
+          resolvedCredentials[`${slug.toUpperCase()}_API_KEY`] = cp.api_key
+          resolvedCredentials.OPENAI_BASE_URL = cp.base_url
+          resolvedCredentials.OPENAI_API_BASE = cp.base_url
+          resolvedCredentials.OPENAI_API_KEY = cp.api_key
+        }
+        break
+      }
+    }
+  } catch (err) {
+    console.warn("[Agent] Failed to resolve custom provider credentials:", err)
+  }
+
   // Start the agent immediately — do not block on a sessions list round-trip.
   // Session numbers from the client (`afterSession`) are authoritative enough
   // for UI correlation; Turso poll events overwrite with the durable number.
