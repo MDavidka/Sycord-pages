@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
-  const userId = session?.user?.id || "guest_user"
+  const userId = (session?.user as any)?.id || session?.user?.email || "guest_user"
 
   const { searchParams } = new URL(request.url)
   const refresh = searchParams.get("refresh") === "true"
@@ -50,23 +50,20 @@ export async function GET(request: Request) {
         return m
       })
 
-    // 2. Append custom provider models (ensuring DEFAULT_SYSTEM_PROVIDERS like Vyce AI and Vertex AI are present)
-    const existingCpSlugs = new Set(
-      customProviders.map((p: any) => (p.provider || p.name || "").toLowerCase().replace(/[^a-z0-9_-]/g, "_"))
-    )
-    const missingSystemProviders = DEFAULT_SYSTEM_PROVIDERS.filter((sp) => !existingCpSlugs.has(sp.provider))
-    const effectiveCustomProviders = [...missingSystemProviders, ...customProviders]
+    // 2. Append official Sycord-managed system providers (Vyce AI and Vertex AI) to platform gateway catalog
+    for (const sp of DEFAULT_SYSTEM_PROVIDERS) {
+      const providerSlug = sp.provider || "system"
+      const providerDisplayName = sp.name || providerSlug
+      const modelList = Array.isArray(sp.models) ? sp.models : []
 
-    for (const cp of effectiveCustomProviders) {
-      const providerSlug = cp.provider || cp.name?.toLowerCase().replace(/[^a-z0-9_-]/g, "_") || "custom"
-      const providerDisplayName = cp.name || providerSlug
-      const modelList = Array.isArray(cp.models) ? cp.models : []
-
-      for (const m of modelList) {
-        const modelId = typeof m === "string" ? m : m?.id || m?.name
+      for (const m of modelList as any[]) {
+        const modelId: string = typeof m === "string" ? m : (m?.id || m?.name || "")
         if (!modelId) continue
         const fullId = modelId.includes("/") ? modelId : `${providerSlug}/${modelId}`
-        const modelName = typeof m === "object" && m.name ? m.name : modelId.includes("/") ? modelId.split("/").pop() : modelId
+        const modelName = typeof m === "object" && m?.name ? m.name : modelId.includes("/") ? modelId.split("/").pop()! : modelId
+
+        // Avoid duplicate model entries if already present from gateway
+        if (models.some((existing) => existing.id === fullId)) continue
 
         models.push({
           id: fullId,
@@ -81,13 +78,14 @@ export async function GET(request: Request) {
           supports_vision: true,
           supports_tools: true,
           supports_reasoning: true,
-          description: `Custom model hosted on ${providerDisplayName} (${cp.base_url || "Custom Endpoint"})`,
+          description: `Platform-managed system model on ${providerDisplayName}`,
           is_active: false,
-          is_custom: true,
-          tags: ["custom", providerSlug],
+          is_custom: false,
+          tags: ["system", providerSlug],
         } as any)
       }
     }
+
 
     // Group models by provider
     const providersMap = new Map<string, typeof models>()
@@ -137,7 +135,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  const userId = session?.user?.id || "guest_user"
+  const userId = (session?.user as any)?.id || session?.user?.email || "guest_user"
 
   try {
     const body = await request.json()

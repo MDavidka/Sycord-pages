@@ -93,9 +93,12 @@ import { DatabaseInspectModal } from "@/components/moderator/database-inspect-mo
 import { ServerPerformanceOverview } from "@/components/moderator/server-performance-overview"
 import { TelemetryDetailsModal } from "@/components/moderator/telemetry-details-modal"
 import { UnderConstructionCard } from "@/components/moderator/under-construction-card"
+import { ProviderLogo } from "@/components/moderator/provider-logos"
+import { ProviderSettingsDialog, type ProviderDetails } from "@/components/moderator/provider-settings-dialog"
 import type { DatabaseRecord } from "@/app/api/moderator/databases/route"
 import type { TelemetryEvent } from "@/app/api/moderator/telemetry/route"
 import type { ReportItem } from "@/lib/moderator-types"
+import type { SystemAlert, ServiceStatus } from "@/app/api/moderator/overview/route"
 
 type ModeratorTab =
   | "general"
@@ -113,13 +116,10 @@ export default function ModeratorPage() {
   const [activeTab, setActiveTab] = useState<ModeratorTab>("general")
   const [loading, setLoading] = useState(true)
 
-  // Overview metrics state
-  const [metrics, setMetrics] = useState({
-    reports: { total: 0, changeText: "— vs. last week" },
-    warnings: { total: 0, changeText: "— vs. last week" },
-    bans: { total: 0, changeText: "— vs. last week" },
-    resolved: { total: 0, changeText: "— vs. last week" },
-  })
+  // Command Center Overview state
+  const [systemAlerts, setSystemAlerts] = useState<SystemAlert[]>([])
+  const [serviceStatuses, setServiceStatuses] = useState<ServiceStatus[]>([])
+  const [pendingReportsCount, setPendingReportsCount] = useState<number>(0)
   const [recentReports, setRecentReports] = useState<ReportItem[]>([])
 
   // Users state
@@ -128,6 +128,7 @@ export default function ModeratorPage() {
   const [usersLoading, setUsersLoading] = useState(false)
   const [targetUser, setTargetUser] = useState<any | null>(null)
   const [assigningShardUserId, setAssigningShardUserId] = useState<string | null>(null)
+
 
   // Dialogs
   const [creditDialogOpen, setCreditDialogOpen] = useState(false)
@@ -156,6 +157,8 @@ export default function ModeratorPage() {
   const [editingModelId, setEditingModelId] = useState<string | null>(null)
   const [editDisplayName, setEditDisplayName] = useState("")
   const [savingModelId, setSavingModelId] = useState<string | null>(null)
+  const [providerSettingsOpen, setProviderSettingsOpen] = useState(false)
+  const [selectedProviderSettings, setSelectedProviderSettings] = useState<ProviderDetails | null>(null)
 
   // AI Usage state
   const [usageData, setUsageData] = useState<{
@@ -244,7 +247,9 @@ export default function ModeratorPage() {
       const res = await fetch("/api/moderator/overview")
       const data = await res.json()
       if (data?.ok) {
-        setMetrics(data.metrics)
+        setSystemAlerts(data.alerts || [])
+        setServiceStatuses(data.services || [])
+        setPendingReportsCount(data.pendingReportsCount ?? 0)
         setRecentReports(data.recentReports || [])
       }
     } catch (e) {
@@ -435,7 +440,73 @@ export default function ModeratorPage() {
     }
   }
 
+  const openProviderSettings = (providerId: string | null) => {
+    if (!providerId) return
+    const meta: Record<string, ProviderDetails> = {
+      vercel: {
+        id: "vercel",
+        name: "Vercel AI Gateway",
+        provider: "vercel",
+        baseUrl: "https://ai-gateway.vercel.sh/v1",
+        apiType: "vercel-ai-gateway (OpenAI SSE)",
+        modelCount: adminModels.filter((m) => m.provider.toLowerCase().includes("vercel") || (!m.provider.toLowerCase().includes("vertex") && !m.provider.toLowerCase().includes("vyce"))).length,
+        gatewayExposed: true,
+        validationState: "verified",
+        description: "Global edge routing for standard models with edge caching and rate limiting shield.",
+      },
+      vertex: {
+        id: "vertex",
+        name: "Google Vertex AI",
+        provider: "vertex",
+        baseUrl: "https://aiplatform.googleapis.com/v1/projects/673403509107/locations/us-central1/publishers/google",
+        apiType: "google-vertex-sse",
+        modelCount: adminModels.filter((m) => m.provider.toLowerCase().includes("vertex") || m.provider.toLowerCase().includes("google")).length || 5,
+        gatewayExposed: true,
+        validationState: "verified",
+        description: "Enterprise Google Cloud provider with Gemini 2.5 Flash through Gemini 3.8 Flash models.",
+      },
+      vyce: {
+        id: "vyce",
+        name: "Vyce AI",
+        provider: "vyce",
+        baseUrl: "https://vyceai.com/v1",
+        apiType: "openai-compatible-sse",
+        modelCount: adminModels.filter((m) => m.provider.toLowerCase().includes("vyce")).length || 3,
+        gatewayExposed: true,
+        validationState: "verified",
+        description: "High-speed inference endpoint optimized for real-time site generation and code changes.",
+      },
+      custom: {
+        id: "custom",
+        name: "Direct & Custom Providers",
+        provider: "custom",
+        baseUrl: "Local VM Runner & Custom Endpoints",
+        apiType: "dynamic-custom-sse",
+        modelCount: adminModels.filter((m) => m.provider.toLowerCase().includes("custom")).length,
+        gatewayExposed: false,
+        validationState: "configurable",
+        description: "Custom OpenAI-compatible base URLs, direct API keys, and local VM runner models.",
+      },
+    }
+
+    const matched = meta[providerId] || {
+      id: providerId,
+      name: providerId.charAt(0).toUpperCase() + providerId.slice(1),
+      provider: providerId,
+      baseUrl: "Configured API Endpoint",
+      apiType: "openai-compatible-sse",
+      modelCount: adminModels.filter((m) => m.provider.toLowerCase().includes(providerId)).length,
+      gatewayExposed: true,
+      validationState: "verified",
+      description: `${providerId} model integration and routing.`,
+    }
+
+    setSelectedProviderSettings(matched)
+    setProviderSettingsOpen(true)
+  }
+
   const handleToggleShardSuspension = async () => {
+
     if (!suspendConfirmDb) return
     const isCurrentlySuspended = suspendConfirmDb.status === "suspended"
     const action = isCurrentlySuspended ? "resume" : "suspend"
@@ -805,7 +876,7 @@ export default function ModeratorPage() {
       {/* Main Moderator Viewport */}
       <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
         {/* =========================================================================
-            TAB 1: GENERAL (SYSTEM OVERVIEW & LIVE STATUS)
+            TAB 1: GENERAL (COMMAND CENTER: ALERTS, QUICK ACTIONS, OBSERVED TOPOLOGY)
            ========================================================================= */}
         {activeTab === "general" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
@@ -813,112 +884,232 @@ export default function ModeratorPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
               <div>
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
-                  System Overview
+                  Moderator Command Center
                 </h1>
                 <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
-                  Platform operational health, moderation reports, and infrastructure readiness
+                  Platform operational integrity, quick section access, and verified system topology
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className="bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)] text-xs px-2.5 py-1 rounded-[var(--radius-inner)]"
-                >
-                  Last 7 days
-                </Badge>
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="outline"
                   onClick={fetchOverview}
-                  className="h-8 px-2 text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+                  <span>Refresh Status</span>
                 </Button>
               </div>
             </div>
 
-            {/* 4 Primary Metric Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <MetricCard
-                title="Reports"
-                value={metrics.reports.total}
-                changeText={metrics.reports.changeText}
-                icon={AlertTriangle}
-                iconColor="text-[var(--warning)]"
-              />
-              <MetricCard
-                title="Warnings"
-                value={metrics.warnings.total}
-                changeText={metrics.warnings.changeText}
-                icon={Shield}
-                iconColor="text-[var(--warning)]"
-              />
-              <MetricCard
-                title="Bans"
-                value={metrics.bans.total}
-                changeText={metrics.bans.changeText}
-                icon={Ban}
-                iconColor="text-[var(--danger)]"
-              />
-              <MetricCard
-                title="Resolved"
-                value={metrics.resolved.total}
-                changeText={metrics.resolved.changeText}
-                icon={CheckCircle2}
-                iconColor="text-[var(--success)]"
-              />
+            {/* SECTION 1: Active Warnings / Calm No Active Warnings State */}
+            {systemAlerts.length === 0 ? (
+              <div className="p-4 sm:p-5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] flex items-center gap-3.5 shadow-[var(--shadow-card)]">
+                <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--success-muted)] border border-[var(--success)]/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-[var(--success)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">No Active Warnings</h3>
+                    <Badge variant="outline" className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] font-mono px-2 py-0 rounded-[var(--radius-full)]">
+                      Nominal
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Storage cluster, VM runtime host, and provider routing services are operating without incident.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {systemAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className={cn(
+                      "p-4 rounded-[var(--radius-panel)] border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[var(--shadow-card)]",
+                      alert.severity === "critical"
+                        ? "bg-[var(--danger-muted)] border-[var(--danger)]/30 text-[var(--foreground)]"
+                        : alert.severity === "warning"
+                        ? "bg-[var(--warning-muted)] border-[var(--warning)]/30 text-[var(--foreground)]"
+                        : "bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)]"
+                    )}
+                  >
+                    <div className="flex items-start sm:items-center gap-3 min-w-0">
+                      <div className={cn(
+                        "w-8 h-8 rounded-[var(--radius-inner)] border flex items-center justify-center shrink-0 mt-0.5 sm:mt-0",
+                        alert.severity === "critical"
+                          ? "bg-[var(--danger)]/15 border-[var(--danger)]/30 text-[var(--danger)]"
+                          : alert.severity === "warning"
+                          ? "bg-[var(--warning)]/15 border-[var(--warning)]/30 text-[var(--warning)]"
+                          : "bg-[var(--surface-muted)] border-[var(--border)] text-[var(--info)]"
+                      )}>
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-semibold text-[var(--foreground)]">{alert.title}</h4>
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">{alert.description}</p>
+                      </div>
+                    </div>
+                    {alert.targetTab && alert.targetTab !== "general" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setActiveTab(alert.targetTab)
+                          if (alert.targetTab === "providers") setSelectedProviderId(null)
+                        }}
+                        className="h-7 px-3 text-xs border-[var(--border-strong)] bg-[var(--surface-raised)] hover:bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] shrink-0 self-start sm:self-auto gap-1"
+                      >
+                        <span>Open {alert.targetTab.charAt(0).toUpperCase() + alert.targetTab.slice(1)}</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* SECTION 2: Operational Dispatch & Quick Actions */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] font-mono">
+                Operational Dispatch & Quick Actions
+              </span>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <button
+                  onClick={() => {
+                    setActiveTab("providers")
+                    setSelectedProviderId(null)
+                  }}
+                  className="group p-3.5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] text-left transition-all shadow-[var(--shadow-card)] space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                      <Cpu className="w-4 h-4 text-[var(--foreground)]" />
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-[var(--surface-muted)] text-[var(--text-secondary)] border-[var(--border)]">
+                      AI GATEWAY
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-[var(--foreground)] group-hover:text-white flex items-center justify-between">
+                      <span>Providers & Models</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      Configure endpoints, model visibility, and costs
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("databases")}
+                  className="group p-3.5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] text-left transition-all shadow-[var(--shadow-card)] space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                      <Database className="w-4 h-4 text-[var(--foreground)]" />
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-[var(--surface-muted)] text-[var(--text-secondary)] border-[var(--border)]">
+                      STORAGE
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-[var(--foreground)] group-hover:text-white flex items-center justify-between">
+                      <span>Databases & Shards</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      Inspect user schema records and cluster storage
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("servers")}
+                  className="group p-3.5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] text-left transition-all shadow-[var(--shadow-card)] space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                      <Server className="w-4 h-4 text-[var(--foreground)]" />
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-[var(--surface-muted)] text-[var(--text-secondary)] border-[var(--border)]">
+                      COMPUTE
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-[var(--foreground)] group-hover:text-white flex items-center justify-between">
+                      <span>Host Servers & VM</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      Live CPU, RAM load, host runner, and logs
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("users")}
+                  className="group p-3.5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] text-left transition-all shadow-[var(--shadow-card)] space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                      <Users className="w-4 h-4 text-[var(--foreground)]" />
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 bg-[var(--surface-muted)] text-[var(--text-secondary)] border-[var(--border)]">
+                      ACCESS
+                    </Badge>
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-[var(--foreground)] group-hover:text-white flex items-center justify-between">
+                      <span>Users & Moderation</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      Account directory, regional shards, and credits
+                    </p>
+                  </div>
+                </button>
+              </div>
             </div>
 
-            {/* Live Infrastructure Health Bar */}
+            {/* SECTION 3: Observable Service Health Summary */}
             <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-4 shadow-[var(--shadow-card)]">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-[var(--success)]" />
                   <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] font-mono">
-                    Live Infrastructure Topology
+                    Observable Platform Topology
                   </span>
                 </div>
                 <span className="text-[11px] text-[var(--text-muted)] font-mono">
-                  Sync Interval: 10s • Latency Target &lt; 50ms
+                  Continuous Status Checks
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-[var(--foreground)]">Turso Master Store</span>
-                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)]">us-east-1 (N. Virginia)</p>
-                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">11ms latency</p>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-[var(--foreground)]">Sycord VPS Runner</span>
-                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)]">Ubuntu 24.04 (Primary)</p>
-                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Service Active (99.98%)</p>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-[var(--foreground)]">Google Vertex AI</span>
-                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)]">us-central1 Regional</p>
-                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Failover Armed</p>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-[var(--foreground)]">Vercel AI Gateway</span>
-                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                  </div>
-                  <p className="text-[11px] text-[var(--text-muted)]">Global Edge Network</p>
-                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Operational</p>
-                </div>
+                {serviceStatuses.map((svc) => {
+                  const isHealthy = svc.status === "healthy"
+                  const isDegraded = svc.status === "degraded" || svc.status === "unconfigured"
+                  return (
+                    <div key={svc.id} className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-medium text-[var(--foreground)]">{svc.name}</span>
+                        <span className={cn(
+                          "w-2 h-2 rounded-full",
+                          isHealthy ? "bg-[var(--success)]" : isDegraded ? "bg-[var(--warning)]" : "bg-[var(--danger)]"
+                        )} />
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)]">{svc.location}</p>
+                      <p className={cn(
+                        "text-[11px] font-mono tabular-nums",
+                        isHealthy ? "text-[var(--success)]" : isDegraded ? "text-[var(--warning)]" : "text-[var(--danger)]"
+                      )}>
+                        {svc.note}
+                      </p>
+                    </div>
+                  )
+                })}
               </div>
             </Card>
 
@@ -1291,14 +1482,26 @@ export default function ModeratorPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
-                        <Cpu className="w-5 h-5 text-[var(--foreground)]" />
+                        <ProviderLogo provider="vercel" size={20} />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
-                      >
-                        Operational
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                        >
+                          Active
+                        </Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openProviderSettings("vercel")
+                          }}
+                          className="p-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface-muted)] transition-colors"
+                          title="Provider Settings"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -1307,13 +1510,13 @@ export default function ModeratorPage() {
                         <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                       </h3>
                       <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">
-                        Global edge routing for standard models with caching and rate limiting shield.
+                        Global edge routing for standard models with edge caching and rate limiting shield.
                       </p>
                     </div>
 
                     <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                      <span>Gateway Latency</span>
-                      <span className="font-mono tabular-nums text-[var(--foreground)]">28ms</span>
+                      <span>Edge Routing</span>
+                      <span className="font-mono text-[var(--foreground)]">Global Active</span>
                     </div>
                   </div>
 
@@ -1324,14 +1527,26 @@ export default function ModeratorPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-[var(--foreground)]" />
+                        <ProviderLogo provider="vertex" size={20} />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
-                      >
-                        us-central1 Active
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                        >
+                          Verified
+                        </Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openProviderSettings("vertex")
+                          }}
+                          className="p-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface-muted)] transition-colors"
+                          title="Provider Settings"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -1345,8 +1560,8 @@ export default function ModeratorPage() {
                     </div>
 
                     <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                      <span>Gateway Latency</span>
-                      <span className="font-mono tabular-nums text-[var(--foreground)]">19ms</span>
+                      <span>Regional Publisher</span>
+                      <span className="font-mono text-[var(--foreground)]">us-central1</span>
                     </div>
                   </div>
 
@@ -1357,14 +1572,26 @@ export default function ModeratorPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
-                        <Zap className="w-5 h-5 text-[var(--foreground)]" />
+                        <ProviderLogo provider="vyce" size={20} />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
-                      >
-                        Operational
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                        >
+                          Operational
+                        </Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openProviderSettings("vyce")
+                          }}
+                          className="p-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface-muted)] transition-colors"
+                          title="Provider Settings"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -1378,8 +1605,8 @@ export default function ModeratorPage() {
                     </div>
 
                     <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                      <span>Gateway Latency</span>
-                      <span className="font-mono tabular-nums text-[var(--foreground)]">34ms</span>
+                      <span>Inference Endpoint</span>
+                      <span className="font-mono text-[var(--foreground)]">vyceai.com/v1</span>
                     </div>
                   </div>
 
@@ -1390,14 +1617,26 @@ export default function ModeratorPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
-                        <Layers className="w-5 h-5 text-[var(--foreground)]" />
+                        <ProviderLogo provider="custom" size={20} />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className="bg-[var(--info-muted)] text-[var(--info)] border-[var(--info)]/20 text-[10px] rounded-[var(--radius-full)]"
-                      >
-                        Configurable
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--info-muted)] text-[var(--info)] border-[var(--info)]/20 text-[10px] rounded-[var(--radius-full)]"
+                        >
+                          Configurable
+                        </Badge>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openProviderSettings("custom")
+                          }}
+                          className="p-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface-muted)] transition-colors"
+                          title="Provider Settings"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -1412,7 +1651,7 @@ export default function ModeratorPage() {
 
                     <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                       <span>Direct Runner</span>
-                      <span className="font-mono tabular-nums text-[var(--foreground)]">Local / 12ms</span>
+                      <span className="font-mono text-[var(--foreground)]">Local Runtime</span>
                     </div>
                   </div>
                 </div>
@@ -1523,7 +1762,7 @@ export default function ModeratorPage() {
                       value={modelSearch}
                       onChange={(e) => setModelSearch(e.target.value)}
                       placeholder={`Filter models for provider (${selectedProviderId})...`}
-                      className="pl-9 h-9 text-xs bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--text-muted)] rounded-[var(--radius-control)]"
+                      className="pl-9 h-9 text-base sm:text-xs bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--text-muted)] rounded-[var(--radius-control)]"
                     />
                   </div>
                   {modelSearch && (
@@ -1566,11 +1805,11 @@ export default function ModeratorPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={handleSyncHandshake}
-                      className="h-9 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1.5"
+                      onClick={() => openProviderSettings(selectedProviderId)}
+                      className="h-9 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Sync VM</span>
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>Settings</span>
                     </Button>
                   </div>
                 </div>
@@ -1832,8 +2071,20 @@ export default function ModeratorPage() {
                               <td className="py-3 px-3 font-mono text-[var(--foreground)] tabular-nums">
                                 {db.latencyMs} ms
                               </td>
-                              <td className="py-3 px-3 font-mono text-[var(--text-secondary)] tabular-nums">
-                                {db.storageUsedMb} MB / {db.storageLimitMb} MB
+                              <td className="py-3 px-3">
+                                <div className="space-y-1 w-28">
+                                  <div className="h-1.5 w-full bg-[var(--border)] rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-[var(--foreground)] transition-all duration-300"
+                                      style={{
+                                        width: `${Math.min(100, Math.round((db.storageUsedMb / Math.max(1, db.storageLimitMb || 1000)) * 100))}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="font-mono text-[10px] text-[var(--text-secondary)] tabular-nums">
+                                    {db.storageUsedMb} MB / {db.storageLimitMb} MB
+                                  </div>
+                                </div>
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
@@ -2286,6 +2537,14 @@ export default function ModeratorPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Provider Details & Settings Dialog */}
+      <ProviderSettingsDialog
+        open={providerSettingsOpen}
+        onOpenChange={setProviderSettingsOpen}
+        provider={selectedProviderSettings}
+      />
     </div>
   )
 }
+
