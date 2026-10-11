@@ -647,7 +647,7 @@ export default function ModeratorPage() {
     { id: "providers" as ModeratorTab, label: "Providers", icon: Cpu },
     { id: "databases" as ModeratorTab, label: "Databases", icon: Database },
     { id: "servers" as ModeratorTab, label: "Servers", icon: Server },
-    { id: "astro" as ModeratorTab, label: "Astro", icon: Orbit },
+    { id: "astro" as ModeratorTab, label: "Astro", icon: Gauge },
     { id: "tickets" as ModeratorTab, label: "Tickets", icon: LifeBuoy },
     { id: "broadcast" as ModeratorTab, label: "Broadcast", icon: Megaphone },
   ]
