@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       }
 
       // Preflight validation
-      const usersInSource = await db.collection("users").countDocuments({}).catch(() => 120)
+      const usersInSource = await db.collection("users").find({}).toArray().then((r) => r.length).catch(() => 120)
 
       const job: MigrationJob = {
         id: `mig_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,

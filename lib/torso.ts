@@ -684,6 +684,15 @@ class TorsoCollection {
     return items[0] ?? null;
   }
 
+  async countDocuments(filter: UpdateFilter = {}): Promise<number> {
+    try {
+      const docs = await loadCollectionDocs(this.name, { filter });
+      return docs.filter((item) => matchFilter(item, filter)).length;
+    } catch {
+      return 0;
+    }
+  }
+
   find<T = any>(filter: UpdateFilter = {}, options?: FindOptions): TorsoQuery<T> {
     const query = new TorsoQuery<T>(this.name, filter, options?.projection);
     if (typeof options?.limit === "number") query.limit(options.limit);

@@ -46,6 +46,8 @@ export interface ReportItem {
   updatedAt?: string
   assignedModerator?: string
   resolutionNotes?: string
+  targetId?: string
+  targetType?: string
 }
 
 export interface ModerationWarning {

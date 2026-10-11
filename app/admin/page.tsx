@@ -956,50 +956,64 @@ export default function ModeratorPage() {
                         </td>
                       </tr>
                     ) : (
-                      recentReports.map((report) => (
-                        <tr key={report.id} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
-                          <td className="py-3 px-4">
-                            <span className="font-semibold text-[var(--foreground)]">{report.targetId}</span>
-                            <p className="text-[10px] text-[var(--text-muted)] capitalize">{report.targetType}</p>
-                          </td>
-                          <td className="py-3 px-3 text-[var(--text-secondary)]">{report.reporterEmail || "System"}</td>
-                          <td className="py-3 px-3 text-[var(--text-secondary)] max-w-xs truncate">{report.reason}</td>
-                          <td className="py-3 px-3">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] uppercase font-mono px-1.5 py-0 rounded-[var(--radius-full)]",
-                                report.status === "pending"
-                                  ? "bg-[var(--warning-muted)] text-[var(--warning)] border-[var(--warning)]/20"
-                                  : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                      recentReports.map((report) => {
+                        const targetLabel =
+                          report.targetId ||
+                          report.reportedUserName ||
+                          report.reportedUserEmail ||
+                          report.reportedUserId ||
+                          "Target"
+                        const targetCategory = report.targetType || report.category || "Report"
+                        const isOpen =
+                          report.status === "open" ||
+                          report.status === "reviewing" ||
+                          (report.status as any) === "pending"
+
+                        return (
+                          <tr key={report.id} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-[var(--foreground)]">{targetLabel}</span>
+                              <p className="text-[10px] text-[var(--text-muted)] capitalize">{targetCategory}</p>
+                            </td>
+                            <td className="py-3 px-3 text-[var(--text-secondary)]">{report.reporterEmail || "System"}</td>
+                            <td className="py-3 px-3 text-[var(--text-secondary)] max-w-xs truncate">{report.reason}</td>
+                            <td className="py-3 px-3">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] uppercase font-mono px-1.5 py-0 rounded-[var(--radius-full)]",
+                                  isOpen
+                                    ? "bg-[var(--warning-muted)] text-[var(--warning)] border-[var(--warning)]/20"
+                                    : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                                )}
+                              >
+                                {report.status}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {isOpen && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleResolveReport(report.id, "dismissed")}
+                                    className="h-7 px-2 text-[11px] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+                                  >
+                                    Dismiss
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleResolveReport(report.id, "resolved")}
+                                    className="h-7 px-2 text-[11px] bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium"
+                                  >
+                                    Resolve
+                                  </Button>
+                                </div>
                               )}
-                            >
-                              {report.status}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-right">
-                            {report.status === "pending" && (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleResolveReport(report.id, "dismissed")}
-                                  className="h-7 px-2 text-[11px] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--foreground)]"
-                                >
-                                  Dismiss
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleResolveReport(report.id, "resolved")}
-                                  className="h-7 px-2 text-[11px] bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium"
-                                >
-                                  Resolve
-                                </Button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>

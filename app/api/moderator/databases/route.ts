@@ -88,7 +88,7 @@ export async function GET() {
     const allDbs = customDbs.length > 0 ? customDbs : INITIAL_DATABASES
 
     // Calculate real user counts if users collection is populated
-    const userCount = await db.collection("users").countDocuments({}).catch(() => 0)
+    const userCount = await db.collection("users").find({}).toArray().then((r) => r.length).catch(() => 0)
 
     return NextResponse.json({
       ok: true,
