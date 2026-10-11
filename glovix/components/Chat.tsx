@@ -2545,8 +2545,40 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         // Embedded project chats use Syte's durable per-project agent. Only the
         // new user turn is submitted; previously saved chat is not resent.
+        // NOTE: Custom provider models (e.g. Vyce AI or custom base URLs) must NOT route
+        // to Syte's remote agent because Syte's remote agent delegates to Vercel AI Gateway,
+        // which rejects custom models with HTTP 404. Custom models route through local /api/ai/chat directly.
+        const isCustomModel = (() => {
+            const m = (selectedModel || '').toLowerCase();
+            if (m.startsWith('vyce') || m.includes('deepseek-v4.1') || m.includes('claude-sonnet-4-6') || m.includes('agnes')) {
+                return true;
+            }
+            if (typeof window !== 'undefined') {
+                try {
+                    const rawCp = localStorage.getItem('sycord_custom_providers');
+                    if (rawCp) {
+                        const providers: any[] = JSON.parse(rawCp);
+                        if (Array.isArray(providers)) {
+                            return providers.some(p => {
+                                const slug = (p.provider || p.name || '').toLowerCase();
+                                if (slug && m.startsWith(`${slug}/`)) return true;
+                                if (Array.isArray(p.models)) {
+                                    return p.models.some((mod: string) => {
+                                        const modStr = String(mod).toLowerCase();
+                                        return modStr === m || `${slug}/${modStr}` === m;
+                                    });
+                                }
+                                return false;
+                            });
+                        }
+                    }
+                } catch {}
+            }
+            return false;
+        })();
+
         const hostProjectId = getHostProjectId();
-        if (hostProjectId) {
+        if (hostProjectId && !isCustomModel) {
             await triggerProjectAgentResponse(userMessage, hostProjectId, chatIdOverride);
             return;
         }

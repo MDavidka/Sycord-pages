@@ -285,10 +285,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     console.warn("[Agent] Failed to resolve custom provider credentials:", err)
   }
 
-  // Start the agent immediately — do not block on a sessions list round-trip.
-  // Session numbers from the client (`afterSession`) are authoritative enough
-  // for UI correlation; Turso poll events overwrite with the durable number.
-  const change = await syteAgentChange(workspace.uuid, message, modelProfile, {
+  // If modelProfile belongs to a custom provider (e.g. vyceai/deepseek-v4.1), map the Syte
+  // runner profile to a supported default (syra-base) so the remote gateway runner does not
+  // reject it with HTTP 404, while retaining the resolved custom credentials.
+  const remoteModelProfile = (
+    modelProfile.toLowerCase().includes("vyce") ||
+    modelProfile.toLowerCase().includes("deepseek-v4.1") ||
+    modelProfile.toLowerCase().includes("claude-sonnet-4-6") ||
+    modelProfile.toLowerCase().includes("agnes") ||
+    resolvedCredentials.CUSTOM_AI_BASE_URL
+  ) ? "syra-base" : modelProfile
+
+  const change = await syteAgentChange(workspace.uuid, message, remoteModelProfile, {
     planMode,
     agentMode,
     thinkingLevel,
