@@ -46,6 +46,7 @@ import {
   ShieldCheck,
   Power,
   Flame,
+  Orbit,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -93,6 +94,7 @@ import { DatabaseInspectModal } from "@/components/moderator/database-inspect-mo
 import { ServerPerformanceOverview } from "@/components/moderator/server-performance-overview"
 import { TelemetryDetailsModal } from "@/components/moderator/telemetry-details-modal"
 import { UnderConstructionCard } from "@/components/moderator/under-construction-card"
+import { AstroControlCenter } from "@/components/moderator/astro-control-center"
 import { ProviderLogo } from "@/components/moderator/provider-logos"
 import { ProviderSettingsDialog, type ProviderDetails } from "@/components/moderator/provider-settings-dialog"
 import type { DatabaseRecord } from "@/app/api/moderator/databases/route"
@@ -106,6 +108,7 @@ type ModeratorTab =
   | "providers"
   | "databases"
   | "servers"
+  | "astro"
   | "tickets"
   | "broadcast"
 
@@ -644,6 +647,7 @@ export default function ModeratorPage() {
     { id: "providers" as ModeratorTab, label: "Providers", icon: Cpu },
     { id: "databases" as ModeratorTab, label: "Databases", icon: Database },
     { id: "servers" as ModeratorTab, label: "Servers", icon: Server },
+    { id: "astro" as ModeratorTab, label: "Astro", icon: Orbit },
     { id: "tickets" as ModeratorTab, label: "Tickets", icon: LifeBuoy },
     { id: "broadcast" as ModeratorTab, label: "Broadcast", icon: Megaphone },
   ]
@@ -2331,7 +2335,12 @@ export default function ModeratorPage() {
         )}
 
         {/* =========================================================================
-            TAB 6: TICKETS ("UNDER CONSTRUCTION" PLACEHOLDER)
+            TAB 6: ASTRO (VM DIAGNOSTICS & SAFE AGENT WORKFLOWS)
+           ========================================================================= */}
+        {activeTab === "astro" && <AstroControlCenter />}
+
+        {/* =========================================================================
+            TAB 7: TICKETS ("UNDER CONSTRUCTION" PLACEHOLDER)
            ========================================================================= */}
         {activeTab === "tickets" && (
           <UnderConstructionCard
@@ -2343,7 +2352,7 @@ export default function ModeratorPage() {
         )}
 
         {/* =========================================================================
-            TAB 7: BROADCAST ("UNDER CONSTRUCTION" PLACEHOLDER)
+            TAB 8: BROADCAST ("UNDER CONSTRUCTION" PLACEHOLDER)
            ========================================================================= */}
         {activeTab === "broadcast" && (
           <UnderConstructionCard
