@@ -7,6 +7,8 @@
 // Serves Astro, builder chat completions, and the Omni Router with
 // OpenAI-compatible SSE streaming using VERCEL_AI (or AI_GATEWAY_API_KEY).
 
+import { convertMessages, toFunctionDeclarations } from "./glovix-gemini"
+
 export interface VercelGatewayPricing {
   input?: string
   output?: string
@@ -405,7 +407,15 @@ export interface StreamCustomProviderOptions extends StreamVercelAiOptions {
  */
 export async function streamCustomAiProvider(options: StreamCustomProviderOptions): Promise<Response> {
   const model = options.model || "default"
-  const encoder = new TextEncoder()
+  // Check if provider is Google Vertex AI
+  const isVertex =
+    options.providerName?.toLowerCase().includes("vertex") ||
+    options.baseUrl.includes("aiplatform.googleapis.com") ||
+    options.baseUrl.includes("/publishers/google")
+
+  if (isVertex) {
+    return streamVertexAiDirect(options)
+  }
 
   // Clean / normalize endpoint URL
   let targetUrl = options.baseUrl.trim()
@@ -554,6 +564,263 @@ export async function streamCustomAiProvider(options: StreamCustomProviderOption
                 {
                   index: 0,
                   delta: { content: `\n\n[${options.providerName || "Custom Provider"} error] ${err?.message || "Stream terminated unexpectedly"}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }),
+          )
+          done()
+        }
+      } finally {
+        clearInterval(keepaliveTimer)
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-store, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+      "Content-Encoding": "identity",
+    },
+  })
+}
+
+/**
+ * Streams chat completions directly through Google Cloud Vertex AI endpoint
+ * using the key and project configuration, translating Vertex SSE chunks into
+ * OpenAI-compatible SSE events for seamless frontend compatibility.
+ */
+export async function streamVertexAiDirect(options: StreamCustomProviderOptions): Promise<Response> {
+  const rawModel = options.model || "gemini-2.5-flash"
+  // Normalize model name (remove vertex/ or google/ prefix if present)
+  const model = rawModel.replace(/^(vertex\/|google\/)/i, "")
+  const encoder = new TextEncoder()
+
+  // Base URL normalization
+  let baseUrl = options.baseUrl.trim().replace(/\/+$/, "")
+  if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+    baseUrl = `https://${baseUrl}`
+  }
+
+  // Construct Vertex streamGenerateContent endpoint
+  // BaseUrl format: https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google
+  const apiKey = (
+    options.apiKey ||
+    process.env.VERTEX_AI_API_KEY ||
+    process.env.GOOGLE_AIAGENT_API ||
+    process.env.GOOGLE_AIAGENT_API_KEY ||
+    ""
+  ).trim()
+  const endpoint = baseUrl.endsWith("/models")
+    ? `${baseUrl}/${model}:streamGenerateContent?alt=sse&key=${apiKey}`
+    : `${baseUrl}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`
+
+  const { contents, systemInstruction } = convertMessages(options.messages as any)
+  const functionDeclarations = toFunctionDeclarations(options.tools)
+
+  const requestBody: Record<string, any> = {
+    contents,
+    generationConfig: {
+      temperature: options.temperature ?? 0.7,
+      maxOutputTokens: options.max_tokens ?? 16384,
+    },
+  }
+
+  if (systemInstruction) {
+    requestBody.systemInstruction = {
+      parts: [{ text: systemInstruction }],
+    }
+  }
+
+  if (functionDeclarations && functionDeclarations.length > 0) {
+    requestBody.tools = [{ functionDeclarations }]
+  }
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false
+      const enqueue = (chunk: Uint8Array) => {
+        if (!closed) controller.enqueue(chunk)
+      }
+      const sendEvent = (data: string) => enqueue(encoder.encode(`data: ${data}\n\n`))
+      const done = () => {
+        if (closed) return
+        sendEvent("[DONE]")
+        closed = true
+        controller.close()
+      }
+
+      enqueue(encoder.encode(": vertex-stream-ready\n\n"))
+      const keepaliveTimer = setInterval(() => {
+        if (!closed) {
+          enqueue(encoder.encode(": ping\n\n"))
+        }
+      }, 15000)
+
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify(requestBody),
+          cache: "no-store",
+          signal: options.signal
+            ? AbortSignal.any([options.signal, AbortSignal.timeout(180_000)])
+            : AbortSignal.timeout(180_000),
+        })
+
+        if (!res.ok) {
+          const errText = await res.text().catch(() => `HTTP ${res.status}`)
+          const actionableMessage = `[Vertex AI Error] ${res.status}: ${errText}`
+
+          sendEvent(
+            JSON.stringify({
+              id: `chatcmpl-${Date.now()}`,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: `\n\n${actionableMessage}` },
+                  finish_reason: "stop",
+                },
+              ],
+            }),
+          )
+          done()
+          return
+        }
+
+        if (!res.body) {
+          throw new Error("No response body from Vertex AI")
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+        let buffer = ""
+        let toolIndex = 0
+
+        try {
+          while (!options.signal?.aborted) {
+            const { done: streamDone, value } = await reader.read()
+            if (streamDone) break
+            if (!value) continue
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split("\n")
+            buffer = lines.pop() || ""
+
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed || trimmed.startsWith(":")) continue
+              if (!trimmed.startsWith("data:")) continue
+
+              const dataStr = trimmed.slice(5).trim()
+              if (!dataStr || dataStr === "[DONE]") continue
+
+              try {
+                const parsed = JSON.parse(dataStr)
+                const candidates = parsed?.candidates || []
+                for (const cand of candidates) {
+                  const parts = cand?.content?.parts || []
+                  for (const part of parts) {
+                    if (part.text) {
+                      sendEvent(
+                        JSON.stringify({
+                          id: `chatcmpl-${Date.now()}`,
+                          object: "chat.completion.chunk",
+                          created: Math.floor(Date.now() / 1000),
+                          model,
+                          choices: [
+                            {
+                              index: 0,
+                              delta: part.thought ? { reasoning: part.text } : { content: part.text },
+                              finish_reason: null,
+                            },
+                          ],
+                        }),
+                      )
+                    }
+
+                    if (part.functionCall) {
+                      sendEvent(
+                        JSON.stringify({
+                          id: `chatcmpl-${Date.now()}`,
+                          object: "chat.completion.chunk",
+                          created: Math.floor(Date.now() / 1000),
+                          model,
+                          choices: [
+                            {
+                              index: 0,
+                              delta: {
+                                tool_calls: [
+                                  {
+                                    index: toolIndex,
+                                    id: `call_${toolIndex}_${Date.now()}`,
+                                    type: "function",
+                                    function: {
+                                      name: part.functionCall.name || "tool",
+                                      arguments: JSON.stringify(part.functionCall.args || {}),
+                                    },
+                                  },
+                                ],
+                              },
+                              finish_reason: null,
+                            },
+                          ],
+                        }),
+                      )
+                      toolIndex++
+                    }
+                  }
+                }
+              } catch {
+                // If chunk is partial JSON, continue accumulating
+              }
+            }
+          }
+        } finally {
+          if (options.signal?.aborted) {
+            await reader.cancel().catch(() => undefined)
+          }
+          reader.releaseLock()
+        }
+
+        // Send stop chunk
+        sendEvent(
+          JSON.stringify({
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: toolIndex > 0 ? "tool_calls" : "stop",
+              },
+            ],
+          }),
+        )
+        done()
+      } catch (err: any) {
+        if (!closed) {
+          sendEvent(
+            JSON.stringify({
+              id: `chatcmpl-${Date.now()}`,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: `\n\n[Google Vertex AI error] ${err?.message || "Stream terminated unexpectedly"}` },
                   finish_reason: "stop",
                 },
               ],
