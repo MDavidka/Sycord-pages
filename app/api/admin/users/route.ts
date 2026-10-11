@@ -125,6 +125,8 @@ export async function GET(request: Request) {
             }))
           : [],
         warnings: Array.isArray(user.warnings) ? user.warnings : [],
+        region: user.region || "us-east-1",
+        shardId: user.shardId || "db-master-us-east",
       }
     })
 

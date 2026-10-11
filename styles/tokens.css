@@ -5,35 +5,59 @@
 :root,
 :root[data-theme="dark"],
 .dark {
-  /* Alap felületek */
-  --background: #111111;         /* A teljes viewport alapháttere */
-  --surface: #191919;            /* Kártyák, panelek, tárolók */
-  --surface-raised: #1F1F1F;     /* Dropdownok, popoverek, modális rétegek */
-  --surface-muted: #141414;      /* Inaktív állapotok, kódblokkok háttere */
+  /* Surfaces & Layering (Master Spec) */
+  --background: #111111;         /* Canvas behind all components */
+  --surface: #191919;            /* Cards, inputs, panels, base containers */
+  --surface-raised: #1F1F1F;     /* Popovers, dropdown menus, dialogs, modals */
+  --surface-muted: #141414;      /* Inset wells, code blocks, quiet fills */
 
-  /* Tipográfia */
-  --foreground: #FFFFFF;         /* Elsődleges szövegek, aktív ikonok */
-  --text-secondary: #B4B4B4;     /* Magyarázó szövegek, másodlagos adatok */
-  --text-muted: #8C8C8C;         /* Helykitöltők, timestamp, inaktív címkék */
+  /* Typography & Icons */
+  --foreground: #FFFFFF;         /* Primary headings, active labels, icons */
+  --text-secondary: #B4B4B4;     /* Body text, descriptions, secondary items */
+  --text-muted: #8C8C8C;         /* Placeholders, timestamps, subtle hints */
 
-  /* Szegélyek és elválasztók */
-  --border: #242424;             /* Alapértelmezett 1px panelelválasztó */
-  --border-subtle: #242424;      /* Belső finom kontúrok */
-  --border-strong: #333333;      /* Fókuszált, hoverelt vagy aktív szegélyek */
+  /* Borders & Dividers */
+  --border: #242424;             /* Default 1px borders between panels */
+  --border-subtle: #242424;      /* Dividers nested inside surfaces */
+  --border-strong: #333333;      /* Active, focused, or hovered borders */
 
-  /* Szemantikus állapotok (nem neonszerű, visszafogott árnyalatok) */
-  --success: #22C55E;
-  --warning: #EAB308;
-  --danger: #EF4444;
-  --accent: #FFFFFF;
+  /* Semantic Feedback & State */
+  --accent: #FFFFFF;             /* Primary action color / high-contrast focus */
+  --accent-muted: rgba(255, 255, 255, 0.08);
+  --success: #22C55E;            /* Completed states, checks, live status */
+  --success-muted: rgba(34, 197, 94, 0.12);
+  --warning: #EAB308;            /* Pending actions, rate limits */
+  --warning-muted: rgba(234, 179, 8, 0.12);
+  --danger: #EF4444;             /* Destructive actions, runtime errors */
+  --danger-muted: rgba(239, 68, 68, 0.12);
+  --info: #3B82F6;               /* External links, informational tags */
+  --info-muted: rgba(59, 130, 246, 0.12);
 
-  /* Lekerekítések (Vercel Concentric Nested Radii szabály) */
-  --radius-surface: 34px;        /* Külső nagy konténerek */
-  --radius-panel: 26px;          /* Belső kártyák, felugró panelek */
-  --radius-control: 18px;        /* Gombok, input mezők */
-  --radius-inner: 10px;          /* Vezérlőkön belüli badge-ek és chipek */
+  /* Corner Radii Scale (Concentric Nested Rule) */
+  --radius-inner: 10px;          /* Badges, pill tags, buttons inside compact toolbars */
+  --radius-control: 18px;        /* Standalone buttons, form inputs, segmented tabs */
+  --radius-panel: 26px;          /* Tool cards, popover panels, command cards */
+  --radius-surface: 34px;        /* Main workspace card, chat outer shell */
+  --radius-full: 9999px;         /* Status dots, avatar pills */
 
-  /* Tipográfia */
-  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Spacing Scale (4px harmonic grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Multi-Layered Diffused Shadows */
+  --shadow-border: 0 0 0 1px var(--border);
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border);
+  --shadow-floating: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-strong);
+  --shadow-overlay: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-strong);
+
+  /* Typography Fonts */
+  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
 }

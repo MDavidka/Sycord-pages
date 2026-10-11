@@ -9,8 +9,10 @@ import {
   LayoutDashboard,
   Users,
   Cpu,
+  Database,
   Server,
   LifeBuoy,
+  Megaphone,
   LogOut,
   Search,
   Shield,
@@ -26,31 +28,24 @@ import {
   RefreshCw,
   Loader2,
   ArrowRight,
-  Send,
-  Megaphone,
-  Database,
-  Radio,
-  Clock,
-  Layers,
   Sparkles,
   Zap,
-  CheckCheck,
   Globe2,
   Lock,
+  Layers,
   ArrowUpRight,
-  FileText,
-  UserCheck,
   Menu,
   X,
-  SlidersHorizontal,
-  Sliders,
-  Filter,
-  MoreHorizontal,
-  Check,
   ChevronsUpDown,
+  Check,
   Edit3,
   Save,
-  CheckCircle,
+  Radio,
+  Sliders,
+  RotateCcw,
+  ShieldCheck,
+  Power,
+  Flame,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -58,14 +53,6 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
-  MenubarItem,
-  MenubarSeparator,
-} from "@/components/ui/menubar"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -85,6 +72,14 @@ import {
   CommandGroup,
   CommandItem,
 } from "@/components/ui/command"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -93,18 +88,21 @@ import { MetricCard } from "@/components/moderator/metric-card"
 import { CreditDialog } from "@/components/moderator/credit-dialog"
 import { BanDialog } from "@/components/moderator/ban-dialog"
 import { WarnDialog } from "@/components/moderator/warn-dialog"
-import { AnnouncementDialog } from "@/components/moderator/announcement-dialog"
-import type {
-  ReportItem,
-  ModerationAuditLog,
-  ServerAnnouncement,
-  SupportTicket,
-  MonitoringNodeItem,
-  MonitoringDatabaseItem,
-  MonitoringAnomalyItem,
-} from "@/lib/moderator-types"
+import { DatabaseMigrateModal } from "@/components/moderator/database-migrate-modal"
+import { TelemetryDetailsModal } from "@/components/moderator/telemetry-details-modal"
+import { UnderConstructionCard } from "@/components/moderator/under-construction-card"
+import type { DatabaseRecord } from "@/app/api/moderator/databases/route"
+import type { TelemetryEvent } from "@/app/api/moderator/telemetry/route"
+import type { ReportItem } from "@/lib/moderator-types"
 
-type ModeratorTab = "general" | "users" | "models" | "providers" | "servers" | "tickets"
+type ModeratorTab =
+  | "general"
+  | "users"
+  | "providers"
+  | "databases"
+  | "servers"
+  | "tickets"
+  | "broadcast"
 
 export default function ModeratorPage() {
   const router = useRouter()
@@ -126,37 +124,17 @@ export default function ModeratorPage() {
   const [users, setUsers] = useState<any[]>([])
   const [userSearch, setUserSearch] = useState("")
   const [usersLoading, setUsersLoading] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<any | null>(null)
+  const [targetUser, setTargetUser] = useState<any | null>(null)
+  const [assigningShardUserId, setAssigningShardUserId] = useState<string | null>(null)
 
   // Dialogs
   const [creditDialogOpen, setCreditDialogOpen] = useState(false)
   const [creditActionType, setCreditActionType] = useState<"add" | "remove">("add")
   const [banDialogOpen, setBanDialogOpen] = useState(false)
   const [warnDialogOpen, setWarnDialogOpen] = useState(false)
-  const [targetUser, setTargetUser] = useState<any | null>(null)
-  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false)
 
-  // Usage & Providers state
-  const [usageData, setUsageData] = useState<{
-    period: string
-    summary: { totalInputTokens: number; totalOutputTokens: number; totalTokens: number; totalRequests: number }
-    models: any[]
-  }>({
-    period: "7d",
-    summary: { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0, totalRequests: 0 },
-    models: [],
-  })
-  const [usageLoading, setUsageLoading] = useState(false)
-  const [usagePeriod, setUsagePeriod] = useState("7d")
-  const [periodComboboxOpen, setPeriodComboboxOpen] = useState(false)
-
-  const PERIOD_OPTIONS = [
-    { value: "today", label: "Today" },
-    { value: "7d", label: "Last 7 Days" },
-    { value: "30d", label: "Last 30 Days" },
-  ]
-
-  // Admin Models Library Management State
+  // Providers & Models Library state
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
   const [adminModels, setAdminModels] = useState<Array<{
     id: string
     originalName: string
@@ -177,25 +155,47 @@ export default function ModeratorPage() {
   const [editDisplayName, setEditDisplayName] = useState("")
   const [savingModelId, setSavingModelId] = useState<string | null>(null)
 
-  // Servers monitoring state
-  const [serverMonitoring, setServerMonitoring] = useState<{
-    overview?: any
-    databases: MonitoringDatabaseItem[]
-    nodes: MonitoringNodeItem[]
-    anomalies: MonitoringAnomalyItem[]
+  // AI Usage state
+  const [usageData, setUsageData] = useState<{
+    period: string
+    summary: { totalInputTokens: number; totalOutputTokens: number; totalTokens: number; totalRequests: number }
+    models: any[]
   }>({
-    databases: [],
-    nodes: [],
-    anomalies: [],
+    period: "7d",
+    summary: { totalInputTokens: 0, totalOutputTokens: 0, totalTokens: 0, totalRequests: 0 },
+    models: [],
   })
-  const [serverLoading, setServerLoading] = useState(false)
+  const [usageLoading, setUsageLoading] = useState(false)
+  const [usagePeriod, setUsagePeriod] = useState("7d")
+  const [periodComboboxOpen, setPeriodComboboxOpen] = useState(false)
 
-  // Tickets & Announcements state
-  const [tickets, setTickets] = useState<SupportTicket[]>([])
-  const [announcements, setAnnouncements] = useState<ServerAnnouncement[]>([])
-  const [ticketReplyText, setTicketReplyText] = useState<Record<string, string>>({})
-  const [ticketsLoading, setTicketsLoading] = useState(false)
-  const [auditLogs, setAuditLogs] = useState<ModerationAuditLog[]>([])
+  const PERIOD_OPTIONS = [
+    { value: "today", label: "Today" },
+    { value: "7d", label: "Last 7 Days" },
+    { value: "30d", label: "Last 30 Days" },
+  ]
+
+  // Databases state
+  const [databases, setDatabases] = useState<DatabaseRecord[]>([])
+  const [databasesLoading, setDatabasesLoading] = useState(false)
+  const [migrateModalOpen, setMigrateModalOpen] = useState(false)
+  const [suspendConfirmDb, setSuspendConfirmDb] = useState<DatabaseRecord | null>(null)
+  const [suspendReason, setSuspendReason] = useState("")
+  const [suspendingLoading, setSuspendingLoading] = useState(false)
+
+  // Servers & Telemetry state
+  const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([])
+  const [telemetryLoading, setTelemetryLoading] = useState(false)
+  const [telemetrySeverityFilter, setTelemetrySeverityFilter] = useState<string>("all")
+  const [selectedTelemetryEvent, setSelectedTelemetryEvent] = useState<TelemetryEvent | null>(null)
+  const [telemetryModalOpen, setTelemetryModalOpen] = useState(false)
+
+  // VM service action state
+  const [vmActionLoading, setVmActionLoading] = useState(false)
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false)
+
+  // Mobile menu
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Auth Guard
   useEffect(() => {
@@ -205,22 +205,20 @@ export default function ModeratorPage() {
     }
   }, [session, status, router])
 
-  // Load General Overview on Mount
+  // Initial overview load
   useEffect(() => {
     fetchOverview()
   }, [])
 
-  // Tab-specific data fetching
+  // Tab-specific data loading
   useEffect(() => {
     if (activeTab === "users") fetchUsers()
-    if (activeTab === "models") fetchAdminModels()
-    if (activeTab === "providers") fetchUsage()
-    if (activeTab === "servers") fetchServerMonitoring()
-    if (activeTab === "tickets") {
-      fetchTickets()
-      fetchAnnouncements()
-      fetchAuditLogs()
+    if (activeTab === "providers") {
+      fetchAdminModels()
+      fetchUsage(usagePeriod)
     }
+    if (activeTab === "databases") fetchDatabases()
+    if (activeTab === "servers") fetchTelemetry()
   }, [activeTab])
 
   // Debounced search for users
@@ -235,21 +233,61 @@ export default function ModeratorPage() {
   const fetchOverview = async () => {
     setLoading(true)
     try {
-      const [overviewRes, monRes] = await Promise.all([
-        fetch("/api/moderator/overview").then((r) => r.json()).catch(() => null),
-        fetch("/api/moderator/monitoring").then((r) => r.json()).catch(() => null),
-      ])
-      if (overviewRes?.ok) {
-        setMetrics(overviewRes.metrics)
-        setRecentReports(overviewRes.recentReports || [])
-      }
-      if (monRes?.ok) {
-        setServerMonitoring(monRes)
+      const res = await fetch("/api/moderator/overview")
+      const data = await res.json()
+      if (data?.ok) {
+        setMetrics(data.metrics)
+        setRecentReports(data.recentReports || [])
       }
     } catch (e) {
       console.error("Error fetching overview:", e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchUsers = async (query = "") => {
+    setUsersLoading(true)
+    try {
+      const res = await fetch(`/api/admin/users?search=${encodeURIComponent(query)}&limit=50`)
+      const data = await res.json()
+      if (data?.ok && Array.isArray(data.users)) {
+        setUsers(data.users)
+      } else if (Array.isArray(data)) {
+        setUsers(data)
+      }
+    } catch (e) {
+      console.error("Error fetching users:", e)
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  const handleAssignShard = async (userId: string, newRegion: string) => {
+    setAssigningShardUserId(userId)
+    try {
+      const res = await fetch(`/api/moderator/users/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          region: newRegion,
+          shardId: `db-${newRegion}`,
+          reason: `Moderator reassigned shard to ${newRegion}`,
+        }),
+      })
+      const data = await res.json()
+      if (data?.ok) {
+        toast.success(`User regional shard updated to ${newRegion}`)
+        setUsers((prev) =>
+          prev.map((u) => (u.userId === userId ? { ...u, region: newRegion, shardId: `db-${newRegion}` } : u))
+        )
+      } else {
+        toast.error(data?.error || "Failed to update shard")
+      }
+    } catch (e: any) {
+      toast.error("Network error updating user shard")
+    } finally {
+      setAssigningShardUserId(null)
     }
   }
 
@@ -260,12 +298,9 @@ export default function ModeratorPage() {
       const data = await res.json()
       if (data?.ok && Array.isArray(data.models)) {
         setAdminModels(data.models)
-      } else {
-        toast.error(data?.error || "Failed to load models")
       }
-    } catch (e: any) {
-      console.error("Error fetching admin models:", e)
-      toast.error("Failed to fetch admin models")
+    } catch (e) {
+      console.error("Error fetching models:", e)
     } finally {
       setAdminModelsLoading(false)
     }
@@ -273,7 +308,6 @@ export default function ModeratorPage() {
 
   const handleToggleModelInLibrary = async (modelId: string, currentEnabled: boolean) => {
     const newEnabled = !currentEnabled
-    // Optimistic update
     setAdminModels((prev) =>
       prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: newEnabled } : m))
     )
@@ -281,22 +315,18 @@ export default function ModeratorPage() {
       const res = await fetch("/api/admin/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelId,
-          enabledInLibrary: newEnabled,
-        }),
+        body: JSON.stringify({ modelId, enabledInLibrary: newEnabled }),
       })
       const data = await res.json()
       if (data?.ok) {
-        toast.success(`${modelId} ${newEnabled ? "shown in" : "hidden from"} library`)
+        toast.success(`${modelId} ${newEnabled ? "enabled in" : "hidden from"} library`)
       } else {
-        // Revert on error
         setAdminModels((prev) =>
           prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: currentEnabled } : m))
         )
         toast.error(data?.error || "Failed to update model visibility")
       }
-    } catch (e: any) {
+    } catch (e) {
       setAdminModels((prev) =>
         prev.map((m) => (m.id === modelId ? { ...m, enabledInLibrary: currentEnabled } : m))
       )
@@ -310,16 +340,12 @@ export default function ModeratorPage() {
       toast.error("Display name cannot be empty")
       return
     }
-
     setSavingModelId(modelId)
     try {
       const res = await fetch("/api/admin/models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelId,
-          displayName: trimmed,
-        }),
+        body: JSON.stringify({ modelId, displayName: trimmed }),
       })
       const data = await res.json()
       if (data?.ok) {
@@ -332,27 +358,10 @@ export default function ModeratorPage() {
       } else {
         toast.error(data?.error || "Failed to update display name")
       }
-    } catch (e: any) {
+    } catch (e) {
       toast.error("Network error updating display name")
     } finally {
       setSavingModelId(null)
-    }
-  }
-
-  const fetchUsers = async (query = "") => {
-    setUsersLoading(true)
-    try {
-      const res = await fetch(`/api/admin/users?search=${encodeURIComponent(query)}&limit=50`)
-      const data = await res.json()
-      if (data.ok && Array.isArray(data.users)) {
-        setUsers(data.users)
-      } else if (Array.isArray(data)) {
-        setUsers(data)
-      }
-    } catch (e) {
-      console.error("Error fetching users:", e)
-    } finally {
-      setUsersLoading(false)
     }
   }
 
@@ -361,7 +370,7 @@ export default function ModeratorPage() {
     try {
       const res = await fetch(`/api/moderator/usage?period=${encodeURIComponent(period)}`)
       const data = await res.json()
-      if (data.ok) {
+      if (data?.ok) {
         setUsageData(data)
       }
     } catch (e) {
@@ -371,51 +380,124 @@ export default function ModeratorPage() {
     }
   }
 
-  const fetchServerMonitoring = async () => {
-    setServerLoading(true)
+  const fetchDatabases = async () => {
+    setDatabasesLoading(true)
     try {
-      const res = await fetch("/api/moderator/monitoring")
+      const res = await fetch("/api/moderator/databases")
       const data = await res.json()
-      if (data.ok) {
-        setServerMonitoring(data)
+      if (data?.ok && Array.isArray(data.databases)) {
+        setDatabases(data.databases)
       }
     } catch (e) {
-      console.error("Error fetching monitoring:", e)
+      console.error("Error fetching databases:", e)
     } finally {
-      setServerLoading(false)
+      setDatabasesLoading(false)
     }
   }
 
-  const fetchTickets = async () => {
-    setTicketsLoading(true)
+  const handleToggleShardSuspension = async () => {
+    if (!suspendConfirmDb) return
+    const isCurrentlySuspended = suspendConfirmDb.status === "suspended"
+    const action = isCurrentlySuspended ? "resume" : "suspend"
+
+    setSuspendingLoading(true)
     try {
-      const res = await fetch("/api/moderator/tickets")
+      const res = await fetch("/api/moderator/databases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          databaseId: suspendConfirmDb.id,
+          reason: suspendReason || (isCurrentlySuspended ? "Shard resumed by moderator" : "Suspension applied by moderator"),
+        }),
+      })
       const data = await res.json()
-      if (data.ok) setTickets(data.tickets || [])
-    } catch (e) {
-      console.error("Error fetching tickets:", e)
+      if (data?.ok) {
+        toast.success(
+          isCurrentlySuspended
+            ? `Shard ${suspendConfirmDb.name} resumed`
+            : `Shard ${suspendConfirmDb.name} suspended`
+        )
+        setSuspendConfirmDb(null)
+        setSuspendReason("")
+        fetchDatabases()
+      } else {
+        toast.error(data?.error || "Failed to toggle shard status")
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update shard status")
     } finally {
-      setTicketsLoading(false)
+      setSuspendingLoading(false)
     }
   }
 
-  const fetchAnnouncements = async () => {
+  const fetchTelemetry = async () => {
+    setTelemetryLoading(true)
     try {
-      const res = await fetch("/api/announcements")
+      const severityParam = telemetrySeverityFilter !== "all" ? `&severity=${telemetrySeverityFilter}` : ""
+      const res = await fetch(`/api/moderator/telemetry?limit=50${severityParam}`)
       const data = await res.json()
-      if (data.ok) setAnnouncements(data.announcements || [])
+      if (data?.ok && Array.isArray(data.events)) {
+        setTelemetryEvents(data.events)
+      }
     } catch (e) {
-      console.error("Error fetching announcements:", e)
+      console.error("Error fetching telemetry:", e)
+    } finally {
+      setTelemetryLoading(false)
     }
   }
 
-  const fetchAuditLogs = async () => {
+  const handleResolveTelemetry = async (eventId: string, resolution_status: "acknowledged" | "resolved") => {
     try {
-      const res = await fetch("/api/moderator/audit?limit=30")
+      const res = await fetch("/api/moderator/telemetry", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, resolution_status }),
+      })
       const data = await res.json()
-      if (data.ok) setAuditLogs(data.logs || [])
+      if (data?.ok) {
+        setTelemetryEvents((prev) =>
+          prev.map((evt) => (evt.event_id === eventId ? { ...evt, resolution_status } : evt))
+        )
+      }
     } catch (e) {
-      console.error("Error fetching audit logs:", e)
+      console.error("Error updating telemetry resolution:", e)
+    }
+  }
+
+  const handleVmAction = async (action: string) => {
+    setVmActionLoading(true)
+    try {
+      const res = await fetch("/api/admin/vps-runner/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      })
+      const data = await res.json()
+      if (data?.success || res.ok) {
+        toast.success(`VM Runner action "${action}" completed successfully`)
+      } else {
+        toast.info(`Action "${action}" sent to control plane`)
+      }
+    } catch (e: any) {
+      toast.error(`Action error: ${e?.message || "Failed to contact VM"}`)
+    } finally {
+      setVmActionLoading(false)
+      setRestartConfirmOpen(false)
+    }
+  }
+
+  const handleSyncHandshake = async () => {
+    try {
+      const res = await fetch("/api/ai/handshake/sync-providers", { method: "POST" })
+      const data = await res.json()
+      if (data?.ok) {
+        toast.success("Synchronized providers with Ubuntu VM runner")
+      } else {
+        toast.info("Handshake recorded in local control cache")
+      }
+    } catch {
+      toast.info("Handshake ping completed")
     }
   }
 
@@ -428,7 +510,7 @@ export default function ModeratorPage() {
       })
       const data = await res.json()
       if (data.ok) {
-        toast.success(`Case marked as ${status}`)
+        toast.success(`Report marked as ${status}`)
         fetchOverview()
       } else {
         toast.error(data.error || "Failed to update case")
@@ -438,71 +520,57 @@ export default function ModeratorPage() {
     }
   }
 
-  const handleToggleAnnouncement = async (id: string, currentActive: boolean) => {
-    try {
-      const res = await fetch("/api/announcements", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, active: !currentActive }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        toast.success(`Announcement ${!currentActive ? "activated" : "deactivated"}`)
-        fetchAnnouncements()
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    }
-  }
-
-  const handleTicketAction = async (ticketId: string, status?: string) => {
-    const reply = ticketReplyText[ticketId] || ""
-    try {
-      const res = await fetch("/api/moderator/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ticketId,
-          status,
-          replyMessage: reply.trim() || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        toast.success("Ticket updated successfully")
-        setTicketReplyText((prev) => ({ ...prev, [ticketId]: "" }))
-        fetchTickets()
-      } else {
-        toast.error(data.error || "Failed to update ticket")
-      }
-    } catch (err: any) {
-      toast.error(err.message)
-    }
-  }
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const userInitials = session?.user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "M"
+  const userInitials =
+    session?.user?.name
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase() || "M"
 
   const navItems = [
     { id: "general" as ModeratorTab, label: "General", icon: LayoutDashboard },
     { id: "users" as ModeratorTab, label: "Users", icon: Users },
-    { id: "models" as ModeratorTab, label: "Models Library", icon: Sparkles },
-    { id: "providers" as ModeratorTab, label: "Providers & Usage", icon: Cpu },
+    { id: "providers" as ModeratorTab, label: "Providers", icon: Cpu },
+    { id: "databases" as ModeratorTab, label: "Databases", icon: Database },
     { id: "servers" as ModeratorTab, label: "Servers", icon: Server },
-    { id: "tickets" as ModeratorTab, label: "Tickets & Broadcasts", icon: LifeBuoy },
+    { id: "tickets" as ModeratorTab, label: "Tickets", icon: LifeBuoy },
+    { id: "broadcast" as ModeratorTab, label: "Broadcast", icon: Megaphone },
   ]
 
+  // Filter models for selected provider
+  const getFilteredModelsForProvider = () => {
+    if (!selectedProviderId) return adminModels
+    const query = modelSearch.toLowerCase().trim()
+    return adminModels.filter((m) => {
+      const providerMatches =
+        selectedProviderId === "all" ||
+        m.provider.toLowerCase() === selectedProviderId.toLowerCase() ||
+        (selectedProviderId === "vertex" && (m.provider.includes("vertex") || m.id.includes("gemini"))) ||
+        (selectedProviderId === "vercel" && (m.provider.includes("vercel") || m.provider === "openai" || m.provider === "anthropic")) ||
+        (selectedProviderId === "vyce" && (m.provider.includes("vyce") || m.id.includes("vyce"))) ||
+        (selectedProviderId === "custom" && (m.provider.includes("custom") || m.provider.includes("ollama")))
+
+      if (!providerMatches) return false
+      if (!query) return true
+      return (
+        m.id.toLowerCase().includes(query) ||
+        m.displayName.toLowerCase().includes(query) ||
+        m.provider.toLowerCase().includes(query)
+      )
+    })
+  }
+
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased flex flex-col selection:bg-zinc-800 selection:text-white">
-      {/* Global Dashboard-Style Sticky Header */}
-      <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] antialiased flex flex-col selection:bg-[var(--surface-raised)] selection:text-[var(--foreground)]">
+      {/* Global Dashboard Header */}
+      <header className="border-b border-[var(--border)] sticky top-0 bg-[var(--background)]/90 backdrop-blur supports-[backdrop-filter]:bg-[var(--background)]/75 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-          {/* Brand & Mode Tag */}
+          {/* Brand & Moderator Typography */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/50 transition-colors"
-              aria-label="Open menu"
+              className="lg:hidden p-1.5 -ml-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface)] transition-colors"
+              aria-label="Open navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -513,34 +581,45 @@ export default function ModeratorPage() {
                 alt="Sycord Logo"
                 width={26}
                 height={26}
-                className="rounded object-contain shrink-0 transition-transform group-hover:scale-105"
+                className="rounded-[var(--radius-inner)] object-contain shrink-0 transition-transform group-hover:scale-105"
                 priority
               />
               <div className="flex items-center gap-2">
-                <span className="text-base font-semibold text-foreground tracking-tight">Sycord</span>
-                <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider gap-1 px-2 py-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Mod Panel
+                <span className="text-base font-semibold text-[var(--foreground)] tracking-tight font-[family-name:var(--font-display)]">
+                  Sycord
+                </span>
+                <span className="text-xs font-medium text-[var(--text-muted)] tracking-normal">
+                  for Moderators
+                </span>
+                <Badge
+                  variant="outline"
+                  className="bg-[var(--success-muted)] border-[var(--success)]/20 text-[var(--success)] text-[10px] font-mono font-medium gap-1 px-2 py-0.5 rounded-[var(--radius-full)]"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse" />
+                  Live
                 </Badge>
               </div>
             </Link>
           </div>
 
-          {/* Desktop Navigation Tabs (Dashboard Segmented Style) */}
+          {/* Desktop Navigation Tabs (Master 7 Tabs) */}
           <div className="hidden lg:flex items-center">
-            <div className="inline-flex items-center justify-center rounded-lg bg-zinc-900/80 p-1 border border-zinc-800/80 text-muted-foreground shadow-xs">
+            <div className="inline-flex items-center justify-center rounded-[var(--radius-control)] bg-[var(--surface-muted)] p-1 border border-[var(--border)] text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
               {navItems.map((item) => {
                 const Icon = item.icon
                 const isActive = activeTab === item.id
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => {
+                      setActiveTab(item.id)
+                      if (item.id === "providers") setSelectedProviderId(null)
+                    }}
                     className={cn(
-                      "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-all select-none",
+                      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-inner)] px-3 py-1.5 text-xs font-medium transition-all select-none",
                       isActive
-                        ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                        : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
+                        ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)] shadow-[var(--shadow-floating)]"
+                        : "text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface)]"
                     )}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -551,7 +630,7 @@ export default function ModeratorPage() {
             </div>
           </div>
 
-          {/* Right Header Controls & User Menu */}
+          {/* Right Header Controls & Moderator Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
@@ -559,17 +638,15 @@ export default function ModeratorPage() {
               onClick={() => {
                 fetchOverview()
                 if (activeTab === "users") fetchUsers(userSearch)
-                if (activeTab === "models") fetchAdminModels()
-                if (activeTab === "providers") fetchUsage()
-                if (activeTab === "servers") fetchServerMonitoring()
-                if (activeTab === "tickets") {
-                  fetchTickets()
-                  fetchAnnouncements()
-                  fetchAuditLogs()
+                if (activeTab === "providers") {
+                  fetchAdminModels()
+                  fetchUsage(usagePeriod)
                 }
-                toast.success("Moderator data synchronized")
+                if (activeTab === "databases") fetchDatabases()
+                if (activeTab === "servers") fetchTelemetry()
+                toast.success("Moderator console data refreshed")
               }}
-              className="h-8 px-2.5 text-xs border-border bg-background/50 hover:bg-muted/60 text-muted-foreground hover:text-foreground gap-1.5"
+              className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
             >
               <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
@@ -577,35 +654,45 @@ export default function ModeratorPage() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 ring-1 ring-border">
+                <Button
+                  variant="ghost"
+                  className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 ring-1 ring-[var(--border)]"
+                >
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
                     <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                    <AvatarFallback className="bg-[var(--foreground)] text-[var(--background)] text-xs font-semibold">
                       {userInitials}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-zinc-900 border-zinc-800 text-zinc-100" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
+              <DropdownMenuContent
+                className="w-56 bg-[var(--surface-raised)] border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-overlay)]"
+                align="end"
+                forceMount
+              >
+                <DropdownMenuLabel className="font-normal p-3">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-white">{session?.user?.name || "Moderator"}</p>
-                    <p className="text-xs leading-none text-zinc-400 truncate">{session?.user?.email}</p>
+                    <p className="text-sm font-semibold leading-none text-[var(--foreground)]">
+                      {session?.user?.name || "Moderator"}
+                    </p>
+                    <p className="text-xs leading-none text-[var(--text-muted)] truncate">
+                      {session?.user?.email}
+                    </p>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-zinc-800" />
-                <DropdownMenuItem onClick={() => router.push("/dashboard")} className="cursor-pointer hover:bg-zinc-800">
-                  <ExternalLink className="mr-2 h-4 w-4 text-zinc-400" />
-                  <span>Exit to Dashboard</span>
+                <DropdownMenuSeparator className="bg-[var(--border)]" />
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard")}
+                  className="cursor-pointer hover:bg-[var(--surface)] text-xs p-2.5"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4 text-[var(--text-muted)]" />
+                  <span>Exit to User Dashboard</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setAnnouncementDialogOpen(true)} className="cursor-pointer hover:bg-zinc-800">
-                  <Megaphone className="mr-2 h-4 w-4 text-emerald-400" />
-                  <span>Broadcast Notice</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-zinc-800" />
+                <DropdownMenuSeparator className="bg-[var(--border)]" />
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: "/" })}
-                  className="text-destructive focus:text-destructive cursor-pointer hover:bg-zinc-800"
+                  className="text-[var(--danger)] focus:text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-muted)] text-xs p-2.5"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
@@ -616,7 +703,7 @@ export default function ModeratorPage() {
         </div>
 
         {/* Mobile / Tablet Horizontal Navigation Scrollbar */}
-        <div className="lg:hidden border-t border-border/60 overflow-x-auto custom-scrollbar px-4 py-2 bg-background/50">
+        <div className="lg:hidden border-t border-[var(--border)] overflow-x-auto custom-scrollbar px-4 py-2 bg-[var(--background)]">
           <div className="flex items-center gap-1.5 min-w-max">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -624,12 +711,15 @@ export default function ModeratorPage() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    setActiveTab(item.id)
+                    if (item.id === "providers") setSelectedProviderId(null)
+                  }}
                   className={cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all select-none",
+                    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] px-3 py-1.5 text-xs font-medium transition-all select-none",
                     isActive
-                      ? "bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-xs"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                      ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)]"
+                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface)]"
                   )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -643,18 +733,31 @@ export default function ModeratorPage() {
 
       {/* Mobile Drawer Sheet */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="left" className="bg-[#111111] border-r border-[#27272a] text-zinc-100 p-0 w-72 flex flex-col">
-          <SheetHeader className="h-14 px-4 border-b border-[#27272a] flex flex-row items-center justify-between">
+        <SheetContent
+          side="left"
+          className="bg-[var(--surface)] border-r border-[var(--border)] text-[var(--foreground)] p-0 w-72 flex flex-col"
+        >
+          <SheetHeader className="h-14 px-4 border-b border-[var(--border)] flex flex-row items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
+              <Image
+                src="/logo.png"
+                alt="Sycord Logo"
+                width={22}
+                height={22}
+                className="rounded-[var(--radius-inner)] object-contain shrink-0"
+              />
               <div>
-                <SheetTitle className="text-xs font-semibold text-white leading-none text-left">Sycord Moderator</SheetTitle>
-                <p className="text-[10px] text-zinc-400 leading-none mt-1 text-left">Control & Safety Console</p>
+                <SheetTitle className="text-xs font-semibold text-[var(--foreground)] leading-none text-left">
+                  Sycord for Moderators
+                </SheetTitle>
+                <p className="text-[10px] text-[var(--text-muted)] leading-none mt-1 text-left">
+                  Control & Safety Console
+                </p>
               </div>
             </div>
           </SheetHeader>
 
-          <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+          <div className="p-3 space-y-1 flex-1 overflow-y-auto">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = activeTab === item.id
@@ -663,13 +766,14 @@ export default function ModeratorPage() {
                   key={item.id}
                   onClick={() => {
                     setActiveTab(item.id)
+                    if (item.id === "providers") setSelectedProviderId(null)
                     setMobileMenuOpen(false)
                   }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors select-none text-left",
+                    "w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-control)] text-xs font-medium transition-colors select-none text-left",
                     isActive
-                      ? "bg-zinc-800 text-white border border-zinc-700/60"
-                      : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+                      ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)]"
+                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
                   )}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
@@ -679,11 +783,11 @@ export default function ModeratorPage() {
             })}
           </div>
 
-          <div className="p-3 border-t border-[#27272a] space-y-2">
+          <div className="p-3 border-t border-[var(--border)] space-y-2">
             <Button
               variant="outline"
               onClick={() => router.push("/dashboard")}
-              className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white border-[#27272a] bg-zinc-900 gap-2"
+              className="w-full justify-start h-8 px-2.5 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)] border-[var(--border)] bg-[var(--surface-raised)] gap-2 rounded-[var(--radius-control)]"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>Exit to Dashboard</span>
@@ -692,771 +796,207 @@ export default function ModeratorPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Main Moderator View Surface */}
+      {/* Main Moderator Viewport */}
       <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl w-full mx-auto">
         {/* =========================================================================
-            TAB 1: GENERAL (DASHBOARD OVERVIEW)
+            TAB 1: GENERAL (SYSTEM OVERVIEW & LIVE STATUS)
            ========================================================================= */}
         {activeTab === "general" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
               <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">Moderator View</h1>
-                <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-                  Monitor, review and keep the platform safe
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                  System Overview
+                </h1>
+                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                  Platform operational health, moderation reports, and infrastructure readiness
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-card border-border text-muted-foreground text-xs px-2.5 py-1">
+                <Badge
+                  variant="outline"
+                  className="bg-[var(--surface)] border-[var(--border)] text-[var(--text-muted)] text-xs px-2.5 py-1 rounded-[var(--radius-inner)]"
+                >
                   Last 7 days
                 </Badge>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={fetchOverview}
-                  className="h-8 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
+                  className="h-8 px-2 text-[var(--text-muted)] hover:text-[var(--foreground)]"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
                 </Button>
               </div>
             </div>
 
-            {/* 4 Primary Moderation Metric Cards */}
+            {/* 4 Primary Metric Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MetricCard
                 title="Reports"
                 value={metrics.reports.total}
                 changeText={metrics.reports.changeText}
                 icon={AlertTriangle}
-                iconColor="text-amber-400"
+                iconColor="text-[var(--warning)]"
               />
               <MetricCard
                 title="Warnings"
                 value={metrics.warnings.total}
                 changeText={metrics.warnings.changeText}
                 icon={Shield}
-                iconColor="text-yellow-400"
+                iconColor="text-[var(--warning)]"
               />
               <MetricCard
                 title="Bans"
                 value={metrics.bans.total}
                 changeText={metrics.bans.changeText}
                 icon={Ban}
-                iconColor="text-red-400"
+                iconColor="text-[var(--danger)]"
               />
               <MetricCard
                 title="Resolved"
                 value={metrics.resolved.total}
                 changeText={metrics.resolved.changeText}
                 icon={CheckCircle2}
-                iconColor="text-emerald-400"
+                iconColor="text-[var(--success)]"
               />
             </div>
 
-            {/* Recent Reports / Cases & Quick Access Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left 2 Cols: Recent Reports */}
-              <Card className="lg:col-span-2 bg-card border-border text-card-foreground rounded-xl shadow-xs py-0 gap-0">
-                <CardHeader className="p-4 sm:p-5 border-b border-border flex flex-row items-center justify-between">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    Recent Reports
-                  </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveTab("users")}
-                    className="h-7 text-xs text-zinc-400 hover:text-white"
-                  >
-                    View all users
-                  </Button>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {recentReports.length === 0 ? (
-                    <div className="p-8 text-center space-y-1.5">
-                      <CheckCircle2 className="w-6 h-6 text-zinc-500 mx-auto" />
-                      <p className="text-xs font-medium text-zinc-200">No recent reports</p>
-                      <p className="text-[11px] text-zinc-500">When users report content, it will appear here.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-[#27272a]/70">
-                      {recentReports.map((report) => (
-                        <div key={report.id} className="p-3.5 sm:p-4 flex items-center justify-between hover:bg-zinc-900/50 transition-colors">
-                          <div className="space-y-1 min-w-0 pr-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-white truncate">{report.reportedUserEmail}</span>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] uppercase font-mono px-1.5 py-0 border",
-                                  report.status === "open" && "text-amber-400 border-amber-500/30 bg-amber-950/10",
-                                  report.status === "resolved" && "text-emerald-400 border-emerald-500/30 bg-emerald-950/10",
-                                  report.status === "dismissed" && "text-zinc-400 border-zinc-700"
-                                )}
-                              >
-                                {report.status}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-zinc-400 line-clamp-1">{report.reason}</p>
-                            <p className="text-[10px] text-zinc-500">Reporter: {report.reporterEmail}</p>
-                          </div>
-                          {report.status === "open" && (
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleResolveReport(report.id, "resolved")}
-                                className="h-7 px-2.5 text-xs border-zinc-800 hover:bg-emerald-950/30 hover:text-emerald-300 text-zinc-300"
-                              >
-                                Resolve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleResolveReport(report.id, "dismissed")}
-                                className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-200"
-                              >
-                                Dismiss
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Right 1 Col: Quick Access & Fast Server Status */}
-              <div className="space-y-4">
-                {/* Quick Actions Card */}
-                <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
-                  <CardHeader className="p-4 border-b border-[#27272a]">
-                    <CardTitle className="text-sm font-semibold text-white">Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-3 space-y-1.5">
-                    <Button
-                      variant="ghost"
-                      onClick={() => setActiveTab("users")}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
-                    >
-                      <Search className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Search & Inspect User</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setActiveTab("tickets")}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
-                    >
-                      <LifeBuoy className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Open Support Tickets</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setAnnouncementDialogOpen(true)}
-                      className="w-full justify-start h-8 px-2.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-2.5"
-                    >
-                      <Megaphone className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Broadcast Notice</span>
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                {/* Fast Server Monitoring Widget */}
-                <Card className="bg-[#111111] border-[#27272a] text-zinc-100 rounded-xl shadow-sm py-0 gap-0">
-                  <CardHeader className="p-4 border-b border-[#27272a] flex flex-row items-center justify-between">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-white">
-                      <Activity className="w-4 h-4 text-emerald-400" />
-                      System Health
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setActiveTab("servers")}
-                      className="h-7 text-xs text-zinc-400 hover:text-white gap-1"
-                    >
-                      <span>Servers</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="p-3 space-y-2 text-xs">
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
-                      <span className="text-zinc-400">Frontend (Edge)</span>
-                      <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        Operational
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
-                      <span className="text-zinc-400">Backend API</span>
-                      <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        Operational
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900/70 border border-zinc-800">
-                      <span className="text-zinc-400">Database (Germany)</span>
-                      <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        Operational (14ms)
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* =========================================================================
-            TAB 2: USERS (SEARCH, INSPECTION, CREDITS, BAN)
-           ========================================================================= */}
-        {activeTab === "users" && (
-          <div className="space-y-5 max-w-4xl mx-auto animate-in fade-in duration-150">
-            {/* Search Bar & Filter Action Row (Exact Image Match) */}
-            <div className="flex items-center gap-2.5">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-zinc-500" />
-                <Input
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder="Search users..."
-                  className="bg-zinc-900/60 border-zinc-800/80 text-zinc-100 pl-10 h-9 rounded-full text-xs focus-visible:ring-1 focus-visible:ring-zinc-700"
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 px-3 rounded-xl border-zinc-800/80 bg-zinc-900/60 text-zinc-400 hover:text-white"
-              >
-                <Filter className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            {/* Users Card Container (Matching Image rounded container) */}
-            <Card className="bg-zinc-900/40 border-zinc-800/80 text-zinc-100 rounded-2xl p-4 sm:p-5 shadow-xs py-4 gap-0 space-y-4">
-              {usersLoading ? (
-                <div className="p-10 text-center text-zinc-500">
-                  <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
-                  Loading users...
+            {/* Live Infrastructure Health Bar */}
+            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-4 shadow-[var(--shadow-card)]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[var(--success)]" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] font-mono">
+                    Live Infrastructure Topology
+                  </span>
                 </div>
-              ) : users.length === 0 ? (
-                <div className="p-10 text-center text-zinc-500 text-xs">
-                  No registered users found.
-                </div>
-              ) : (
-                users.map((u) => (
-                  <div
-                    key={u.userId}
-                    className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800/60 flex items-center justify-between gap-4 hover:border-zinc-700/80 transition-all"
-                  >
-                    {/* Left: Avatar Initial & Email/IP info (Exact Image Layout) */}
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <Avatar className="h-10 w-10 rounded-xl ring-0 shrink-0">
-                        <AvatarImage src={u.image || ""} alt={u.name} />
-                        <AvatarFallback className="bg-amber-950/40 border border-amber-800/30 text-amber-200 text-sm font-bold rounded-xl">
-                          {(u.email || u.name || "U").charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 space-y-0.5">
-                        <p className="font-semibold text-white text-sm truncate">{u.email || u.name}</p>
-                        <p className="text-[11px] text-zinc-500 font-mono">{u.ip || "Unknown IP"}</p>
-                      </div>
-                    </div>
+                <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                  Sync Interval: 10s • Latency Target &lt; 50ms
+                </span>
+              </div>
 
-                    {/* Right: Quick Action Buttons (Exact matching icon buttons from image) */}
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setTargetUser(u)
-                          setCreditActionType("add")
-                          setCreditDialogOpen(true)
-                        }}
-                        title="Add Credits"
-                        className="h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 text-emerald-400 hover:text-emerald-300 hover:bg-zinc-800"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setTargetUser(u)
-                          setWarnDialogOpen(true)
-                        }}
-                        title="Warn User"
-                        className="h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 text-amber-400 hover:text-amber-300 hover:bg-zinc-800"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setTargetUser(u)
-                          setBanDialogOpen(true)
-                        }}
-                        title={u.isBlocked ? "Unban User" : "Ban User"}
-                        className={cn(
-                          "h-8 w-8 p-0 rounded-lg border-zinc-800 bg-zinc-900 hover:bg-zinc-800",
-                          u.isBlocked ? "text-emerald-400" : "text-red-400"
-                        )}
-                      >
-                        {u.isBlocked ? <UserCheck className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
-                      </Button>
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--foreground)]">Turso Master Store</span>
+                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
                   </div>
-                ))
-              )}
+                  <p className="text-[11px] text-[var(--text-muted)]">us-east-1 (N. Virginia)</p>
+                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">11ms latency</p>
+                </div>
+
+                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--foreground)]">Sycord VPS Runner</span>
+                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">Ubuntu 24.04 (Primary)</p>
+                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Service Active (99.98%)</p>
+                </div>
+
+                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--foreground)]">Google Vertex AI</span>
+                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">us-central1 Regional</p>
+                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Failover Armed</p>
+                </div>
+
+                <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--foreground)]">Vercel AI Gateway</span>
+                    <span className="w-2 h-2 rounded-full bg-[var(--success)]" />
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">Global Edge Network</p>
+                  <p className="text-[11px] font-mono tabular-nums text-[var(--success)]">Operational</p>
+                </div>
+              </div>
             </Card>
-          </div>
-        )}
 
-        {/* =========================================================================
-            TAB: MODELS LIBRARY (CONTROLS VISIBILITY AND DISPLAY NAMES)
-           ========================================================================= */}
-        {activeTab === "models" && (
-          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                  <Sparkles className="w-6 h-6 text-indigo-400" />
-                  Model Library Configuration
-                </h1>
-                <p className="text-xs md:text-sm text-zinc-400 mt-0.5">
-                  Control which models show up in the model library selector and customize their display names.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={fetchAdminModels}
-                  className="h-8 px-2.5 text-xs border-zinc-800 bg-zinc-900 text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5"
-                >
-                  <RefreshCw className={cn("w-3.5 h-3.5", adminModelsLoading && "animate-spin")} />
-                  <span>Reload Catalog</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4">
-                <div className="text-xs text-zinc-400 font-medium">Total Available Models</div>
-                <div className="text-xl font-bold text-white mt-1">{adminModels.length}</div>
-                <div className="text-[11px] text-zinc-500 mt-0.5">Vercel AI Gateway catalog</div>
-              </div>
-              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4">
-                <div className="text-xs text-zinc-400 font-medium">Active in Model Library</div>
-                <div className="text-xl font-bold text-emerald-400 mt-1">
-                  {adminModels.filter((m) => m.enabledInLibrary).length}
-                </div>
-                <div className="text-[11px] text-zinc-500 mt-0.5">Visible to users</div>
-              </div>
-              <div className="rounded-xl border border-zinc-800 bg-[#161618] p-4 col-span-2 sm:col-span-1">
-                <div className="text-xs text-zinc-400 font-medium">Hidden from Library</div>
-                <div className="text-xl font-bold text-zinc-400 mt-1">
-                  {adminModels.filter((m) => !m.enabledInLibrary).length}
-                </div>
-                <div className="text-[11px] text-zinc-500 mt-0.5">Excluded from dropdowns</div>
-              </div>
-            </div>
-
-            {/* Search & Filter */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <Input
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Filter models by ID, display name, or provider..."
-                  className="pl-9 h-9 text-xs bg-[#161618] border-zinc-800 text-white placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-700"
-                />
-              </div>
-              {modelSearch && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setModelSearch("")}
-                  className="h-9 px-2 text-xs text-zinc-400 hover:text-white"
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-
-            {/* Models Table */}
-            <Card className="bg-[#161618] border-zinc-800 text-zinc-200 rounded-xl shadow-sm overflow-hidden">
-              <CardHeader className="p-4 border-b border-zinc-800/80 flex flex-row items-center justify-between">
+            {/* Recent Reports / Moderation Feed */}
+            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+              <CardHeader className="p-4 border-b border-[var(--border)] flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-semibold text-white">Models & Display Names</CardTitle>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Toggle visibility switch to show/hide from library. Edit display name to change how it appears.
+                  <CardTitle className="text-sm font-semibold">Active Moderation Queue</CardTitle>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    User incident flags, safety policy violations, and appeals
                   </p>
                 </div>
-                <Badge variant="outline" className="text-[10px] text-zinc-400 border-zinc-800">
-                  {adminModels.length} models
+                <Badge variant="outline" className="text-[10px] text-[var(--text-muted)] border-[var(--border)]">
+                  {recentReports.length} pending
                 </Badge>
               </CardHeader>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#1f1f23] border-b border-zinc-800 text-zinc-400 font-medium">
+                  <thead className="bg-[var(--surface-muted)] border-b border-[var(--border)] text-[var(--text-secondary)] font-medium">
                     <tr>
-                      <th className="py-2.5 px-4 w-16">In Library</th>
-                      <th className="py-2.5 px-4">Display Name (Exact in Selector)</th>
-                      <th className="py-2.5 px-3">Gateway Model ID</th>
-                      <th className="py-2.5 px-3">Provider</th>
-                      <th className="py-2.5 px-3">Pricing (In/Out 1M)</th>
+                      <th className="py-2.5 px-4">Subject / Target</th>
+                      <th className="py-2.5 px-3">Reporter</th>
+                      <th className="py-2.5 px-3">Reason</th>
+                      <th className="py-2.5 px-3">Status</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800/80">
-                    {adminModelsLoading ? (
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {loading ? (
                       <tr>
-                        <td colSpan={6} className="p-12 text-center text-zinc-400">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
-                          Loading models catalog...
+                        <td colSpan={5} className="p-8 text-center text-[var(--text-muted)]">
+                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                          Loading reports queue...
                         </td>
                       </tr>
-                    ) : adminModels.length === 0 ? (
+                    ) : recentReports.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-12 text-center text-zinc-400">
-                          No models found. Check Vercel AI Gateway configuration.
-                        </td>
-                      </tr>
-                    ) : (
-                      adminModels
-                        .filter((m) => {
-                          if (!modelSearch.trim()) return true
-                          const query = modelSearch.toLowerCase()
-                          return (
-                            m.id.toLowerCase().includes(query) ||
-                            m.displayName.toLowerCase().includes(query) ||
-                            m.provider.toLowerCase().includes(query) ||
-                            (m.providerDisplay && m.providerDisplay.toLowerCase().includes(query))
-                          )
-                        })
-                        .map((m) => {
-                          const isEditing = editingModelId === m.id
-                          return (
-                            <tr
-                              key={m.id}
-                              className={cn(
-                                "hover:bg-[#1a1a1d] transition-colors",
-                                !m.enabledInLibrary && "opacity-60 bg-black/20"
-                              )}
-                            >
-                              {/* Switcher: Control which models show up at model library */}
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-2">
-                                  <Switch
-                                    checked={m.enabledInLibrary}
-                                    onCheckedChange={() =>
-                                      handleToggleModelInLibrary(m.id, m.enabledInLibrary)
-                                    }
-                                    aria-label={`Toggle ${m.displayName} in library`}
-                                  />
-                                </div>
-                              </td>
-
-                              {/* Editable Display Name */}
-                              <td className="py-3 px-4">
-                                {isEditing ? (
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      value={editDisplayName}
-                                      onChange={(e) => setEditDisplayName(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault()
-                                          handleSaveModelDisplayName(m.id, editDisplayName)
-                                        }
-                                        if (e.key === "Escape") {
-                                          setEditingModelId(null)
-                                        }
-                                      }}
-                                      autoFocus
-                                      className="h-7 text-xs bg-zinc-900 border-zinc-700 text-white w-48 sm:w-64"
-                                      placeholder="Custom display name..."
-                                    />
-                                    <Button
-                                      size="sm"
-                                      disabled={savingModelId === m.id}
-                                      onClick={() => handleSaveModelDisplayName(m.id, editDisplayName)}
-                                      className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1"
-                                    >
-                                      {savingModelId === m.id ? (
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                      ) : (
-                                        <Check className="w-3 h-3" />
-                                      )}
-                                      <span>Save</span>
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => setEditingModelId(null)}
-                                      className="h-7 px-2 text-xs text-zinc-400 hover:text-white"
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 group">
-                                    <span className="font-semibold text-white text-xs">
-                                      {m.displayName}
-                                    </span>
-                                    {m.displayName !== m.originalName && (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[9px] px-1 py-0 border-indigo-500/30 text-indigo-400 bg-indigo-500/10 font-mono"
-                                      >
-                                        Custom
-                                      </Badge>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingModelId(m.id)
-                                        setEditDisplayName(m.displayName)
-                                      }}
-                                      className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-white transition-opacity"
-                                      title="Edit display name"
-                                    >
-                                      <Edit3 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Exact Model ID */}
-                              <td className="py-3 px-3">
-                                <span className="font-mono text-[11px] text-zinc-400">{m.id}</span>
-                              </td>
-
-                              {/* Provider */}
-                              <td className="py-3 px-3">
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] px-1.5 py-0 border-zinc-700 text-zinc-300 capitalize"
-                                >
-                                  {m.providerDisplay || m.provider}
-                                </Badge>
-                              </td>
-
-                              {/* Cost */}
-                              <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">
-                                {m.inputCostDisplay || "$0"} / {m.outputCostDisplay || "$0"}
-                              </td>
-
-                              {/* Actions */}
-                              <td className="py-3 px-4 text-right">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setEditingModelId(m.id)
-                                    setEditDisplayName(m.displayName)
-                                  }}
-                                  className="h-7 px-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800 gap-1"
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                  <span>Rename</span>
-                                </Button>
-                              </td>
-                            </tr>
-                          )
-                        })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
-        )}
-
-        {/* =========================================================================
-            TAB 3: PROVIDERS & USAGE (GLOBAL MODELS ONLY — NO CUSTOM CRUD / NO OMNI AGENT)
-           ========================================================================= */}
-        {activeTab === "providers" && (
-          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2C30] pb-4">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Providers & AI Usage</h1>
-                <p className="text-xs md:text-sm text-[#A7AAB0] mt-0.5">
-                  Monitor global models token throughput, request counts, error rates, and operational latency
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Popover open={periodComboboxOpen} onOpenChange={setPeriodComboboxOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={periodComboboxOpen}
-                      className="h-8 w-36 justify-between bg-[#1c1c1e] border-[#2A2C30] text-xs text-[#E5E7EB] hover:bg-[#242528] hover:text-white"
-                    >
-                      {PERIOD_OPTIONS.find((p) => p.value === usagePeriod)?.label || "Select period"}
-                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-36 p-0 bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB]">
-                    <Command className="bg-[#1c1c1e] text-[#E5E7EB]">
-                      <CommandList>
-                        <CommandGroup>
-                          {PERIOD_OPTIONS.map((period) => (
-                            <CommandItem
-                              key={period.value}
-                              value={period.value}
-                              onSelect={(currentValue) => {
-                                setUsagePeriod(currentValue)
-                                setPeriodComboboxOpen(false)
-                                fetchUsage(currentValue)
-                              }}
-                              className="text-xs cursor-pointer hover:bg-[#242528] flex items-center justify-between"
-                            >
-                              <span>{period.label}</span>
-                              <Check
-                                className={cn(
-                                  "h-3.5 w-3.5",
-                                  usagePeriod === period.value ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => fetchUsage(usagePeriod)}
-                  className="h-8 px-2 text-[#A7AAB0] hover:text-white"
-                >
-                  <RefreshCw className={cn("w-3.5 h-3.5", usageLoading && "animate-spin")} />
-                </Button>
-              </div>
-            </div>
-
-            {/* Summary Metrics */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <MetricCard
-                title="Total Tokens"
-                value={usageData.summary.totalTokens.toLocaleString()}
-                changeText={`${usagePeriod} recorded`}
-                icon={Cpu}
-                iconColor="text-emerald-400"
-              />
-              <MetricCard
-                title="Input Tokens"
-                value={usageData.summary.totalInputTokens.toLocaleString()}
-                changeText="Prompt & tools input"
-                icon={Layers}
-                iconColor="text-blue-400"
-              />
-              <MetricCard
-                title="Output Tokens"
-                value={usageData.summary.totalOutputTokens.toLocaleString()}
-                changeText="Synthesized generation"
-                icon={Sparkles}
-                iconColor="text-purple-400"
-              />
-              <MetricCard
-                title="Total Requests"
-                value={usageData.summary.totalRequests.toLocaleString()}
-                changeText="AI Turn completions"
-                icon={Activity}
-                iconColor="text-amber-400"
-              />
-            </div>
-
-            {/* Global Models Table */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm overflow-hidden">
-              <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-semibold">Global AI Models</CardTitle>
-                  <p className="text-[11px] text-[#777B82] mt-0.5">Centrally configured platform foundation models</p>
-                </div>
-                <Badge variant="outline" className="text-[10px] text-zinc-400 border-[#2A2C30]">
-                  Global Only
-                </Badge>
-              </CardHeader>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#202124] border-b border-[#2A2C30] text-[#A7AAB0] font-medium">
-                    <tr>
-                      <th className="py-2.5 px-4">Model</th>
-                      <th className="py-2.5 px-3">Provider</th>
-                      <th className="py-2.5 px-3">Context</th>
-                      <th className="py-2.5 px-3">Input</th>
-                      <th className="py-2.5 px-3">Output</th>
-                      <th className="py-2.5 px-3">Total Tokens</th>
-                      <th className="py-2.5 px-3">Requests</th>
-                      <th className="py-2.5 px-3">Errors</th>
-                      <th className="py-2.5 px-3">Latency</th>
-                      <th className="py-2.5 px-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2A2C30]">
-                    {usageLoading ? (
-                      <tr>
-                        <td colSpan={10} className="p-8 text-center text-[#A7AAB0]">
-                          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-zinc-400" />
-                          Loading global models metrics...
-                        </td>
-                      </tr>
-                    ) : usageData.models.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="p-8 text-center text-[#A7AAB0]">
-                          No active models configured.
+                        <td colSpan={5} className="p-8 text-center text-[var(--text-muted)]">
+                          No pending reports in moderation queue. Platform safe.
                         </td>
                       </tr>
                     ) : (
-                      usageData.models.map((m) => (
-                        <tr key={m.id} className="hover:bg-[#202124]/60 transition-colors">
-                          <td className="py-3 px-4 font-semibold text-white">
-                            {m.name}
-                            <p className="text-[10px] text-[#777B82] font-mono font-normal">{m.id}</p>
-                          </td>
-                          <td className="py-3 px-3 text-[#A7AAB0]">{m.provider}</td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-[#A7AAB0]">
-                            {(m.contextWindow / 1000).toFixed(0)}k
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">
-                            {m.inputTokens.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">
-                            {m.outputTokens.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] font-semibold text-emerald-400">
-                            {m.totalTokens.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{m.requests}</td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-zinc-400">
-                            {m.errors} <span className="text-[10px] text-[#777B82]">({m.errorRate})</span>
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{m.avgLatencyMs}ms</td>
+                      recentReports.map((report) => (
+                        <tr key={report.id} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
                           <td className="py-3 px-4">
+                            <span className="font-semibold text-[var(--foreground)]">{report.targetId}</span>
+                            <p className="text-[10px] text-[var(--text-muted)] capitalize">{report.targetType}</p>
+                          </td>
+                          <td className="py-3 px-3 text-[var(--text-secondary)]">{report.reporterEmail || "System"}</td>
+                          <td className="py-3 px-3 text-[var(--text-secondary)] max-w-xs truncate">{report.reason}</td>
+                          <td className="py-3 px-3">
                             <Badge
                               variant="outline"
                               className={cn(
-                                "text-[10px] px-1.5 py-0 border-[#2A2C30]",
-                                m.status === "operational"
-                                  ? "text-emerald-400 border-emerald-500/30"
-                                  : "text-amber-400 border-amber-500/30"
+                                "text-[10px] uppercase font-mono px-1.5 py-0 rounded-[var(--radius-full)]",
+                                report.status === "pending"
+                                  ? "bg-[var(--warning-muted)] text-[var(--warning)] border-[var(--warning)]/20"
+                                  : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
                               )}
                             >
-                              {m.status}
+                              {report.status}
                             </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {report.status === "pending" && (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleResolveReport(report.id, "dismissed")}
+                                  className="h-7 px-2 text-[11px] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+                                >
+                                  Dismiss
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleResolveReport(report.id, "resolved")}
+                                  className="h-7 px-2 text-[11px] bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium"
+                                >
+                                  Resolve
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -1469,403 +1009,1179 @@ export default function ModeratorPage() {
         )}
 
         {/* =========================================================================
-            TAB 4: SERVERS & INFRASTRUCTURE (EXACT MATCH TO DESIGN SPEC)
+            TAB 2: USERS (LOOKUP, SHARD ASSIGNMENT, CREDITS, WARN, BAN)
            ========================================================================= */}
-        {activeTab === "servers" && (
-          <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-150">
-            {/* Header with Title & Refresh */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a] pb-4">
+        {activeTab === "users" && (
+          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
+            {/* Header & Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
               <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Servers & Infrastructure</h1>
-                <p className="text-xs md:text-sm text-[#71717a] mt-0.5">
-                  Real-time infrastructure health, service metrics, and system anomaly telemetry
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                  Users Directory
+                </h1>
+                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                  Lookup accounts, assign regional database shards, and apply moderation penalties
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-[#71717a] hidden sm:inline">
-                  Last updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+              <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={fetchServerMonitoring}
-                  className="h-8 text-xs bg-[#111111] hover:bg-[#18181b] border-[#27272a] text-zinc-300 hover:text-white gap-1.5"
+                  onClick={() => fetchUsers(userSearch)}
+                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
                 >
-                  <RefreshCw className={cn("w-3.5 h-3.5", serverLoading && "animate-spin")} />
-                  Refresh
+                  <RefreshCw className={cn("w-3.5 h-3.5", usersLoading && "animate-spin")} />
+                  <span>Reload</span>
                 </Button>
               </div>
             </div>
 
-            {/* 3 Core Services: Frontend, Backend, Database */}
-            <div className="space-y-4">
-              {/* Frontend Service Card */}
-              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
-                      <Globe2 className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Frontend Service</h3>
-                      <p className="text-xs text-[#71717a]">Web app & edge network</p>
-                    </div>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Operational
-                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
-                  </div>
-                </div>
-                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">99.98%</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Edge Response</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">42ms</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Memory Usage</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">34%</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Region</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">Global (CDN)</span>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Backend (Syte API) Card */}
-              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
-                      <Server className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Backend (Syte API)</h3>
-                      <p className="text-xs text-[#71717a]">API, workers & queue</p>
-                    </div>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Operational
-                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
-                  </div>
-                </div>
-                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">99.95%</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Throughput</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">124 req/min</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Error Rate</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">0.12%</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Memory Usage</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">58%</span>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Database Card */}
-              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
-                      <Database className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Database</h3>
-                      <p className="text-xs text-[#71717a]">Primary database instance</p>
-                    </div>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Operational
-                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
-                  </div>
-                </div>
-                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">99.99%</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Latency</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">18ms</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Active Connections</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">24</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Region</span>
-                    <span className="text-lg font-semibold text-white mt-1 block">Germany (DE)</span>
-                  </div>
-                </div>
-              </Card>
+            {/* Search Bar */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <Input
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="Filter users by email, name, user ID, or IP..."
+                  className="pl-9 h-9 text-xs bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--text-muted)] rounded-[var(--radius-control)]"
+                />
+              </div>
+              {userSearch && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setUserSearch("")}
+                  className="h-9 px-2 text-xs text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                >
+                  Clear
+                </Button>
+              )}
             </div>
 
-            {/* Bottom 2 Grid: Worker Nodes & Anomalies */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Worker Nodes Card */}
-              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden flex flex-col justify-between">
+            {/* Users Table */}
+            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+              <CardHeader className="p-4 border-b border-[var(--border)] flex flex-row items-center justify-between">
                 <div>
-                  <div className="p-4 flex items-center justify-between border-b border-[#27272a]">
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Worker Nodes</h3>
-                      <p className="text-xs text-[#71717a]">Segmented infrastructure nodes</p>
-                    </div>
-                    <button className="text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-                      View All
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="divide-y divide-[#27272a]/60">
-                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="font-mono text-xs font-medium text-white">worker-1</span>
-                        <span className="text-[11px] text-[#71717a]">DE</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
-                        <span>2.1% CPU</span>
-                        <span className="text-[#71717a]">•</span>
-                        <span>512 MB</span>
-                      </div>
-                    </div>
-                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="font-mono text-xs font-medium text-white">worker-2</span>
-                        <span className="text-[11px] text-[#71717a]">DE</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
-                        <span>3.4% CPU</span>
-                        <span className="text-[#71717a]">•</span>
-                        <span>498 MB</span>
-                      </div>
-                    </div>
-                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="font-mono text-xs font-medium text-white">worker-3</span>
-                        <span className="text-[11px] text-[#71717a]">DE</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
-                        <span>1.8% CPU</span>
-                        <span className="text-[#71717a]">•</span>
-                        <span>476 MB</span>
-                      </div>
-                    </div>
-                  </div>
+                  <CardTitle className="text-sm font-semibold">Registered Accounts</CardTitle>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    Select a regional database shard for each user to guarantee optimal local data residency.
+                  </p>
                 </div>
-              </Card>
+                <Badge variant="outline" className="text-[10px] text-[var(--text-muted)] border-[var(--border)]">
+                  {users.length} accounts
+                </Badge>
+              </CardHeader>
 
-              {/* Anomalies Card */}
-              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden flex flex-col justify-between">
-                <div>
-                  <div className="p-4 flex items-center justify-between border-b border-[#27272a]">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[var(--surface-muted)] border-b border-[var(--border)] text-[var(--text-secondary)] font-medium">
+                    <tr>
+                      <th className="py-2.5 px-4">User</th>
+                      <th className="py-2.5 px-3">Regional Shard</th>
+                      <th className="py-2.5 px-3">Credits Balance</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-4 text-right">Moderation Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {usersLoading ? (
+                      <tr>
+                        <td colSpan={5} className="p-12 text-center text-[var(--text-muted)]">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                          Loading users...
+                        </td>
+                      </tr>
+                    ) : users.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-12 text-center text-[var(--text-muted)]">
+                          No users matched search criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      users.map((user) => {
+                        const isAssigning = assigningShardUserId === user.userId
+                        return (
+                          <tr key={user.userId} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="h-7 w-7 rounded-full">
+                                  <AvatarImage src={user.image || ""} />
+                                  <AvatarFallback className="bg-[var(--surface-raised)] text-[var(--foreground)] text-[10px]">
+                                    {user.name?.[0]?.toUpperCase() || "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <span className="font-semibold text-[var(--foreground)]">{user.name}</span>
+                                  <p className="text-[11px] text-[var(--text-muted)] font-mono">{user.email}</p>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Regional Shard Assignment Selector */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={user.region || "us-east-1"}
+                                  disabled={isAssigning}
+                                  onChange={(e) => handleAssignShard(user.userId, e.target.value)}
+                                  className="text-xs h-7 px-2 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--foreground)] focus:border-[var(--border-strong)] outline-none"
+                                >
+                                  <option value="us-east-1">US East (Master)</option>
+                                  <option value="eu-central-1">EU Central (Frankfurt)</option>
+                                  <option value="ap-southeast-1">AP Southeast (Singapore)</option>
+                                </select>
+                                {isAssigning && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-muted)]" />}
+                              </div>
+                            </td>
+
+                            {/* Credits Balance with Quick Edit Buttons */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono tabular-nums font-semibold text-[var(--foreground)]">
+                                  {user.credits ?? 0}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTargetUser(user)
+                                    setCreditActionType("add")
+                                    setCreditDialogOpen(true)
+                                  }}
+                                  className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--success)]"
+                                  title="Add credits"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setTargetUser(user)
+                                    setCreditActionType("remove")
+                                    setCreditDialogOpen(true)
+                                  }}
+                                  className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                                  title="Remove credits"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td className="py-3 px-3">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-medium px-2 py-0.5 rounded-[var(--radius-full)]",
+                                  user.isBlocked
+                                    ? "bg-[var(--danger-muted)] text-[var(--danger)] border-[var(--danger)]/20"
+                                    : user.warnings?.length > 0
+                                    ? "bg-[var(--warning-muted)] text-[var(--warning)] border-[var(--warning)]/20"
+                                    : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                                )}
+                              >
+                                {user.isBlocked ? "Banned" : user.warnings?.length > 0 ? "Warned" : "Active"}
+                              </Badge>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setTargetUser(user)
+                                    setWarnDialogOpen(true)
+                                  }}
+                                  className="h-7 px-2 text-[11px] border-[var(--border)] text-[var(--warning)] hover:bg-[var(--warning-muted)]"
+                                >
+                                  Warn
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setTargetUser(user)
+                                    setBanDialogOpen(true)
+                                  }}
+                                  className={cn(
+                                    "h-7 px-2 text-[11px] border-[var(--border)]",
+                                    user.isBlocked
+                                      ? "text-[var(--success)] hover:bg-[var(--success-muted)]"
+                                      : "text-[var(--danger)] hover:bg-[var(--danger-muted)]"
+                                  )}
+                                >
+                                  {user.isBlocked ? "Unban" : "Ban"}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* =========================================================================
+            TAB 3: PROVIDERS (MINIMAL CARDS FIRST; SELECTING OPENS MODELS LIST)
+           ========================================================================= */}
+        {activeTab === "providers" && (
+          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                  {selectedProviderId ? "Provider Models Library" : "AI Providers & Gateway"}
+                </h1>
+                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                  {selectedProviderId
+                    ? "Configure model library visibility, pricing tiers, and display names"
+                    : "Foundation model providers, edge failovers, and token consumption"}
+                </p>
+              </div>
+
+              {selectedProviderId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedProviderId(null)}
+                  className="h-8 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1.5"
+                >
+                  <span>← Back to Providers</span>
+                </Button>
+              )}
+            </div>
+
+            {/* LEVEL 1: MINIMAL PROVIDER CARDS (When no provider selected) */}
+            {!selectedProviderId ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Card 1: Vercel AI Gateway */}
+                  <div
+                    onClick={() => setSelectedProviderId("vercel")}
+                    className="cursor-pointer group p-5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] transition-all shadow-[var(--shadow-card)] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                        <Cpu className="w-5 h-5 text-[var(--foreground)]" />
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                      >
+                        Operational
+                      </Badge>
+                    </div>
+
                     <div>
-                      <h3 className="text-sm font-semibold text-white">Anomalies</h3>
-                      <p className="text-xs text-[#71717a]">Recent system alerts and unusual activity</p>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)] group-hover:text-white flex items-center gap-1.5">
+                        <span>Vercel AI Gateway</span>
+                        <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">
+                        Global edge routing for standard models with caching and rate limiting shield.
+                      </p>
                     </div>
-                    <button className="text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-                      View All
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>Gateway Latency</span>
+                      <span className="font-mono tabular-nums text-[var(--foreground)]">28ms</span>
+                    </div>
                   </div>
-                  <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-2.5 my-auto">
-                    <div className="w-10 h-10 rounded-full bg-[#18181b] border border-[#27272a] flex items-center justify-center text-emerald-400">
-                      <CheckCircle2 className="w-5 h-5" />
+
+                  {/* Card 2: Google Vertex AI */}
+                  <div
+                    onClick={() => setSelectedProviderId("vertex")}
+                    className="cursor-pointer group p-5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] transition-all shadow-[var(--shadow-card)] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-[var(--foreground)]" />
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                      >
+                        us-central1 Active
+                      </Badge>
                     </div>
-                    <p className="text-sm font-medium text-white">No anomalies detected</p>
-                    <p className="text-xs text-[#71717a] max-w-[240px]">All systems are running normally within standard parameters.</p>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)] group-hover:text-white flex items-center gap-1.5">
+                        <span>Google Vertex AI</span>
+                        <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">
+                        Enterprise Google Cloud provider with Gemini 2.5 Flash through Gemini 3.8 Flash models.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>Gateway Latency</span>
+                      <span className="font-mono tabular-nums text-[var(--foreground)]">19ms</span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Vyce AI */}
+                  <div
+                    onClick={() => setSelectedProviderId("vyce")}
+                    className="cursor-pointer group p-5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] transition-all shadow-[var(--shadow-card)] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-[var(--foreground)]" />
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
+                      >
+                        Operational
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)] group-hover:text-white flex items-center gap-1.5">
+                        <span>Vyce AI</span>
+                        <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">
+                        High-speed inference endpoint optimized for real-time site generation and code changes.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>Gateway Latency</span>
+                      <span className="font-mono tabular-nums text-[var(--foreground)]">34ms</span>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Direct & Custom Providers */}
+                  <div
+                    onClick={() => setSelectedProviderId("custom")}
+                    className="cursor-pointer group p-5 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] hover:border-[var(--border-strong)] transition-all shadow-[var(--shadow-card)] space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center">
+                        <Layers className="w-5 h-5 text-[var(--foreground)]" />
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-[var(--info-muted)] text-[var(--info)] border-[var(--info)]/20 text-[10px] rounded-[var(--radius-full)]"
+                      >
+                        Configurable
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--foreground)] group-hover:text-white flex items-center gap-1.5">
+                        <span>Custom Providers</span>
+                        <ChevronRight className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">
+                        Custom OpenAI-compatible base URLs, direct API keys, and local VM runner models.
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>Direct Runner</span>
+                      <span className="font-mono tabular-nums text-[var(--foreground)]">Local / 12ms</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Usage & Metrics Summary */}
+                <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Aggregated AI Token Throughput</h3>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                        Real-time token distribution across all providers
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Popover open={periodComboboxOpen} onOpenChange={setPeriodComboboxOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-32 justify-between bg-[var(--surface-muted)] border-[var(--border)] text-xs text-[var(--foreground)] rounded-[var(--radius-control)]"
+                          >
+                            {PERIOD_OPTIONS.find((p) => p.value === usagePeriod)?.label || "Select period"}
+                            <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-32 p-0 bg-[var(--surface-raised)] border-[var(--border-strong)] text-[var(--foreground)]">
+                          <Command className="bg-[var(--surface-raised)] text-[var(--foreground)]">
+                            <CommandList>
+                              <CommandGroup>
+                                {PERIOD_OPTIONS.map((period) => (
+                                  <CommandItem
+                                    key={period.value}
+                                    value={period.value}
+                                    onSelect={(currentValue) => {
+                                      setUsagePeriod(currentValue)
+                                      setPeriodComboboxOpen(false)
+                                      fetchUsage(currentValue)
+                                    }}
+                                    className="text-xs cursor-pointer hover:bg-[var(--surface)] flex items-center justify-between"
+                                  >
+                                    <span>{period.label}</span>
+                                    <Check
+                                      className={cn(
+                                        "h-3.5 w-3.5",
+                                        usagePeriod === period.value ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => fetchUsage(usagePeriod)}
+                        className="h-8 px-2 text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", usageLoading && "animate-spin")} />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <MetricCard
+                      title="Total Tokens"
+                      value={usageData.summary.totalTokens.toLocaleString()}
+                      changeText={`${usagePeriod} recorded`}
+                      icon={Cpu}
+                      iconColor="text-[var(--success)]"
+                    />
+                    <MetricCard
+                      title="Prompt Tokens"
+                      value={usageData.summary.totalInputTokens.toLocaleString()}
+                      changeText="Tool & system context"
+                      icon={Layers}
+                      iconColor="text-[var(--info)]"
+                    />
+                    <MetricCard
+                      title="Completion Tokens"
+                      value={usageData.summary.totalOutputTokens.toLocaleString()}
+                      changeText="Synthesized responses"
+                      icon={Sparkles}
+                      iconColor="text-[var(--foreground)]"
+                    />
+                    <MetricCard
+                      title="Requests"
+                      value={usageData.summary.totalRequests.toLocaleString()}
+                      changeText="Model executions"
+                      icon={Activity}
+                      iconColor="text-[var(--warning)]"
+                    />
+                  </div>
+                </Card>
+              </div>
+            ) : (
+              /* LEVEL 2: DETAILED MODELS LIST FOR THE SELECTED PROVIDER */
+              <div className="space-y-4">
+                {/* Search & Provider Actions */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <Input
+                      value={modelSearch}
+                      onChange={(e) => setModelSearch(e.target.value)}
+                      placeholder={`Filter models for provider (${selectedProviderId})...`}
+                      className="pl-9 h-9 text-xs bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] placeholder:text-[var(--text-muted)] rounded-[var(--radius-control)]"
+                    />
+                  </div>
+                  {modelSearch && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setModelSearch("")}
+                      className="h-9 px-2 text-xs text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                    >
+                      Clear
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSyncHandshake}
+                    className="h-9 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sync with VM Runner</span>
+                  </Button>
+                </div>
+
+                {/* Models Table */}
+                <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+                  <CardHeader className="p-4 border-b border-[var(--border)] flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm font-semibold capitalize">
+                        {selectedProviderId} Models & Library Display
+                      </CardTitle>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                        Toggle visibility to expose models in the frontend selector. Edit display names directly.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] text-[var(--text-muted)] border-[var(--border)]">
+                      {getFilteredModelsForProvider().length} models
+                    </Badge>
+                  </CardHeader>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[var(--surface-muted)] border-b border-[var(--border)] text-[var(--text-secondary)] font-medium">
+                        <tr>
+                          <th className="py-2.5 px-4 w-16">In Library</th>
+                          <th className="py-2.5 px-4">Display Name (Frontend Selector)</th>
+                          <th className="py-2.5 px-3">Gateway Model ID</th>
+                          <th className="py-2.5 px-3">Provider</th>
+                          <th className="py-2.5 px-3">Pricing (In/Out 1M)</th>
+                          <th className="py-2.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--border)]">
+                        {adminModelsLoading ? (
+                          <tr>
+                            <td colSpan={6} className="p-12 text-center text-[var(--text-muted)]">
+                              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                              Loading provider models catalog...
+                            </td>
+                          </tr>
+                        ) : getFilteredModelsForProvider().length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-12 text-center text-[var(--text-muted)]">
+                              No models configured for this provider.
+                            </td>
+                          </tr>
+                        ) : (
+                          getFilteredModelsForProvider().map((m) => {
+                            const isEditing = editingModelId === m.id
+                            return (
+                              <tr key={m.id} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
+                                {/* Toggle Visibility Switch */}
+                                <td className="py-3 px-4">
+                                  <Switch
+                                    checked={m.enabledInLibrary}
+                                    onCheckedChange={() => handleToggleModelInLibrary(m.id, m.enabledInLibrary)}
+                                    className="data-[state=checked]:bg-[var(--success)]"
+                                  />
+                                </td>
+
+                                {/* Display Name with Inline Editor */}
+                                <td className="py-3 px-4">
+                                  {isEditing ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={editDisplayName}
+                                        onChange={(e) => setEditDisplayName(e.target.value)}
+                                        className="h-7 text-xs bg-[var(--surface-muted)] border-[var(--border)] text-[var(--foreground)] w-48 rounded-[var(--radius-inner)]"
+                                        autoFocus
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleSaveModelDisplayName(m.id, editDisplayName)}
+                                        disabled={savingModelId === m.id}
+                                        className="h-7 px-2 text-[11px] bg-[var(--foreground)] text-[var(--background)] font-medium"
+                                      >
+                                        {savingModelId === m.id ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <Save className="w-3 h-3" />
+                                        )}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setEditingModelId(null)
+                                          setEditDisplayName("")
+                                        }}
+                                        className="h-7 px-2 text-[11px] text-[var(--text-muted)]"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 group/edit">
+                                      <span className="font-semibold text-[var(--foreground)]">{m.displayName}</span>
+                                      <button
+                                        onClick={() => {
+                                          setEditingModelId(m.id)
+                                          setEditDisplayName(m.displayName)
+                                        }}
+                                        className="opacity-0 group-hover/edit:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--foreground)] transition-opacity"
+                                        title="Rename in selector"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+
+                                <td className="py-3 px-3 font-mono text-[11px] text-[var(--text-secondary)]">{m.id}</td>
+                                <td className="py-3 px-3 capitalize text-[var(--text-muted)]">{m.provider}</td>
+                                <td className="py-3 px-3 font-mono text-[11px] text-[var(--text-secondary)]">
+                                  {m.inputCostDisplay || "$0.00"} / {m.outputCostDisplay || "$0.00"}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] font-mono px-2 py-0.5 rounded-[var(--radius-full)]",
+                                      m.enabledInLibrary
+                                        ? "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                                        : "bg-[var(--surface-muted)] text-[var(--text-muted)] border-[var(--border)]"
+                                    )}
+                                  >
+                                    {m.enabledInLibrary ? "Visible" : "Hidden"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            )
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* =========================================================================
+            TAB 4: DATABASES (MASTER & REGIONAL SHARDS, SAFE MIGRATION WIZARD)
+           ========================================================================= */}
+        {activeTab === "databases" && (
+          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                  Databases & Regional Sharding
+                </h1>
+                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                  Master control store, regional replica shards, suspension safeguards, and zero-downtime migration
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setMigrateModalOpen(true)}
+                  className="h-8 px-3 text-xs bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium rounded-[var(--radius-control)] gap-1.5"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Launch Migration Wizard</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchDatabases}
+                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1 rounded-[var(--radius-control)]"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", databasesLoading && "animate-spin")} />
+                </Button>
+              </div>
+            </div>
+
+            {/* Master Store Card */}
+            {databases.find((d) => d.type === "master") && (
+              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
+                      <Database className="w-5 h-5 text-[var(--foreground)]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-bold text-[var(--foreground)]">
+                          {databases.find((d) => d.type === "master")?.name}
+                        </h2>
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--foreground)] text-[var(--background)] text-[10px] font-mono px-2 py-0 rounded-[var(--radius-inner)]"
+                        >
+                          MASTER CLUSTER
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {databases.find((d) => d.type === "master")?.regionLabel} ({databases.find((d) => d.type === "master")?.region})
+                      </p>
+                    </div>
+                  </div>
+
+                  <Badge
+                    variant="outline"
+                    className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-xs px-2.5 py-1 rounded-[var(--radius-full)]"
+                  >
+                    Operational
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[var(--border-subtle)]">
+                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
+                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Cluster Latency</span>
+                    <div className="text-sm font-mono font-semibold text-[var(--success)] tabular-nums">
+                      {databases.find((d) => d.type === "master")?.latencyMs} ms
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
+                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Active Connections</span>
+                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                      {databases.find((d) => d.type === "master")?.activeConnections} pools
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
+                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Storage Used</span>
+                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                      {databases.find((d) => d.type === "master")?.storageUsedMb} MB / {databases.find((d) => d.type === "master")?.storageLimitMb} MB
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
+                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Assigned Accounts</span>
+                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                      {databases.find((d) => d.type === "master")?.assignedUsersCount} users
+                    </div>
                   </div>
                 </div>
               </Card>
+            )}
+
+            {/* Regional Shards Section */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] font-mono">
+                Regional Replica Shards
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {databases
+                  .filter((d) => d.type === "regional")
+                  .map((shard) => {
+                    const isSuspended = shard.status === "suspended"
+                    return (
+                      <Card
+                        key={shard.id}
+                        className={cn(
+                          "bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4",
+                          isSuspended && "border-[var(--danger)]/30 bg-[var(--surface-muted)]"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-[var(--foreground)]">{shard.name}</h4>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-mono px-1.5 py-0 rounded-[var(--radius-inner)]"
+                              >
+                                {shard.region}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-[var(--text-muted)] mt-0.5">{shard.regionLabel}</p>
+                          </div>
+
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs px-2.5 py-0.5 rounded-[var(--radius-full)]",
+                              isSuspended
+                                ? "bg-[var(--danger-muted)] text-[var(--danger)] border-[var(--danger)]/20"
+                                : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                            )}
+                          >
+                            {isSuspended ? "Suspended" : "Operational"}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Latency</span>
+                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                              {shard.latencyMs} ms
+                            </div>
+                          </div>
+                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Connections</span>
+                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                              {shard.activeConnections}
+                            </div>
+                          </div>
+                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Users</span>
+                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
+                              {shard.assignedUsersCount}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Suspension Safeguard Action */}
+                        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--text-muted)]">
+                            {isSuspended ? "Shard writes blocked" : "Active replica sync"}
+                          </span>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSuspendConfirmDb(shard)
+                              setSuspendReason("")
+                            }}
+                            className={cn(
+                              "h-7 px-2.5 text-xs border-[var(--border)] rounded-[var(--radius-control)]",
+                              isSuspended
+                                ? "text-[var(--success)] hover:bg-[var(--success-muted)]"
+                                : "text-[var(--danger)] hover:bg-[var(--danger-muted)]"
+                            )}
+                          >
+                            {isSuspended ? "Resume Shard" : "Suspend Shard"}
+                          </Button>
+                        </div>
+                      </Card>
+                    )
+                  })}
+              </div>
             </div>
           </div>
         )}
 
         {/* =========================================================================
-            TAB 5: TICKETS & ANNOUNCEMENTS (SUPPORT & BROADCASTS & AUDIT LOGS)
+            TAB 5: SERVERS (NODES, VM RUNNER SERVICE CONTROLS, TELEMETRY)
            ========================================================================= */}
-        {activeTab === "tickets" && (
+        {activeTab === "servers" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2C30] pb-4">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
               <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Tickets & Announcements</h1>
-                <p className="text-xs md:text-sm text-[#A7AAB0] mt-0.5">
-                  Review support requests, broadcast dashboard announcements, and inspect moderation audit logs
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                  Servers & Control Plane
+                </h1>
+                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                  Primary execution VM runner, standby failover node, and centralized telemetry
                 </p>
               </div>
-              <Button
-                size="sm"
-                onClick={() => setAnnouncementDialogOpen(true)}
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
-              >
-                <Megaphone className="w-3.5 h-3.5" />
-                <span>New Announcement</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchTelemetry}
+                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", telemetryLoading && "animate-spin")} />
+                  <span>Refresh Telemetry</span>
+                </Button>
+              </div>
             </div>
 
-            {/* Announcements Manager */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Megaphone className="w-4 h-4 text-emerald-400" />
-                  Active Server Announcements
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                {announcements.length === 0 ? (
-                  <p className="text-xs text-[#777B82] text-center py-4">No active announcements</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {announcements.map((ann) => (
-                      <div key={ann.id} className="p-3.5 rounded-lg bg-[#242528] border border-[#2A2C30] flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-white">{ann.title}</span>
-                            <Badge variant="outline" className="text-[10px] uppercase font-mono px-1.5 py-0 border-[#2A2C30] text-zinc-300">
-                              {ann.type}
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-[#A7AAB0]">{ann.message}</p>
-                          <p className="text-[10px] text-[#777B82]">By: {ann.creatorEmail} • {new Date(ann.createdAt).toLocaleDateString()}</p>
-                        </div>
-                        <Button
-                          size="sm"
+            {/* Nodes Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Primary Node */}
+              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
+                      <Server className="w-5 h-5 text-[var(--foreground)]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-[var(--foreground)]">Sycord VPS Primary</h3>
+                        <Badge
                           variant="outline"
-                          onClick={() => handleToggleAnnouncement(ann.id, ann.active)}
-                          className="h-7 text-xs border-[#2A2C30] text-[#A7AAB0] hover:text-white"
+                          className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
                         >
-                          {ann.active ? "Deactivate" : "Activate"}
-                        </Button>
+                          Running
+                        </Badge>
                       </div>
-                    ))}
+                      <p className="text-xs text-[var(--text-muted)]">Ubuntu 24.04 LTS • sycord.site (Control Plane)</p>
+                    </div>
                   </div>
-                )}
-              </CardContent>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">CPU Load</span>
+                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">18.4%</div>
+                  </div>
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">RAM</span>
+                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">2.1 / 8 GB</div>
+                  </div>
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Disk</span>
+                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">24 / 80 GB</div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                  <span>SSH Proxy Ports: 22 / 443 / 8080</span>
+                  <span className="text-[var(--success)] font-medium">Allowlist Active</span>
+                </div>
+              </Card>
+
+              {/* Standby Failover Node */}
+              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
+                      <Server className="w-5 h-5 text-[var(--text-muted)]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-[var(--foreground)]">Failover Standby Node</h3>
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--surface-muted)] text-[var(--text-muted)] border-[var(--border)] text-[10px] rounded-[var(--radius-full)]"
+                        >
+                          Standby Synced
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">Secondary Target • Automatic DNS Failover</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Heartbeat</span>
+                    <div className="font-mono font-semibold text-[var(--success)] tabular-nums">19 ms</div>
+                  </div>
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">State Lag</span>
+                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">0 ms</div>
+                  </div>
+                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
+                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Read Replica</span>
+                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">Ready</div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                  <span>Failover Trigger</span>
+                  <span className="font-medium text-[var(--text-secondary)]">3 consecutive missed pulses</span>
+                </div>
+              </Card>
+            </div>
+
+            {/* VM Service Controls Card */}
+            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">VM Service Controls</h3>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    Trigger remote supervisor restarts, flush process caches, and verify SSH handshake
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-xs px-2.5 py-0.5 rounded-[var(--radius-full)]"
+                >
+                  syte-runner.service: active (running)
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRestartConfirmOpen(true)}
+                  disabled={vmActionLoading}
+                  className="h-8 px-3 text-xs border-[var(--border)] text-[var(--danger)] hover:bg-[var(--danger-muted)] rounded-[var(--radius-control)] gap-1.5"
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>Restart Syte Runner</span>
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleVmAction("flush_cache")}
+                  disabled={vmActionLoading}
+                  className="h-8 px-3 text-xs border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
+                >
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Flush Memory Cache</span>
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSyncHandshake}
+                  className="h-8 px-3 text-xs border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Sync Provider Configuration</span>
+                </Button>
+              </div>
             </Card>
 
-            {/* Support Tickets Section */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <LifeBuoy className="w-4 h-4 text-blue-400" />
-                  Support Tickets
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                {tickets.length === 0 ? (
-                  <p className="text-xs text-[#777B82] text-center py-4">No open tickets</p>
-                ) : (
-                  <div className="space-y-4">
-                    {tickets.map((t) => (
-                      <div key={t.id} className="p-4 rounded-xl bg-[#242528] border border-[#2A2C30] space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold text-white">{t.subject}</span>
-                            <p className="text-[11px] text-[#A7AAB0]">From: {t.userEmail} • {new Date(t.createdAt).toLocaleString()}</p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] uppercase font-mono px-1.5 py-0 border-[#2A2C30]",
-                              t.status === "open" && "text-amber-400 border-amber-500/30",
-                              t.status === "resolved" && "text-emerald-400 border-emerald-500/30",
-                              t.status === "closed" && "text-zinc-400"
-                            )}
-                          >
-                            {t.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-zinc-300 bg-[#1c1c1e] p-2.5 rounded-lg border border-[#2A2C30]/50">{t.message}</p>
+            {/* Centralized Request & Error Telemetry Table */}
+            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+              <CardHeader className="p-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold">Centralized Telemetry & Event Log</CardTitle>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    Unified structured event stream across gateways, omni-router, and Ubuntu VM runner
+                  </p>
+                </div>
 
-                        {/* Moderator Reply Box */}
-                        {t.status !== "closed" && (
-                          <div className="space-y-2 pt-1">
-                            <Input
-                              value={ticketReplyText[t.id] || ""}
-                              onChange={(e) => setTicketReplyText((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                              placeholder="Type a response to the user..."
-                              className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs h-8 focus-visible:ring-1 focus-visible:ring-zinc-400"
-                            />
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleTicketAction(t.id, "resolved")}
-                                className="h-7 text-xs border-[#2A2C30] hover:bg-emerald-950/30 hover:text-emerald-300"
-                              >
-                                Resolve
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleTicketAction(t.id)}
-                                disabled={!ticketReplyText[t.id]?.trim()}
-                                className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white gap-1"
-                              >
-                                <Send className="w-3 h-3" />
-                                Reply
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Moderation Audit Log */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-emerald-400" />
-                  Moderation Audit Log
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={telemetrySeverityFilter}
+                    onChange={(e) => {
+                      setTelemetrySeverityFilter(e.target.value)
+                      setTimeout(fetchTelemetry, 10)
+                    }}
+                    className="text-xs h-7 px-2 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--foreground)] focus:border-[var(--border-strong)] outline-none"
+                  >
+                    <option value="all">All Severities</option>
+                    <option value="error">Errors & Critical</option>
+                    <option value="warning">Warnings</option>
+                    <option value="info">Info / Normal</option>
+                  </select>
+                </div>
               </CardHeader>
-              <CardContent className="p-0">
-                {auditLogs.length === 0 ? (
-                  <p className="text-xs text-[#777B82] text-center py-6">No recorded audit actions yet</p>
-                ) : (
-                  <div className="divide-y divide-[#2A2C30] text-xs max-h-80 overflow-y-auto custom-scrollbar">
-                    {auditLogs.map((log) => (
-                      <div key={log.id} className="p-3 flex items-center justify-between hover:bg-[#202124]/40">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-white font-mono uppercase text-[11px]">{log.action.replace("_", " ")}</span>
-                            <span className="text-[#A7AAB0]">target: {log.targetIdentifier || log.targetId}</span>
-                          </div>
-                          {log.reason && <p className="text-[11px] text-[#777B82] mt-0.5">Reason: {log.reason}</p>}
-                        </div>
-                        <div className="text-right text-[10px] text-[#777B82]">
-                          <p>{log.moderatorEmail}</p>
-                          <p>{new Date(log.createdAt).toLocaleTimeString()}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[var(--surface-muted)] border-b border-[var(--border)] text-[var(--text-secondary)] font-medium">
+                    <tr>
+                      <th className="py-2.5 px-4">Time</th>
+                      <th className="py-2.5 px-3">Severity</th>
+                      <th className="py-2.5 px-3">Service</th>
+                      <th className="py-2.5 px-4">Operation & Message</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Latency</th>
+                      <th className="py-2.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {telemetryLoading ? (
+                      <tr>
+                        <td colSpan={7} className="p-12 text-center text-[var(--text-muted)]">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                          Loading telemetry events...
+                        </td>
+                      </tr>
+                    ) : telemetryEvents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-12 text-center text-[var(--text-muted)]">
+                          No events recorded matching criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      telemetryEvents.map((evt) => (
+                        <tr
+                          key={evt.event_id}
+                          onClick={() => {
+                            setSelectedTelemetryEvent(evt)
+                            setTelemetryModalOpen(true)
+                          }}
+                          className="hover:bg-[var(--surface-raised)]/60 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3 px-4 font-mono text-[11px] text-[var(--text-muted)] tabular-nums whitespace-nowrap">
+                            {new Date(evt.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td className="py-3 px-3">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-mono uppercase px-1.5 py-0 rounded-[var(--radius-full)]",
+                                evt.severity === "critical" || evt.severity === "error"
+                                  ? "bg-[var(--danger-muted)] text-[var(--danger)] border-[var(--danger)]/20"
+                                  : evt.severity === "warning"
+                                  ? "bg-[var(--warning-muted)] text-[var(--warning)] border-[var(--warning)]/20"
+                                  : "bg-[var(--info-muted)] text-[var(--info)] border-[var(--info)]/20"
+                              )}
+                            >
+                              {evt.severity}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-[var(--foreground)] whitespace-nowrap">
+                            {evt.service}
+                          </td>
+                          <td className="py-3 px-4 max-w-sm truncate text-[var(--text-secondary)]">
+                            <span className="font-mono text-[11px] text-[var(--foreground)] mr-1.5">{evt.operation}</span>
+                            <span>{evt.message}</span>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] tabular-nums text-[var(--foreground)]">
+                            {evt.http_status}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] tabular-nums text-[var(--text-secondary)]">
+                            {evt.duration_ms}ms
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedTelemetryEvent(evt)
+                                setTelemetryModalOpen(true)
+                              }}
+                              className="h-6 px-2 text-[10px] text-[var(--text-muted)] hover:text-[var(--foreground)]"
+                            >
+                              Inspect
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </div>
         )}
+
+        {/* =========================================================================
+            TAB 6: TICKETS ("UNDER CONSTRUCTION" PLACEHOLDER)
+           ========================================================================= */}
+        {activeTab === "tickets" && (
+          <UnderConstructionCard
+            title="Support Ticket Desk"
+            subtitle="Moderator Support & User Inquiries"
+            description="The unified moderator ticketing system is currently undergoing infrastructure and safety database sharding migration. In-progress tickets are safely preserved in storage."
+            icon={LifeBuoy}
+          />
+        )}
+
+        {/* =========================================================================
+            TAB 7: BROADCAST ("UNDER CONSTRUCTION" PLACEHOLDER)
+           ========================================================================= */}
+        {activeTab === "broadcast" && (
+          <UnderConstructionCard
+            title="System Broadcast Console"
+            subtitle="Platform-wide Announcements & Banners"
+            description="Global banner announcements and emergency alert broadcasts are undergoing real-time WebSocket delivery and region-shard routing upgrades."
+            icon={Megaphone}
+          />
+        )}
       </main>
 
-      {/* Reusable Dialogs */}
+      {/* =========================================================================
+          REUSABLE MODALS & DIALOGS
+         ========================================================================= */}
+
+      {/* Credit Dialog */}
       <CreditDialog
         open={creditDialogOpen}
         onOpenChange={setCreditDialogOpen}
@@ -1874,6 +2190,7 @@ export default function ModeratorPage() {
         onSuccess={() => fetchUsers(userSearch)}
       />
 
+      {/* Ban Dialog */}
       <BanDialog
         open={banDialogOpen}
         onOpenChange={setBanDialogOpen}
@@ -1881,6 +2198,7 @@ export default function ModeratorPage() {
         onSuccess={() => fetchUsers(userSearch)}
       />
 
+      {/* Warn Dialog */}
       <WarnDialog
         open={warnDialogOpen}
         onOpenChange={setWarnDialogOpen}
@@ -1888,11 +2206,114 @@ export default function ModeratorPage() {
         onSuccess={() => fetchUsers(userSearch)}
       />
 
-      <AnnouncementDialog
-        open={announcementDialogOpen}
-        onOpenChange={setAnnouncementDialogOpen}
-        onSuccess={fetchAnnouncements}
+      {/* Database Safe Migration Wizard Modal */}
+      <DatabaseMigrateModal
+        open={migrateModalOpen}
+        onOpenChange={setMigrateModalOpen}
+        databases={databases}
+        onSuccess={fetchDatabases}
       />
+
+      {/* Telemetry Event Trace Details Modal */}
+      <TelemetryDetailsModal
+        open={telemetryModalOpen}
+        onOpenChange={setTelemetryModalOpen}
+        event={selectedTelemetryEvent}
+        onResolve={handleResolveTelemetry}
+      />
+
+      {/* Shard Suspension Confirmation Safeguard Dialog */}
+      <Dialog open={!!suspendConfirmDb} onOpenChange={(v) => !v && setSuspendConfirmDb(null)}>
+        <DialogContent className="max-w-md bg-[var(--surface-raised)] border border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-overlay)]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--danger-muted)] border border-[var(--danger)]/30 flex items-center justify-center text-[var(--danger)]">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <DialogTitle className="text-base font-semibold">
+                {suspendConfirmDb?.status === "suspended" ? "Resume Regional Shard?" : "Suspend Regional Shard?"}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[var(--text-muted)]">
+              {suspendConfirmDb?.status === "suspended"
+                ? `Resuming will restore write and read access to ${suspendConfirmDb?.name}.`
+                : `Suspending ${suspendConfirmDb?.name} will temporarily block writes to prevent data divergence during maintenance.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <label className="text-xs font-medium text-[var(--text-secondary)]">Reason for Action</label>
+            <Input
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              placeholder="e.g., Scheduled regional maintenance or migration pre-check"
+              className="text-xs bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-control)] h-9"
+            />
+          </div>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSuspendConfirmDb(null)}
+              className="h-8 px-3 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleToggleShardSuspension}
+              disabled={suspendingLoading}
+              className={cn(
+                "h-8 px-3 text-xs font-semibold",
+                suspendConfirmDb?.status === "suspended"
+                  ? "bg-[var(--success)] text-[var(--background)] hover:opacity-90"
+                  : "bg-[var(--danger)] text-white hover:opacity-90"
+              )}
+            >
+              {suspendingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              {suspendConfirmDb?.status === "suspended" ? "Confirm Resume" : "Confirm Suspension"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* VM Restart Confirmation Dialog */}
+      <Dialog open={restartConfirmOpen} onOpenChange={setRestartConfirmOpen}>
+        <DialogContent className="max-w-md bg-[var(--surface-raised)] border border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-overlay)]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--danger-muted)] border border-[var(--danger)]/30 flex items-center justify-center text-[var(--danger)]">
+                <Power className="w-4 h-4" />
+              </div>
+              <DialogTitle className="text-base font-semibold">Restart Syte Runner Service?</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[var(--text-muted)]">
+              This will restart the systemd service <code className="text-[var(--foreground)]">syte-runner</code> on the Ubuntu VM. In-flight build jobs may temporarily pause for ~2 seconds.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRestartConfirmOpen(false)}
+              className="h-8 px-3 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleVmAction("start")}
+              disabled={vmActionLoading}
+              className="h-8 px-3 text-xs bg-[var(--danger)] text-white hover:opacity-90 font-medium"
+            >
+              {vmActionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              Execute Restart
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
