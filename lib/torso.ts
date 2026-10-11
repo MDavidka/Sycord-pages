@@ -44,6 +44,28 @@ function getTorsoToken(): string {
   ).trim();
 }
 
+export function isTorsoConfigured(): boolean {
+  return Boolean(getTorsoUrl() && getTorsoToken());
+}
+
+export function getTorsoMetadata() {
+  const url = getTorsoUrl();
+  const token = getTorsoToken();
+  if (!url || !token) {
+    return {
+      configured: false,
+      provider: "Turso / LibSQL",
+      url: null,
+    };
+  }
+  const maskedUrl = url.replace(/^(libsql:\/\/|https:\/\/)([^.]+)/, "$1***");
+  return {
+    configured: true,
+    provider: "Turso Cloud / LibSQL",
+    url: maskedUrl,
+  };
+}
+
 function normalizeTorsoUrl(raw: string): string {
   if (!raw) return "";
   const trimmed = raw.trim().replace(/\/$/, "");

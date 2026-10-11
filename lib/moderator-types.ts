@@ -78,6 +78,8 @@ export interface ModerationAuditLog {
     | "ticket_reply"
     | "ticket_resolve"
     | "ticket_close"
+    | "model_toggle"
+    | "models_bulk_update"
   targetType: "user" | "report" | "ticket" | "announcement" | "system"
   targetId: string
   targetIdentifier?: string

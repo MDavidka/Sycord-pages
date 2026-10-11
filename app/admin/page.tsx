@@ -89,6 +89,8 @@ import { CreditDialog } from "@/components/moderator/credit-dialog"
 import { BanDialog } from "@/components/moderator/ban-dialog"
 import { WarnDialog } from "@/components/moderator/warn-dialog"
 import { DatabaseMigrateModal } from "@/components/moderator/database-migrate-modal"
+import { DatabaseInspectModal } from "@/components/moderator/database-inspect-modal"
+import { ServerPerformanceOverview } from "@/components/moderator/server-performance-overview"
 import { TelemetryDetailsModal } from "@/components/moderator/telemetry-details-modal"
 import { UnderConstructionCard } from "@/components/moderator/under-construction-card"
 import type { DatabaseRecord } from "@/app/api/moderator/databases/route"
@@ -177,11 +179,17 @@ export default function ModeratorPage() {
 
   // Databases state
   const [databases, setDatabases] = useState<DatabaseRecord[]>([])
+  const [databasesConfigured, setDatabasesConfigured] = useState<boolean>(true)
   const [databasesLoading, setDatabasesLoading] = useState(false)
   const [migrateModalOpen, setMigrateModalOpen] = useState(false)
+  const [inspectModalOpen, setInspectModalOpen] = useState(false)
+  const [selectedInspectDb, setSelectedInspectDb] = useState<DatabaseRecord | null>(null)
   const [suspendConfirmDb, setSuspendConfirmDb] = useState<DatabaseRecord | null>(null)
   const [suspendReason, setSuspendReason] = useState("")
   const [suspendingLoading, setSuspendingLoading] = useState(false)
+  const [bulkModelModalOpen, setBulkModelModalOpen] = useState(false)
+  const [bulkModelAction, setBulkModelAction] = useState<"disable_all" | "enable_all">("disable_all")
+  const [bulkModelLoading, setBulkModelLoading] = useState(false)
 
   // Servers & Telemetry state
   const [telemetryEvents, setTelemetryEvents] = useState<TelemetryEvent[]>([])
@@ -385,13 +393,45 @@ export default function ModeratorPage() {
     try {
       const res = await fetch("/api/moderator/databases")
       const data = await res.json()
-      if (data?.ok && Array.isArray(data.databases)) {
-        setDatabases(data.databases)
+      if (data?.ok) {
+        setDatabases(Array.isArray(data.databases) ? data.databases : [])
+        setDatabasesConfigured(Boolean(data.configured ?? true))
       }
     } catch (e) {
       console.error("Error fetching databases:", e)
     } finally {
       setDatabasesLoading(false)
+    }
+  }
+
+  const handleBulkModelsAction = async (action: "disable_all" | "enable_all") => {
+    if (!selectedProviderId) return
+    setBulkModelLoading(true)
+    try {
+      const res = await fetch("/api/admin/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          provider: selectedProviderId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        toast.success(
+          action === "disable_all"
+            ? `All ${selectedProviderId} models disabled in library`
+            : `All ${selectedProviderId} models enabled in library`
+        )
+        setBulkModelModalOpen(false)
+        fetchAdminModels()
+      } else {
+        toast.error(data.error || "Failed to update models")
+      }
+    } catch {
+      toast.error("Network error during bulk update")
+    } finally {
+      setBulkModelLoading(false)
     }
   }
 
@@ -567,14 +607,6 @@ export default function ModeratorPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           {/* Brand & Moderator Typography */}
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 -ml-1 text-[var(--text-muted)] hover:text-[var(--foreground)] rounded-[var(--radius-inner)] hover:bg-[var(--surface)] transition-colors"
-              aria-label="Open navigation"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-
             <Link href="/dashboard" className="flex items-center gap-2.5 group">
               <Image
                 src="/logo.png"
@@ -591,13 +623,6 @@ export default function ModeratorPage() {
                 <span className="text-xs font-medium text-[var(--text-muted)] tracking-normal">
                   for Moderators
                 </span>
-                <Badge
-                  variant="outline"
-                  className="bg-[var(--success-muted)] border-[var(--success)]/20 text-[var(--success)] text-[10px] font-mono font-medium gap-1 px-2 py-0.5 rounded-[var(--radius-full)]"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse" />
-                  Live
-                </Badge>
               </div>
             </Link>
           </div>
@@ -632,25 +657,6 @@ export default function ModeratorPage() {
 
           {/* Right Header Controls & Moderator Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                fetchOverview()
-                if (activeTab === "users") fetchUsers(userSearch)
-                if (activeTab === "providers") {
-                  fetchAdminModels()
-                  fetchUsage(usagePeriod)
-                }
-                if (activeTab === "databases") fetchDatabases()
-                if (activeTab === "servers") fetchTelemetry()
-                toast.success("Moderator console data refreshed")
-              }}
-              className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
-            >
-              <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1530,15 +1536,43 @@ export default function ModeratorPage() {
                       Clear
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSyncHandshake}
-                    className="h-9 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1.5"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Sync with VM Runner</span>
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setBulkModelAction("enable_all")
+                        setBulkModelModalOpen(true)
+                      }}
+                      className="h-9 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success)]" />
+                      <span>Enable all</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setBulkModelAction("disable_all")
+                        setBulkModelModalOpen(true)
+                      }}
+                      className="h-9 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-raised)] text-[var(--text-secondary)] hover:text-[var(--danger)] rounded-[var(--radius-control)] gap-1"
+                    >
+                      <Ban className="w-3.5 h-3.5 text-[var(--danger)]" />
+                      <span>Disable all</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSyncHandshake}
+                      className="h-9 px-3 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Sync VM</span>
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Models Table */}
@@ -1714,167 +1748,135 @@ export default function ModeratorPage() {
               </div>
             </div>
 
-            {/* Master Store Card */}
-            {databases.find((d) => d.type === "master") && (
-              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
-                      <Database className="w-5 h-5 text-[var(--foreground)]" />
-                    </div>
+            {/* Databases Table or Restrained Empty State */}
+            {!databasesConfigured || databases.length === 0 ? (
+              <div className="py-12 px-6 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] text-center space-y-3">
+                <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center mx-auto text-[var(--text-muted)]">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)]">No Shards Configured</h3>
+                  <p className="text-xs text-[var(--text-muted)] max-w-md mx-auto">
+                    Turso / LibSQL database cluster connection is not configured in this environment. Supply <code className="text-[var(--foreground)]">TURSO_DATABASE_URL</code> and auth token to activate cluster routing.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+                  <CardHeader className="p-4 border-b border-[var(--border)] flex flex-row items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-sm font-bold text-[var(--foreground)]">
-                          {databases.find((d) => d.type === "master")?.name}
-                        </h2>
-                        <Badge
-                          variant="outline"
-                          className="bg-[var(--foreground)] text-[var(--background)] text-[10px] font-mono px-2 py-0 rounded-[var(--radius-inner)]"
-                        >
-                          MASTER CLUSTER
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {databases.find((d) => d.type === "master")?.regionLabel} ({databases.find((d) => d.type === "master")?.region})
+                      <CardTitle className="text-sm font-semibold">Active Database Clusters & Shards</CardTitle>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                        Turso-backed document tables and replica nodes. Click Inspect to review safe records.
                       </p>
                     </div>
+                    <Badge variant="outline" className="text-[10px] text-[var(--text-muted)] border-[var(--border)]">
+                      {databases.length} registered
+                    </Badge>
+                  </CardHeader>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[var(--surface-muted)] border-b border-[var(--border)] text-[var(--text-secondary)] font-medium">
+                        <tr>
+                          <th className="py-2.5 px-4">Cluster / Shard Name</th>
+                          <th className="py-2.5 px-3">Type</th>
+                          <th className="py-2.5 px-3">Location</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Latency</th>
+                          <th className="py-2.5 px-3">Storage</th>
+                          <th className="py-2.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--border)]">
+                        {databases.map((db) => {
+                          const isSuspended = db.status === "suspended"
+                          return (
+                            <tr key={db.id} className="hover:bg-[var(--surface-raised)]/50 transition-colors">
+                              <td className="py-3 px-4 font-semibold text-[var(--foreground)]">
+                                <div className="flex items-center gap-2">
+                                  <Database className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+                                  <span>{db.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-mono px-2 py-0.5 rounded-[var(--radius-inner)]",
+                                    db.type === "master"
+                                      ? "bg-[var(--foreground)] text-[var(--background)] font-medium"
+                                      : "bg-[var(--surface-muted)] text-[var(--text-secondary)] border-[var(--border)]"
+                                  )}
+                                >
+                                  {db.type.toUpperCase()}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-3 text-[var(--text-secondary)]">
+                                {db.regionLabel || db.region}
+                              </td>
+                              <td className="py-3 px-3">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-mono px-2 py-0.5 rounded-[var(--radius-full)]",
+                                    isSuspended
+                                      ? "bg-[var(--danger-muted)] text-[var(--danger)] border-[var(--danger)]/20"
+                                      : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
+                                  )}
+                                >
+                                  {isSuspended ? "Suspended" : "Operational"}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-3 font-mono text-[var(--foreground)] tabular-nums">
+                                {db.latencyMs} ms
+                              </td>
+                              <td className="py-3 px-3 font-mono text-[var(--text-secondary)] tabular-nums">
+                                {db.storageUsedMb} MB / {db.storageLimitMb} MB
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedInspectDb(db)
+                                      setInspectModalOpen(true)
+                                    }}
+                                    className="h-7 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)]"
+                                  >
+                                    Inspect Records
+                                  </Button>
+                                  {db.type !== "master" && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        setSuspendConfirmDb(db)
+                                        setSuspendReason("")
+                                      }}
+                                      className={cn(
+                                        "h-7 px-2 text-xs",
+                                        isSuspended
+                                          ? "text-[var(--success)] hover:text-[var(--success)] hover:bg-[var(--success-muted)]"
+                                          : "text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-muted)]"
+                                      )}
+                                    >
+                                      {isSuspended ? "Resume" : "Suspend"}
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-
-                  <Badge
-                    variant="outline"
-                    className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-xs px-2.5 py-1 rounded-[var(--radius-full)]"
-                  >
-                    Operational
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-[var(--border-subtle)]">
-                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Cluster Latency</span>
-                    <div className="text-sm font-mono font-semibold text-[var(--success)] tabular-nums">
-                      {databases.find((d) => d.type === "master")?.latencyMs} ms
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Active Connections</span>
-                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                      {databases.find((d) => d.type === "master")?.activeConnections} pools
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Storage Used</span>
-                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                      {databases.find((d) => d.type === "master")?.storageUsedMb} MB / {databases.find((d) => d.type === "master")?.storageLimitMb} MB
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-0.5">
-                    <span className="text-[10px] uppercase text-[var(--text-muted)] font-mono">Assigned Accounts</span>
-                    <div className="text-sm font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                      {databases.find((d) => d.type === "master")?.assignedUsersCount} users
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {/* Regional Shards Section */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] font-mono">
-                Regional Replica Shards
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {databases
-                  .filter((d) => d.type === "regional")
-                  .map((shard) => {
-                    const isSuspended = shard.status === "suspended"
-                    return (
-                      <Card
-                        key={shard.id}
-                        className={cn(
-                          "bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4",
-                          isSuspended && "border-[var(--danger)]/30 bg-[var(--surface-muted)]"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-bold text-[var(--foreground)]">{shard.name}</h4>
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] font-mono px-1.5 py-0 rounded-[var(--radius-inner)]"
-                              >
-                                {shard.region}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5">{shard.regionLabel}</p>
-                          </div>
-
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs px-2.5 py-0.5 rounded-[var(--radius-full)]",
-                              isSuspended
-                                ? "bg-[var(--danger-muted)] text-[var(--danger)] border-[var(--danger)]/20"
-                                : "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20"
-                            )}
-                          >
-                            {isSuspended ? "Suspended" : "Operational"}
-                          </Badge>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 text-xs">
-                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Latency</span>
-                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                              {shard.latencyMs} ms
-                            </div>
-                          </div>
-                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Connections</span>
-                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                              {shard.activeConnections}
-                            </div>
-                          </div>
-                          <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                            <span className="text-[10px] text-[var(--text-muted)] uppercase">Users</span>
-                            <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">
-                              {shard.assignedUsersCount}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Suspension Safeguard Action */}
-                        <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--text-muted)]">
-                            {isSuspended ? "Shard writes blocked" : "Active replica sync"}
-                          </span>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSuspendConfirmDb(shard)
-                              setSuspendReason("")
-                            }}
-                            className={cn(
-                              "h-7 px-2.5 text-xs border-[var(--border)] rounded-[var(--radius-control)]",
-                              isSuspended
-                                ? "text-[var(--success)] hover:bg-[var(--success-muted)]"
-                                : "text-[var(--danger)] hover:bg-[var(--danger-muted)]"
-                            )}
-                          >
-                            {isSuspended ? "Resume Shard" : "Suspend Shard"}
-                          </Button>
-                        </div>
-                      </Card>
-                    )
-                  })}
+                </Card>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1906,113 +1908,24 @@ export default function ModeratorPage() {
               </div>
             </div>
 
-            {/* Nodes Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Primary Node */}
-              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
-                      <Server className="w-5 h-5 text-[var(--foreground)]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-[var(--foreground)]">Sycord VPS Primary</h3>
-                        <Badge
-                          variant="outline"
-                          className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] rounded-[var(--radius-full)]"
-                        >
-                          Running
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)]">Ubuntu 24.04 LTS • sycord.site (Control Plane)</p>
-                    </div>
-                  </div>
-                </div>
+            {/* Top Reference Component: System Performance Overview */}
+            <ServerPerformanceOverview
+              onScrollToDetails={() => {
+                const el = document.getElementById("server-operational-events")
+                if (el) el.scrollIntoView({ behavior: "smooth" })
+              }}
+            />
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">CPU Load</span>
-                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">18.4%</div>
-                  </div>
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">RAM</span>
-                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">2.1 / 8 GB</div>
-                  </div>
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Disk</span>
-                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">24 / 80 GB</div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                  <span>SSH Proxy Ports: 22 / 443 / 8080</span>
-                  <span className="text-[var(--success)] font-medium">Allowlist Active</span>
-                </div>
-              </Card>
-
-              {/* Standby Failover Node */}
-              <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-[var(--radius-inner)] bg-[var(--surface-raised)] border border-[var(--border-strong)] flex items-center justify-center">
-                      <Server className="w-5 h-5 text-[var(--text-muted)]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-[var(--foreground)]">Failover Standby Node</h3>
-                        <Badge
-                          variant="outline"
-                          className="bg-[var(--surface-muted)] text-[var(--text-muted)] border-[var(--border)] text-[10px] rounded-[var(--radius-full)]"
-                        >
-                          Standby Synced
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)]">Secondary Target • Automatic DNS Failover</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Heartbeat</span>
-                    <div className="font-mono font-semibold text-[var(--success)] tabular-nums">19 ms</div>
-                  </div>
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">State Lag</span>
-                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">0 ms</div>
-                  </div>
-                  <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] uppercase">Read Replica</span>
-                    <div className="font-mono font-semibold text-[var(--foreground)] tabular-nums">Ready</div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                  <span>Failover Trigger</span>
-                  <span className="font-medium text-[var(--text-secondary)]">3 consecutive missed pulses</span>
-                </div>
-              </Card>
-            </div>
-
-            {/* VM Service Controls Card */}
-            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-5 shadow-[var(--shadow-card)] space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">VM Service Controls</h3>
-                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                    Trigger remote supervisor restarts, flush process caches, and verify SSH handshake
-                  </p>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-xs px-2.5 py-0.5 rounded-[var(--radius-full)]"
-                >
-                  syte-runner.service: active (running)
-                </Badge>
+            {/* VM Service Controls Toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)]">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--foreground)]">Host Services & Runner Controls</h3>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Direct supervisor controls for Syte VM runner and gateway sync
+                </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -2021,7 +1934,7 @@ export default function ModeratorPage() {
                   className="h-8 px-3 text-xs border-[var(--border)] text-[var(--danger)] hover:bg-[var(--danger-muted)] rounded-[var(--radius-control)] gap-1.5"
                 >
                   <Power className="w-3.5 h-3.5" />
-                  <span>Restart Syte Runner</span>
+                  <span>Restart VM Runner</span>
                 </Button>
 
                 <Button
@@ -2032,7 +1945,7 @@ export default function ModeratorPage() {
                   className="h-8 px-3 text-xs border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
                 >
                   <Flame className="w-3.5 h-3.5" />
-                  <span>Flush Memory Cache</span>
+                  <span>Flush Cache</span>
                 </Button>
 
                 <Button
@@ -2042,16 +1955,16 @@ export default function ModeratorPage() {
                   className="h-8 px-3 text-xs border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Sync Provider Configuration</span>
+                  <span>Sync Providers</span>
                 </Button>
               </div>
-            </Card>
+            </div>
 
             {/* Centralized Request & Error Telemetry Table */}
-            <Card className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
+            <Card id="server-operational-events" className="bg-[var(--surface)] border-[var(--border)] text-[var(--foreground)] rounded-[var(--radius-panel)] shadow-[var(--shadow-card)] overflow-hidden">
               <CardHeader className="p-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-sm font-semibold">Centralized Telemetry & Event Log</CardTitle>
+                  <CardTitle className="text-sm font-semibold">Operational Telemetry & Event Stream</CardTitle>
                   <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
                     Unified structured event stream across gateways, omni-router, and Ubuntu VM runner
                   </p>
@@ -2228,13 +2141,58 @@ export default function ModeratorPage() {
         onSuccess={fetchDatabases}
       />
 
-      {/* Telemetry Event Trace Details Modal */}
-      <TelemetryDetailsModal
-        open={telemetryModalOpen}
-        onOpenChange={setTelemetryModalOpen}
-        event={selectedTelemetryEvent}
-        onResolve={handleResolveTelemetry}
+      {/* Database Live Records Inspection Modal */}
+      <DatabaseInspectModal
+        open={inspectModalOpen}
+        onOpenChange={setInspectModalOpen}
+        databaseName={selectedInspectDb?.name || "Turso Master"}
       />
+
+      {/* Scoped Model Bulk Action Confirmation Modal */}
+      <Dialog open={bulkModelModalOpen} onOpenChange={setBulkModelModalOpen}>
+        <DialogContent className="max-w-md bg-[var(--surface-raised)] border border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-overlay)]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-8 h-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)]">
+                {bulkModelAction === "disable_all" ? <Ban className="w-4 h-4 text-[var(--danger)]" /> : <CheckCircle2 className="w-4 h-4 text-[var(--success)]" />}
+              </div>
+              <DialogTitle className="text-base font-semibold">
+                {bulkModelAction === "disable_all" ? `Disable All ${selectedProviderId} Models?` : `Enable All ${selectedProviderId} Models?`}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[var(--text-muted)]">
+              {bulkModelAction === "disable_all"
+                ? `This action is scoped to provider "${selectedProviderId}". All its models will be hidden from the user selector. Other providers remain unaffected.`
+                : `This action will expose all models under "${selectedProviderId}" in the frontend model selector.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setBulkModelModalOpen(false)}
+              className="h-8 px-3 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleBulkModelsAction(bulkModelAction)}
+              disabled={bulkModelLoading}
+              className={cn(
+                "h-8 px-3 text-xs font-semibold",
+                bulkModelAction === "disable_all"
+                  ? "bg-[var(--danger)] text-white hover:opacity-90"
+                  : "bg-[var(--success)] text-[var(--background)] hover:opacity-90"
+              )}
+            >
+              {bulkModelLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              {bulkModelAction === "disable_all" ? "Confirm Disable All" : "Confirm Enable All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Shard Suspension Confirmation Safeguard Dialog */}
       <Dialog open={!!suspendConfirmDb} onOpenChange={(v) => !v && setSuspendConfirmDb(null)}>
