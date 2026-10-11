@@ -34,7 +34,7 @@
 
 | Feature Area | Existing Route | Method | Backend Functionality |
 | :--- | :--- | :--- | :--- |
-| **Moderator Page** | `/admin` | Page | Client component with tabs: General, Users, Models, Providers, Servers, Tickets |
+| **Moderator Page** | `/admin` | Page | Client component with tabs: General, Users, Providers, Databases, Servers, Astro, Tickets, Broadcast |
 | **Overview & Metrics**| `/api/moderator/overview` | GET | Aggregates bans, warnings, reports, user counts from Turso/LibSQL |
 | **Infrastructure Mon.**| `/api/moderator/monitoring` | GET | Cronitor integration, multi-db nodes, edge router latency |
 | **Audit Logs** | `/api/moderator/audit` | GET | Fetches recent entries from `moderation_audit_logs` |
