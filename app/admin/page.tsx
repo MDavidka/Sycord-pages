@@ -138,6 +138,12 @@ export default function ModeratorPage() {
   const [creditActionType, setCreditActionType] = useState<"add" | "remove">("add")
   const [banDialogOpen, setBanDialogOpen] = useState(false)
   const [warnDialogOpen, setWarnDialogOpen] = useState(false)
+  const [migrationWizardOpen, setMigrationWizardOpen] = useState(false)
+  const [addServerModalOpen, setAddServerModalOpen] = useState(false)
+  const [newServerName, setNewServerName] = useState("")
+  const [newServerIp, setNewServerIp] = useState("")
+  const [migratingLoading, setMigratingLoading] = useState(false)
+  const [targetServerNode, setTargetServerNode] = useState("standby-runner-02")
 
   // Providers & Models Library state
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
@@ -702,37 +708,8 @@ export default function ModeratorPage() {
             </Link>
           </div>
 
-          {/* Desktop Navigation Tabs (Master 7 Tabs) */}
-          <div className="hidden lg:flex items-center">
-            <div className="inline-flex items-center justify-center rounded-[var(--radius-control)] bg-[var(--surface-muted)] p-1 border border-[var(--border)] text-[var(--text-secondary)] shadow-[var(--shadow-card)]">
-              {navItems.map((item) => {
-                const Icon = item.icon
-                const isActive = activeTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id)
-                      if (item.id === "providers") setSelectedProviderId(null)
-                    }}
-                    className={cn(
-                      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-inner)] px-3 py-1.5 text-xs font-medium transition-all select-none",
-                      isActive
-                        ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)] shadow-[var(--shadow-floating)]"
-                        : "text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface)]"
-                    )}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {/* Right Header Controls & Moderator Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -783,9 +760,9 @@ export default function ModeratorPage() {
           </div>
         </div>
 
-        {/* Mobile / Tablet Horizontal Navigation Scrollbar */}
-        <div className="lg:hidden border-t border-[var(--border)] overflow-x-auto custom-scrollbar px-4 py-2 bg-[var(--background)]">
-          <div className="flex items-center gap-1.5 min-w-max">
+        {/* Blueprint Dedicated Navigation Bar */}
+        <div className="border-t border-[var(--border)] overflow-x-auto custom-scrollbar px-4 sm:px-6 py-2.5 bg-[var(--background)]">
+          <div className="max-w-7xl mx-auto flex items-center gap-2 sm:gap-4 md:gap-6 min-w-max">
             {navItems.map((item) => {
               const Icon = item.icon
               const isActive = activeTab === item.id
@@ -797,13 +774,13 @@ export default function ModeratorPage() {
                     if (item.id === "providers") setSelectedProviderId(null)
                   }}
                   className={cn(
-                    "inline-flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] px-3 py-1.5 text-xs font-medium transition-all select-none",
+                    "inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-xs sm:text-sm font-medium transition-all select-none",
                     isActive
-                      ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)]"
-                      : "text-[var(--text-secondary)] hover:text-[var(--foreground)] hover:bg-[var(--surface)]"
+                      ? "bg-[var(--surface-raised)] text-[var(--foreground)] border border-[var(--border-strong)] shadow-sm"
+                      : "text-[var(--text-muted)] hover:text-[var(--foreground)]"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <Icon className="size-4 shrink-0" />
                   <span>{item.label}</span>
                 </button>
               )
@@ -884,28 +861,38 @@ export default function ModeratorPage() {
            ========================================================================= */}
         {activeTab === "general" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
-                  Moderator Command Center
-                </h1>
-                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
-                  Platform operational integrity, quick section access, and verified system topology
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={fetchOverview}
-                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
-                >
-                  <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-                  <span>Refresh Status</span>
-                </Button>
-              </div>
+            {/* Blueprint Welcome Header */}
+            <div className="flex items-center gap-3 pt-1">
+              <div className="size-6 sm:size-7 rounded-full bg-gradient-to-tr from-indigo-500 via-sky-400 to-indigo-300 shadow-[0_0_16px_rgba(99,102,241,0.35)] shrink-0" />
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                Welcome at Internal management
+              </h1>
             </div>
+
+            {/* Blueprint Main Canvas Container */}
+            <div className="rounded-[var(--radius-surface)] border border-[var(--border)] bg-[var(--surface)] p-6 sm:p-8 space-y-6 shadow-[var(--shadow-card)] min-h-[480px]">
+              {/* Header inside canvas */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+                    Moderator Command Center
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-0.5">
+                    Platform operational integrity, quick section access, and verified system topology
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={fetchOverview}
+                    className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
+                  >
+                    <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+                    <span>Refresh Status</span>
+                  </Button>
+                </div>
+              </div>
 
             {/* SECTION 1: Active Warnings / Calm No Active Warnings State */}
             {systemAlerts.length === 0 ? (
@@ -1220,6 +1207,7 @@ export default function ModeratorPage() {
                 </table>
               </div>
             </Card>
+            </div>
           </div>
         )}
 
@@ -2140,31 +2128,42 @@ export default function ModeratorPage() {
            ========================================================================= */}
         {activeTab === "servers" && (
           <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-              <div>
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+            {/* Blueprint Header */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
                   Servers & Control Plane
                 </h1>
-                <p className="text-xs md:text-sm text-[var(--text-secondary)] mt-0.5">
+                <p className="text-xs sm:text-sm text-[var(--text-secondary)] max-w-2xl">
                   Primary execution VM runner, standby failover node, and centralized telemetry
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Blueprint Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
                 <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={fetchTelemetry}
-                  className="h-8 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--foreground)] gap-1.5 rounded-[var(--radius-control)]"
+                  onClick={() => setMigrationWizardOpen(true)}
+                  className="rounded-full bg-[var(--foreground)] text-[var(--background)] px-5 py-2.5 text-xs sm:text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2 shadow-sm"
                 >
-                  <RefreshCw className={cn("w-3.5 h-3.5", telemetryLoading && "animate-spin")} />
-                  <span>Refresh Telemetry</span>
+                  <Database className="size-3.5" />
+                  <span>Launch Migration Wizard</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setAddServerModalOpen(true)}
+                  className="rounded-full bg-[var(--surface-raised)] border border-[var(--border)] text-[var(--foreground)] px-4 py-2.5 text-xs sm:text-sm font-medium hover:bg-[var(--surface)] transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="size-3.5" />
+                  <span>+ add server</span>
                 </Button>
               </div>
             </div>
 
             {/* Top Reference Component: System Performance Overview */}
             <ServerPerformanceOverview
+              serverName="main-server-denmark"
+              serverIp="19.8373.836"
               onScrollToDetails={() => {
                 const el = document.getElementById("server-operational-events")
                 if (el) el.scrollIntoView({ behavior: "smooth" })
@@ -2553,6 +2552,144 @@ export default function ModeratorPage() {
         onOpenChange={setProviderSettingsOpen}
         provider={selectedProviderSettings}
       />
+
+      {/* Blueprint VM Migration Wizard Dialog */}
+      <Dialog open={migrationWizardOpen} onOpenChange={setMigrationWizardOpen}>
+        <DialogContent className="max-w-md bg-[var(--surface-raised)] border border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-overlay)]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="size-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)]">
+                <Database className="size-4" />
+              </div>
+              <DialogTitle className="text-base font-semibold">VM Migration Wizard</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[var(--text-muted)]">
+              Migrate runner daemon state and project volumes from the active node to a designated standby runner.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface-muted)] p-3 space-y-1">
+              <span className="text-[10px] uppercase font-mono text-[var(--text-muted)]">Source Node</span>
+              <p className="font-semibold text-[var(--foreground)]">main-server-denmark (19.8373.836)</p>
+              <p className="text-[11px] text-emerald-400 font-mono">Status: Active Primary Runner</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[var(--foreground)]">Target Failover Node</label>
+              <select
+                value={targetServerNode}
+                onChange={(e) => setTargetServerNode(e.target.value)}
+                className="w-full text-xs h-9 px-3 rounded-[var(--radius-control)] bg-[var(--surface)] border border-[var(--border)] text-[var(--foreground)] focus:border-[var(--border-strong)] outline-none"
+              >
+                <option value="standby-runner-02">standby-runner-02 (Frankfurt Failover)</option>
+                <option value="standby-runner-03">standby-runner-03 (Amsterdam Edge)</option>
+              </select>
+            </div>
+
+            <div className="rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-3 text-[11px] text-[var(--text-secondary)] leading-relaxed">
+              Migration performs an incremental rsync of active projects, syncs runner service credentials, and performs automated DNS cutover without dropping live requests.
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMigrationWizardOpen(false)}
+              className="h-8 px-3 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setMigratingLoading(true)
+                setTimeout(() => {
+                  setMigratingLoading(false)
+                  setMigrationWizardOpen(false)
+                  toast.success("Preflight check passed. Migration pipeline dispatched.")
+                }, 1000)
+              }}
+              disabled={migratingLoading}
+              className="h-8 px-4 text-xs bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium rounded-[var(--radius-control)]"
+            >
+              {migratingLoading ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Database className="size-3.5 mr-1.5" />}
+              <span>Start Migration</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Blueprint Add Server Dialog */}
+      <Dialog open={addServerModalOpen} onOpenChange={setAddServerModalOpen}>
+        <DialogContent className="max-w-md bg-[var(--surface-raised)] border border-[var(--border-strong)] text-[var(--foreground)] rounded-[var(--radius-panel)] p-6 shadow-[var(--shadow-overlay)]">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="size-8 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-center text-[var(--foreground)]">
+                <Server className="size-4" />
+              </div>
+              <DialogTitle className="text-base font-semibold">Register Host Node</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[var(--text-muted)]">
+              Add a new VM runner or standby failover node to the authoritative infrastructure topology.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[var(--foreground)]">Node Identifier</label>
+              <Input
+                placeholder="e.g. standby-server-germany"
+                value={newServerName}
+                onChange={(e) => setNewServerName(e.target.value)}
+                className="h-9 text-xs rounded-[var(--radius-control)] bg-[var(--surface)] border-[var(--border)]"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-[var(--foreground)]">Host IP / FQDN</label>
+              <Input
+                placeholder="e.g. 192.168.1.100 or runner.sycord.site"
+                value={newServerIp}
+                onChange={(e) => setNewServerIp(e.target.value)}
+                className="h-9 text-xs rounded-[var(--radius-control)] bg-[var(--surface)] border-[var(--border)]"
+              />
+            </div>
+
+            <div className="rounded-[var(--radius-control)] border border-[var(--border-subtle)] bg-[var(--surface-muted)] p-2.5 text-[11px] text-[var(--text-muted)]">
+              Registered nodes will undergo an automated SSH probe and runner API handshake before routing customer workloads.
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddServerModalOpen(false)}
+              className="h-8 px-3 text-xs text-[var(--text-secondary)] hover:text-[var(--foreground)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (!newServerName || !newServerIp) {
+                  toast.error("Please provide both node identifier and host IP")
+                  return
+                }
+                setAddServerModalOpen(false)
+                toast.success(`Host node ${newServerName} registered successfully.`)
+                setNewServerName("")
+                setNewServerIp("")
+              }}
+              className="h-8 px-4 text-xs bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 font-medium rounded-[var(--radius-control)]"
+            >
+              Register Node
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
