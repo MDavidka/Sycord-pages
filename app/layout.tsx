@@ -3,6 +3,7 @@ import AuthProvider from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
+import "./mobile-friendly.css"
 
 export default function RootLayout({
   children,
@@ -39,8 +40,6 @@ export const metadata = {
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: 'cover' as const,
   themeColor: '#131313',
 };
