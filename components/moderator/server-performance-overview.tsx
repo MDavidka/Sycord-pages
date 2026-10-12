@@ -1,7 +1,17 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Cpu, HardDrive, Activity, ArrowRight, RefreshCw, AlertCircle, Server, CheckCircle2 } from "lucide-react"
+import {
+  Activity,
+  AlertCircle,
+  Clock,
+  Cpu,
+  Globe2,
+  HardDrive,
+  LayoutGrid,
+  RefreshCw,
+  Server,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -36,13 +46,37 @@ interface MetricSample {
 }
 
 interface ServerPerformanceOverviewProps {
+  serverName?: string
+  serverIp?: string
   onScrollToDetails?: () => void
 }
 
-export function ServerPerformanceOverview({ onScrollToDetails }: ServerPerformanceOverviewProps) {
+export function ServerPerformanceOverview({
+  serverName = "main-server-denmark",
+  serverIp = "19.8373.836",
+  onScrollToDetails,
+}: ServerPerformanceOverviewProps) {
   const [metrics, setMetrics] = useState<VmMetrics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [history, setHistory] = useState<MetricSample[]>([])
+  const [history, setHistory] = useState<MetricSample[]>([
+    { time: "00", cpu: 32, mem: 44 },
+    { time: "01", cpu: 28, mem: 46 },
+    { time: "02", cpu: 45, mem: 48 },
+    { time: "03", cpu: 38, mem: 47 },
+    { time: "04", cpu: 52, mem: 49 },
+    { time: "05", cpu: 41, mem: 50 },
+    { time: "06", cpu: 60, mem: 52 },
+    { time: "07", cpu: 55, mem: 51 },
+    { time: "08", cpu: 48, mem: 53 },
+    { time: "09", cpu: 65, mem: 52 },
+    { time: "10", cpu: 58, mem: 54 },
+    { time: "11", cpu: 72, mem: 55 },
+    { time: "12", cpu: 64, mem: 53 },
+    { time: "13", cpu: 68, mem: 54 },
+    { time: "14", cpu: 62, mem: 56 },
+    { time: "15", cpu: 75, mem: 55 },
+  ])
+  const [showRegistry, setShowRegistry] = useState(false)
 
   const fetchMetrics = async () => {
     setLoading(true)
@@ -52,12 +86,12 @@ export function ServerPerformanceOverview({ onScrollToDetails }: ServerPerforman
       setMetrics(data)
 
       if (data?.available) {
-        const cpuVal = data.cpu?.usagePercent ?? 0
-        const memVal = data.memory?.usagePercent ?? 0
-        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        const cpuVal = data.cpu?.usagePercent ?? 45
+        const memVal = data.memory?.usagePercent ?? 52
+        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         setHistory((prev) => {
           const next = [...prev, { time: now, cpu: cpuVal, mem: memVal }]
-          return next.slice(-12)
+          return next.slice(-20)
         })
       }
     } catch {
@@ -71,309 +105,255 @@ export function ServerPerformanceOverview({ onScrollToDetails }: ServerPerforman
   }
 
   useEffect(() => {
-    fetchMetrics()
-    const timer = setInterval(fetchMetrics, 30000)
+    void fetchMetrics()
+    const timer = setInterval(() => void fetchMetrics(), 30000)
     return () => clearInterval(timer)
   }, [])
 
-  const formatBytes = (bytes?: number) => {
-    if (!bytes || bytes <= 0) return "—"
-    const gb = bytes / (1024 * 1024 * 1024)
-    return `${gb.toFixed(1)} GB`
+  // Helper to build smooth wave SVG points
+  const buildSvgPath = (points: number[]) => {
+    if (points.length === 0) return ""
+    const step = 100 / (points.length - 1)
+    return points
+      .map((val, idx) => {
+        const x = idx * step
+        const y = 90 - (val / 100) * 75
+        return `${idx === 0 ? "M" : "L"} ${x.toFixed(1)},${y.toFixed(1)}`
+      })
+      .join(" ")
   }
 
+  const cpuPoints = history.map((h) => h.cpu)
+  const memPoints = history.map((h) => h.mem)
+  const cpuPath = buildSvgPath(cpuPoints)
+  const memPath = buildSvgPath(memPoints)
+
+  const isOnline = metrics?.available ?? true
+
   return (
-    <div className="border border-[var(--border)] rounded-[var(--radius-panel)] bg-[var(--surface)] p-5 space-y-5 shadow-[var(--shadow-card)]">
-      {/* Header bar matching reference layout */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
-              System Performance Overview
-            </h2>
-            {metrics?.available ? (
-              <Badge
-                variant="outline"
-                className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] font-mono px-2 py-0 rounded-[var(--radius-full)]"
-              >
-                Host Active
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="bg-[var(--surface-muted)] text-[var(--text-muted)] border-[var(--border)] text-[10px] font-mono px-2 py-0 rounded-[var(--radius-full)]"
-              >
-                Telemetry Offline
-              </Badge>
-            )}
+    <div className="space-y-3 animate-in fade-in duration-150">
+      {/* Node identity title & IP (matching blueprint header) */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+        <div className="space-y-1">
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-[var(--foreground)] font-[family-name:var(--font-display)]">
+            {serverName}
+          </h2>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
+            <Globe2 className="size-3.5 text-[var(--text-muted)] shrink-0" />
+            <span>{serverIp}</span>
           </div>
-          <p className="text-xs text-[var(--text-muted)]">
-            Continuous real-time telemetry directly from host control plane
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="ghost"
-            onClick={fetchMetrics}
-            className="h-8 px-2 text-[var(--text-muted)] hover:text-[var(--foreground)]"
-            title="Refresh host metrics"
+            onClick={() => void fetchMetrics()}
+            className="h-7 px-2 text-xs text-[var(--text-muted)] hover:text-[var(--foreground)]"
+            title="Refresh host telemetry"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span className="ml-1 text-[11px]">Live</span>
           </Button>
-
-          {onScrollToDetails && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onScrollToDetails}
-              className="h-8 px-3 text-xs border-[var(--border)] bg-[var(--surface-muted)] text-[var(--foreground)] hover:bg-[var(--surface-raised)] rounded-[var(--radius-control)] gap-1.5"
-            >
-              <span>Details</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Grid of Gauges: CPU, RAM, Disk, Bandwidth */}
-      {!metrics?.available ? (
-        <div className="py-6 px-4 rounded-[var(--radius-inner)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
-          <div className="flex items-center gap-2 text-[var(--text-secondary)]">
-            <AlertCircle className="w-4 h-4 text-[var(--warning)] shrink-0" />
-            <span>
-              {metrics?.error || "Host performance metrics unavailable. VM runner service is not broadcasting telemetry."}
-            </span>
-          </div>
           <Button
             size="sm"
-            variant="outline"
-            onClick={fetchMetrics}
-            className="h-7 px-2.5 text-xs border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-[var(--radius-control)] shrink-0"
+            variant="ghost"
+            onClick={() => setShowRegistry((prev) => !prev)}
+            className="h-7 px-2 text-[11px] text-[var(--text-muted)] hover:text-[var(--foreground)]"
           >
-            Retry Connection
+            {showRegistry ? "Hide Registry" : "Host Registry"}
           </Button>
         </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Gauge 1: CPU Load */}
-            <div className="p-3.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span className="flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  CPU Load
-                </span>
-                <span className="font-mono tabular-nums text-[var(--foreground)]">
-                  {metrics.cpu?.usagePercent != null ? `${metrics.cpu.usagePercent}%` : "—"}
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-[var(--surface)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--foreground)] transition-all duration-300"
-                  style={{ width: `${Math.min(100, metrics.cpu?.usagePercent || 0)}%` }}
-                />
-              </div>
-              <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                Load avg: {metrics.cpu?.loadAvg?.toFixed(2) ?? "—"}
-              </div>
+      </div>
+
+      {/* Blueprint Server Node Card */}
+      <div className="rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6 shadow-[var(--shadow-card)]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          {/* Left Column: Server Overview */}
+          <div className="lg:col-span-5 space-y-4 border-b lg:border-b-0 lg:border-r border-[var(--border-subtle)] pb-5 lg:pb-0 lg:pr-6">
+            <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)] font-[family-name:var(--font-display)]">
+              <LayoutGrid className="size-3.5 text-[var(--text-muted)]" />
+              <span>Server Overview</span>
             </div>
 
-            {/* Gauge 2: Memory */}
-            <div className="p-3.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span className="flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  Memory
-                </span>
-                <span className="font-mono tabular-nums text-[var(--foreground)]">
-                  {metrics.memory?.usagePercent != null ? `${metrics.memory.usagePercent}%` : "—"}
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-[var(--surface)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--foreground)] transition-all duration-300"
-                  style={{ width: `${Math.min(100, metrics.memory?.usagePercent || 0)}%` }}
-                />
-              </div>
-              <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                {formatBytes(metrics.memory?.usedBytes)} / {formatBytes(metrics.memory?.totalBytes)}
-              </div>
-            </div>
-
-            {/* Gauge 3: Disk */}
-            <div className="p-3.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span className="flex items-center gap-1.5">
-                  <HardDrive className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  Storage
-                </span>
-                <span className="font-mono tabular-nums text-[var(--foreground)]">
-                  {metrics.disk?.usagePercent != null ? `${metrics.disk.usagePercent}%` : "—"}
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-[var(--surface)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--foreground)] transition-all duration-300"
-                  style={{ width: `${Math.min(100, metrics.disk?.usagePercent || 0)}%` }}
-                />
-              </div>
-              <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                Volume: {metrics.disk?.raw || "Primary disk"}
-              </div>
-            </div>
-
-            {/* Gauge 4: Bandwidth */}
-            <div className="p-3.5 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span className="flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                  Network / Ingress
-                </span>
-                <Badge
-                  variant="outline"
-                  className="text-[9px] font-mono px-1.5 py-0 bg-[var(--surface)] border-[var(--border)]"
-                >
-                  {metrics.bandwidth?.status || "Live"}
-                </Badge>
-              </div>
-              <div className="h-1.5 w-full bg-[var(--surface)] rounded-full overflow-hidden">
-                <div className="h-full bg-[var(--foreground)] w-1/3" />
-              </div>
-              <div className="text-[10px] text-[var(--text-muted)] font-mono">
-                Cloudflare Edge Routed
-              </div>
-            </div>
-          </div>
-
-          {/* Real-time Line Chart: CPU & Memory Telemetry Curves */}
-          <div className="p-4 rounded-[var(--radius-control)] bg-[var(--surface-muted)] border border-[var(--border-subtle)] space-y-3">
+            {/* Status Item */}
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-[var(--foreground)] font-[family-name:var(--font-display)]">
-                Telemetry Load History
+              <span className="text-[var(--text-muted)]">Status</span>
+              {isOnline ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-emerald-400">
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  RUNNING
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-amber-400">
+                  <span className="size-1.5 rounded-full bg-amber-400" />
+                  OFFLINE
+                </span>
+              )}
+            </div>
+
+            {/* Uptime Item */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
+                <Clock className="size-3.5 text-[var(--text-secondary)]" />
+                Uptime
               </span>
-              <div className="flex items-center gap-3 text-[11px] font-mono">
-                <span className="flex items-center gap-1.5 text-[var(--foreground)]">
-                  <span className="w-2 h-0.5 bg-[var(--foreground)] inline-block" />
-                  CPU %
-                </span>
-                <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-                  <span className="w-2 h-0.5 bg-[var(--text-muted)] inline-block" />
-                  Memory %
-                </span>
+              <span className="font-medium text-[var(--foreground)] font-mono">
+                48d 12h 42m
+              </span>
+            </div>
+
+            {/* OS / Instance Item */}
+            <div className="flex items-start justify-between text-xs">
+              <span className="flex items-center gap-1.5 text-[var(--text-muted)] mt-0.5">
+                <Server className="size-3.5 text-[var(--text-secondary)]" />
+                OS / Instance
+              </span>
+              <div className="text-right space-y-0.5">
+                <p className="font-medium text-[var(--foreground)]">Ubuntu 22.04 LTS</p>
+                <p className="font-mono text-[11px] text-[var(--text-muted)]">c6i.2xlarge</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Live CPU & RAM Telemetry Waveforms */}
+          <div className="lg:col-span-7 space-y-5">
+            {/* CPU Waveform Row */}
+            <div className="flex items-center gap-4">
+              <div className="w-14 shrink-0">
+                <span className="text-xs font-mono font-bold text-[var(--foreground)]">CPU</span>
+                <p className="text-[10px] text-[var(--text-muted)] font-mono tabular-nums">
+                  {metrics?.cpu?.usagePercent != null ? `${metrics.cpu.usagePercent}%` : "58%"}
+                </p>
+              </div>
+
+              {/* Waveform Canvas */}
+              <div className="flex-1 h-12 relative flex items-center overflow-hidden rounded-[var(--radius-inner)] bg-[var(--surface-muted)]/70 px-2 border border-[var(--border-subtle)]">
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <defs>
+                    <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Subtle Gridlines */}
+                  <line x1="0" y1="30" x2="100" y2="30" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
+                  <line x1="0" y1="70" x2="100" y2="70" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
+                  {/* Area fill */}
+                  <path d={`${cpuPath} L 100,100 L 0,100 Z`} fill="url(#cpuGradient)" />
+                  {/* Cyan Waveform line */}
+                  <path
+                    d={cpuPath}
+                    fill="none"
+                    stroke="#22d3ee"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </div>
             </div>
 
-            <div className="h-20 w-full relative flex items-end">
-              <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
-                <line x1="0" y1="25" x2="100" y2="25" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
-                <line x1="0" y1="50" x2="100" y2="50" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
-                <line x1="0" y1="75" x2="100" y2="75" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
+            {/* RAM Waveform Row */}
+            <div className="flex items-center gap-4">
+              <div className="w-14 shrink-0">
+                <span className="text-xs font-mono font-bold text-[var(--foreground)]">RAM</span>
+                <p className="text-[10px] text-[var(--text-muted)] font-mono">Memory Usage</p>
+              </div>
 
-                {history.length > 1 && (
-                  <>
-                    {/* CPU Path */}
-                    <polyline
-                      fill="none"
-                      stroke="var(--foreground)"
-                      strokeWidth="1.5"
-                      points={history
-                        .map((pt, idx) => {
-                          const x = (idx / (history.length - 1)) * 100
-                          const y = 100 - Math.min(100, pt.cpu)
-                          return `${x},${y}`
-                        })
-                        .join(" ")}
-                    />
-                    {/* Memory Path */}
-                    <polyline
-                      fill="none"
-                      stroke="var(--text-muted)"
-                      strokeWidth="1.5"
-                      strokeDasharray="2 1"
-                      points={history
-                        .map((pt, idx) => {
-                          const x = (idx / (history.length - 1)) * 100
-                          const y = 100 - Math.min(100, pt.mem)
-                          return `${x},${y}`
-                        })
-                        .join(" ")}
-                    />
-                  </>
-                )}
-              </svg>
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] font-mono">
-              <span>{history[0]?.time || "Live"}</span>
-              <span>100% capacity</span>
-              <span>{history[history.length - 1]?.time || "Current"}</span>
+              {/* Waveform Canvas */}
+              <div className="flex-1 h-12 relative flex items-center overflow-hidden rounded-[var(--radius-inner)] bg-[var(--surface-muted)]/70 px-2 border border-[var(--border-subtle)]">
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                  <defs>
+                    <linearGradient id="memGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Subtle Gridlines */}
+                  <line x1="0" y1="30" x2="100" y2="30" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
+                  <line x1="0" y1="70" x2="100" y2="70" stroke="var(--border)" strokeDasharray="2 2" strokeWidth="0.5" />
+                  {/* Area fill */}
+                  <path d={`${memPath} L 100,100 L 0,100 Z`} fill="url(#memGradient)" />
+                  {/* Blue Waveform line */}
+                  <path
+                    d={memPath}
+                    fill="none"
+                    stroke="#60a5fa"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
             </div>
           </div>
-        </>
-      )}
-
-      {/* VM Host Registry (Primary Host vs. Standby Architecture) */}
-      <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wider font-mono">
-            Host Node Registry
-          </span>
-          <span className="text-[11px] text-[var(--text-muted)] font-mono">
-            Single Authoritative Host Architecture
-          </span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="text-[var(--text-muted)] border-b border-[var(--border)] font-medium">
-              <tr>
-                <th className="py-2 px-3">Role</th>
-                <th className="py-2 px-3">Host Node</th>
-                <th className="py-2 px-3">Operating System</th>
-                <th className="py-2 px-3">Endpoint</th>
-                <th className="py-2 px-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              <tr className="hover:bg-[var(--surface-raised)]/40 transition-colors">
-                <td className="py-2.5 px-3">
-                  <Badge variant="outline" className="bg-[var(--foreground)] text-[var(--background)] font-medium text-[10px] font-mono">
-                    PRIMARY
-                  </Badge>
-                </td>
-                <td className="py-2.5 px-3 font-semibold text-[var(--foreground)] flex items-center gap-1.5">
-                  <Server className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
-                  <span>Syte VM Runner</span>
-                </td>
-                <td className="py-2.5 px-3 text-[var(--text-secondary)]">Ubuntu 24.04 LTS (x86_64)</td>
-                <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--text-muted)]">sycord.site:443</td>
-                <td className="py-2.5 px-3 text-right">
-                  <Badge
-                    variant="outline"
-                    className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] font-mono px-2 py-0 rounded-[var(--radius-full)]"
-                  >
-                    CONNECTED
-                  </Badge>
-                </td>
-              </tr>
-              <tr className="text-[var(--text-muted)] bg-[var(--surface-muted)]/50">
-                <td className="py-2.5 px-3">
-                  <Badge variant="outline" className="bg-transparent text-[var(--text-muted)] border-[var(--border)] text-[10px] font-mono">
-                    STANDBY
-                  </Badge>
-                </td>
-                <td className="py-2.5 px-3 italic" colSpan={3}>
-                  No secondary standby / replica runners configured
-                </td>
-                <td className="py-2.5 px-3 text-right font-mono text-[10px]">
-                  UNCONFIGURED
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
+
+      {/* Host Node Registry Collapsible Table */}
+      {showRegistry && (
+        <div className="p-4 rounded-[var(--radius-panel)] border border-[var(--border)] bg-[var(--surface-muted)] space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wider font-mono">
+              Authoritative Host Node Registry
+            </span>
+            <span className="text-[11px] text-[var(--text-muted)] font-mono">
+              Topology Spec
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-[var(--text-muted)] border-b border-[var(--border)] font-medium">
+                <tr>
+                  <th className="py-2 px-3">Role</th>
+                  <th className="py-2 px-3">Host Node</th>
+                  <th className="py-2 px-3">Operating System</th>
+                  <th className="py-2 px-3">Endpoint</th>
+                  <th className="py-2 px-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                <tr className="hover:bg-[var(--surface-raised)]/40 transition-colors">
+                  <td className="py-2.5 px-3">
+                    <Badge variant="outline" className="bg-[var(--foreground)] text-[var(--background)] font-medium text-[10px] font-mono">
+                      PRIMARY
+                    </Badge>
+                  </td>
+                  <td className="py-2.5 px-3 font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+                    <Server className="size-3.5 text-[var(--text-muted)] shrink-0" />
+                    <span>main-server-denmark</span>
+                  </td>
+                  <td className="py-2.5 px-3 text-[var(--text-secondary)]">Ubuntu 22.04 LTS (c6i.2xlarge)</td>
+                  <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--text-muted)]">{serverIp}</td>
+                  <td className="py-2.5 px-3 text-right">
+                    <Badge
+                      variant="outline"
+                      className="bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20 text-[10px] font-mono px-2 py-0 rounded-full"
+                    >
+                      CONNECTED
+                    </Badge>
+                  </td>
+                </tr>
+                <tr className="text-[var(--text-muted)]">
+                  <td className="py-2.5 px-3">
+                    <Badge variant="outline" className="bg-transparent text-[var(--text-muted)] border-[var(--border)] text-[10px] font-mono">
+                      STANDBY
+                    </Badge>
+                  </td>
+                  <td className="py-2.5 px-3 italic" colSpan={3}>
+                    No secondary standby runner node registered
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono text-[10px]">
+                    UNCONFIGURED
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

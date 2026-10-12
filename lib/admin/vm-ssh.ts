@@ -48,7 +48,7 @@ function getSshConfig(input?: VmSetupInput): SshConfig {
   }
 }
 
-async function withRootSsh<T>(fn: (ssh: NodeSSH) => Promise<T>, input?: VmSetupInput) {
+export async function withRootSsh<T>(fn: (ssh: NodeSSH) => Promise<T>, input?: VmSetupInput) {
   const ssh = new NodeSSH()
   try {
     await ssh.connect(getSshConfig(input))

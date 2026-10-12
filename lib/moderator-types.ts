@@ -20,7 +20,7 @@ export async function getAuthenticatedModerator(): Promise<ModeratorUser | null>
   return {
     id: (session.user as any)?.id || email,
     email,
-    name: session.user.name || email.split("@")[0],
+    name: session.user?.name || email.split("@")[0],
     role: "moderator",
   }
 }
@@ -80,6 +80,9 @@ export interface ModerationAuditLog {
     | "ticket_close"
     | "model_toggle"
     | "models_bulk_update"
+    | "astro_task_run"
+    | "astro_self_heal"
+    | "astro_benchmark"
   targetType: "user" | "report" | "ticket" | "announcement" | "system"
   targetId: string
   targetIdentifier?: string
