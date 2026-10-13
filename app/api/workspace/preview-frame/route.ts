@@ -46,11 +46,13 @@ function isAllowedPreviewUrl(raw: string): boolean {
 
     if (isAllowed) {
       if (parsed.protocol === "http:") {
-        return hostname === "localhost" || hostname === "127.0.0.1"
+        return (hostname === "localhost" || hostname === "127.0.0.1") && process.env.NODE_ENV !== "production"
       }
       return true
     }
-    if (hostname === "localhost" || hostname === "127.0.0.1") return true
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return process.env.NODE_ENV !== "production"
+    }
     return false
   } catch {
     return false
@@ -59,31 +61,15 @@ function isAllowedPreviewUrl(raw: string): boolean {
 
 function frameAncestorsForRequest(req: Request): string {
   const ancestors = new Set<string>(["'self'"])
-  try {
-    const origin = req.headers.get("origin")
-    if (origin) {
-      const parsed = new URL(origin)
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        ancestors.add(origin)
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const referer = req.headers.get("referer")
-    if (referer) {
-      const parsed = new URL(referer)
-      ancestors.add(parsed.origin)
-    }
-  } catch {
-    /* ignore */
-  }
   ancestors.add("https://sycord.com")
   ancestors.add("https://www.sycord.com")
   ancestors.add("https://app.sycord.com")
-  ancestors.add("http://localhost:3000")
-  ancestors.add("http://127.0.0.1:3000")
+
+  if (process.env.NODE_ENV !== "production") {
+    ancestors.add("http://localhost:3000")
+    ancestors.add("http://127.0.0.1:3000")
+  }
+
   return Array.from(ancestors).join(" ")
 }
 
