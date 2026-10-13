@@ -18,7 +18,7 @@ import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
 import { syteWriteFile, isSyteConfigured } from "@/lib/deploy/syte-client"
 import { getStoredSyteUuid } from "@/lib/deploy/syte-workspace"
-import { isValidProjectId } from "@/lib/workspace/sandbox"
+import { isValidProjectId, validateSafePath } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -60,10 +60,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!isValidProjectId(String(projectId || ""))) {
     return NextResponse.json({ ok: false, error: "Invalid project ID" }, { status: 400 })
   }
-  if (!path || typeof path !== "string") {
-    return NextResponse.json({ ok: false, error: "Missing 'path'" }, { status: 400 })
-  }
-  if (path.includes("..") || path.includes("\0")) {
+  if (!validateSafePath(path)) {
     return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
   }
   if (typeof content !== "string") {
