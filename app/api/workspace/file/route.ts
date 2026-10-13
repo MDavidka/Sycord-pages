@@ -63,7 +63,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!path || typeof path !== "string") {
     return NextResponse.json({ ok: false, error: "Missing 'path'" }, { status: 400 })
   }
-  if (path.includes("..") || path.includes("\0")) {
+  if (path.includes("..") || path.includes("\0") || path.startsWith("/")) {
     return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
   }
   if (typeof content !== "string") {
