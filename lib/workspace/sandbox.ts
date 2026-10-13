@@ -102,7 +102,7 @@ export function safeJoin(root: string, rel: string): string {
 }
 
 /** True for files that must never be written into / read from the sandbox. */
-function isDisallowedFile(name: string): boolean {
+export function isDisallowedFile(name: string): boolean {
   if (!name) return true
   if (name.includes("..") || name.includes("\0")) return true
   if (path.isAbsolute(name)) return true
@@ -176,7 +176,7 @@ export function isDangerousCommand(command: string): boolean {
   if (/`/.test(command) || /\$\(|\$\{/.test(command)) return true
 
   // Split on shell operators and validate the leading binary of each segment
-  const segments = command.split(/&&|\|\||;|\n|\|/).map((s) => s.trim()).filter(Boolean)
+  const segments = command.split(/&&|\|\||;|\n|\||&|\$\(|\`/).map((s) => s.trim()).filter(Boolean)
   for (const segment of segments) {
     // Skip leading ENV=value assignments: FOO=1 BAR=2 npm run build
     const tokens = segment.replace(/^[0-9<>&\s]+/, "").split(/\s+/).filter(Boolean)
