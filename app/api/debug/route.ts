@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { isAdmin } from "@/lib/is-admin"
 import { checkCoolifyHealth, isCoolifyConfigured } from "@/lib/deploy/coolify-client"
 import { checkSyteHealth, isSyteConfigured, useSyteWorkspace } from "@/lib/deploy/syte-client"
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user) {
+  if (!session?.user || !(await isAdmin())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
