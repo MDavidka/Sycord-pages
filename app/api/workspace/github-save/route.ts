@@ -17,6 +17,7 @@ import {
 } from "@/lib/deploy/github"
 import { prepareProjectDeployFiles, validateApiDeployFiles } from "@/lib/deploy/runner-client"
 import { isValidProjectId } from "@/lib/workspace/sandbox"
+import { getOwnedProject } from "@/lib/project-id"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -53,8 +54,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne({ id: userId })
-  const project = user?.projects?.find((p: any) => p._id.toString() === projectId)
+  const project = await getOwnedProject(db, userId, projectId)
   if (!project) {
     return NextResponse.json({ status: "error", message: "Project not found" }, { status: 404 })
   }
@@ -67,6 +67,7 @@ export async function POST(req: Request): Promise<Response> {
     token = envCreds.token
     owner = envCreds.owner
   } else {
+    const user = await db.collection("users").findOne({ id: userId })
     const tokenData = user?.github_tokens?.[projectId]
     if (tokenData?.token) {
       token = tokenData.token
