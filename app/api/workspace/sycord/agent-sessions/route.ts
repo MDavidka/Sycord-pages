@@ -13,6 +13,7 @@ import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
 import { getStoredSyteUuid } from "@/lib/deploy/syte-workspace"
 import { isSyteConfigured, syteAgentSessions } from "@/lib/deploy/syte-client"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,6 +24,14 @@ export async function GET(req: Request): Promise<Response> {
   const userId = (session?.user as any)?.id
   if (!userId) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
+
+  const rateLimit = checkRateLimit(`agent-sessions:${userId}`, { limit: 100, windowMs: 60000 })
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSec) } }
+    )
   }
 
   if (!isSyteConfigured()) {
